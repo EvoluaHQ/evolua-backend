@@ -1,0 +1,39 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  getProfile: MyProfile!
+}
+
+type Mutation {
+  inviteUser(
+    tenantId: ID! 
+    name: String! 
+    email: AWSEmail!
+  ): User
+}
+
+type Tenant {
+  id: ID!
+  name: String!
+}
+
+type MyProfile {
+  id: ID!
+  name: String!
+  email: AWSEmail!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: AWSEmail!
+}
+
+enum TenantRole {
+  Owner  # administrator (full access)
+  Member # read-write
+  Viewer # read-only
+}
