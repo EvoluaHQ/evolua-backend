@@ -33,7 +33,7 @@ type User {
 }
 
 enum TenantRole {
-  Owner  # administrator (full access)
-  Member # read-write
-  Viewer # read-only
+  Owner
+  Member
+  Viewer
 }
