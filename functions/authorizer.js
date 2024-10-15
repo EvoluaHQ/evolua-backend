@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken')
 const { Logger } = require('@aws-lambda-powertools/logger')
 
-const logger = new Logger({ serviceName: process.env.serviceName })
+const logger = new Logger()
 
 // move this to secure location
 const publicKey = `get it from a secure location`

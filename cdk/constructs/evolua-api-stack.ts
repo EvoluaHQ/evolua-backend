@@ -1,21 +1,19 @@
 import * as cdk from 'aws-cdk-lib';
 import * as appsync from 'aws-cdk-lib/aws-appsync';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
+import { EvoluaServiceStackProps } from './evolua-stack-props';
 import { Construct } from 'constructs';
 import { STAGE_NAMES } from '../constants';
 
-export class EvoluaApiStackProps {
-  serviceName: string;
-  stageName: string;
-  ssmStageName: string;
-}
-
 export class EvoluaApiStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props: EvoluaApiStackProps) {
+  constructor(scope: Construct, id: string, props: EvoluaServiceStackProps) {
     super(scope, id);
 
-    const usersTable = this.createUsersTable();
+    const usersTableArn = ssm.StringParameter.valueForStringParameter(
+      this, `/evolua/${props.ssmStageName}/dynamodb/users-table/arn`);
+    const usersTable = dynamodb.Table.fromTableArn(this, 'UsersTable', usersTableArn);
 
     // create a authorizer lambda function
     const authorizerFunction = new lambda.NodejsFunction(this, 'Authorizer', {
@@ -30,8 +28,9 @@ export class EvoluaApiStack extends cdk.Stack {
         USERS_TABLE_NAME: usersTable.tableName,
       }
     });
+    usersTable.grantReadWriteData(authorizerFunction);
 
-    const api = new appsync.GraphqlApi(this, 'Api', {
+    new appsync.GraphqlApi(this, 'Api', {
       name: `${props.serviceName}-${props.stageName}`,
       definition: {
         schema: appsync.SchemaFile.fromAsset('schema.graphql'),
@@ -48,16 +47,6 @@ export class EvoluaApiStack extends cdk.Stack {
         },
       },
       xrayEnabled: true,
-    });
-  }
-
-  private createUsersTable(): dynamodb.Table {
-    return new dynamodb.Table(this, 'UsersTable', {
-      partitionKey: {
-        name: 'id',
-        type: dynamodb.AttributeType.STRING,
-      },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
     });
   }
 

@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
+import { DataStack } from './constructs/data-stack';
 import { EvoluaApiStack } from './constructs/evolua-api-stack';
+import { EvoluaWebhookStack } from './constructs/evolua-webhook-stack';
 import { CommonLambdaEnvVars } from './aspects/lambda';
+import { EvoluaServiceStackProps } from './constructs/evolua-stack-props';
 
 const app = new cdk.App();
 
@@ -19,12 +22,23 @@ if (!ssmStageName) {
   ssmStageName = stageName;
 }
 
-const serviceName = 'evolua-api';
-
-new EvoluaApiStack(app, `EvoluaApiStack-${stageName}`, {
-  serviceName,
+new DataStack(app, `EvoluaDataStack-${stageName}`, {
   stageName,
   ssmStageName,
 });
 
-cdk.Aspects.of(app).add(new CommonLambdaEnvVars(serviceName, stageName, ssmStageName));
+const apiStackProps: EvoluaServiceStackProps = {
+  serviceName: 'evolua-api',
+  stageName,
+  ssmStageName,
+};
+const apiStack = new EvoluaApiStack(app, `EvoluaApiStack-${stageName}`, apiStackProps);
+cdk.Aspects.of(apiStack).add(new CommonLambdaEnvVars(apiStackProps));
+
+const webhookStackProps: EvoluaServiceStackProps = {
+  serviceName: 'evolua-webhook',
+  stageName,
+  ssmStageName,
+};
+const webhookStack = new EvoluaWebhookStack(app, `EvoluaWebhookStack-${stageName}`, webhookStackProps);
+cdk.Aspects.of(webhookStack).add(new CommonLambdaEnvVars(webhookStackProps));
