@@ -1,33 +1,40 @@
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
+import * as eventTargets from 'aws-cdk-lib/aws-events-targets';
+import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { EvoluaStackProps } from './evolua-stack-props';
 import { Construct } from 'constructs';
 
 export class DataStack extends cdk.Stack {
   props: EvoluaStackProps;
+  usersTable: dynamodb.Table;
+  eventsTable: dynamodb.Table;
+  eventBus: events.EventBus;  
 
   constructor(scope: Construct, id: string, props: EvoluaStackProps) {
     super(scope, id);
 
     this.props = props;
 
-    const usersTable = this.createUsersTable();
-    this.createTableParameters('UsersTable', usersTable, 'users-table');
+    this.usersTable = this.createUsersTable();
+    this.createTableParameters('UsersTable', this.usersTable, 'users-table');
 
-    const eventsTable = this.createEventsTable();
-    this.createTableParameters('EventsTable', eventsTable, 'events-table');
+    this.eventsTable = this.createEventsTable();
+    this.createTableParameters('EventsTable', this.eventsTable, 'events-table');
 
-    const eventBus = this.createEventBus();
+    this.eventBus = this.createEventBus();
     new ssm.StringParameter(this, 'EventBusName', {
       parameterName: `/evolua/${props.ssmStageName}/event-bus/name`,
-      stringValue: eventBus.eventBusName,
+      stringValue: this.eventBus.eventBusName,
     });
     new ssm.StringParameter(this, 'EventBusArn', {
       parameterName: `/evolua/${props.ssmStageName}/event-bus/arn`,
-      stringValue: eventBus.eventBusArn,
+      stringValue: this.eventBus.eventBusArn,
     });
+
+    this.createGitHubEventHandlerFunction();
   }
 
   private createEventBus(): events.EventBus {
@@ -75,5 +82,26 @@ export class DataStack extends cdk.Stack {
       parameterName: `/evolua/${this.props.ssmStageName}/dynamodb/${ssmPath}/stream-arn`,
       stringValue: table.tableStreamArn || '',
     });
+  }
+
+  private createGitHubEventHandlerFunction() {
+    const githubHandler = new lambda.NodejsFunction(this, 'GitHubEventHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/github-event-handler.ts',
+      handler: 'handler',
+      memorySize: 1024,
+      environment: {
+      }
+    });
+
+    // add EventBridge event source for the githubHandler function    
+    const ghWebhookRule = new events.Rule(this, 'GithubWebhookRule', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['github'],
+        detailType: ['webhook'],
+      }
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(githubHandler));
   }
 }
