@@ -14,7 +14,7 @@ const handler = async (event, context) => {
     secret: context.GITHUB_SECRET,
   });
 
-  const signature = event.headers["x-hub-signature-256"];
+  const signature = event.headers["X-Hub-Signature-256"];
   if (!(await webhooks.verify(event.body, signature))) {
     return {
       statusCode: 401
