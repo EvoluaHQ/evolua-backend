@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
@@ -8,6 +9,7 @@ import { EvoluaServiceStackProps } from './evolua-stack-props';
 import { Construct } from 'constructs';
 
 export class EvoluaWebhookStack extends cdk.Stack {
+  props: EvoluaServiceStackProps;
   usersTable: dynamodb.ITable;
   eventsTable: dynamodb.ITable;
   eventBus: events.IEventBus;
@@ -15,6 +17,8 @@ export class EvoluaWebhookStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: EvoluaServiceStackProps) {
     super(scope, id);
+
+    this.props = props;
 
     const usersTableArn = ssm.StringParameter.valueForStringParameter(
       this, `/evolua/${props.ssmStageName}/dynamodb/users-table/arn`);
@@ -34,11 +38,11 @@ export class EvoluaWebhookStack extends cdk.Stack {
       }
     });
 
-    this.createClerkWebhook(props.stageName);
-    this.createGitHubWebhook(props.stageName);
+    this.createClerkWebhook();
+    this.createGitHubWebhook();
   }
 
-  private createClerkWebhook(stageName: string) {
+  private createClerkWebhook() {
     const webhookFunction = new lambda.NodejsFunction(this, 'ClerkWebhookFunction', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
       entry: 'functions/clerk-webhook.js',
@@ -55,13 +59,14 @@ export class EvoluaWebhookStack extends cdk.Stack {
     this.eventsTable.grantWriteData(webhookFunction);
     this.eventBus.grantPutEventsTo(webhookFunction);
 
-    // add a resource to this.api for the path GET /clerk and connec it to webhookFunction
+    // set up the POST /clerk endpoint with an API key as a shared secret
+    // between the Clerk service and the webhook
     const clerkResource = this.api.root.addResource('clerk');
     const apiKey = this.api.addApiKey('ClerkApiKey', {
-      apiKeyName: `ClerkApiKey-${stageName}`,
+      apiKeyName: `ClerkApiKey-${this.props.stageName}`,
     });
     const plan = this.api.addUsagePlan('ClerkUsagePlan', {
-      name: `Clerk-${stageName}`,
+      name: `Clerk-${this.props.stageName}`,
       apiStages: [{
         api: this.api,
         stage: this.api.deploymentStage,
@@ -74,7 +79,7 @@ export class EvoluaWebhookStack extends cdk.Stack {
     });
   }
 
-  private createGitHubWebhook(stageName: string) {
+  private createGitHubWebhook() {
     const webhookFunction = new lambda.NodejsFunction(this, 'GitHubWebhookFunction', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
       entry: 'functions/github-webhook.js',
@@ -89,22 +94,15 @@ export class EvoluaWebhookStack extends cdk.Stack {
     this.eventsTable.grantWriteData(webhookFunction);
     this.eventBus.grantPutEventsTo(webhookFunction);
 
-    // add a resource to this.api for the path GET /github and connec it to webhookFunction
+    // set up the POST /github endpoint
     const githubResource = this.api.root.addResource('github');
-    const apiKey = this.api.addApiKey('GitHubApiKey', {
-      apiKeyName: `GitHubApiKey-${stageName}`,
-    });
-    const plan = this.api.addUsagePlan('GitHubUsagePlan', {
-      name: `GitHub-${stageName}`,
-      apiStages: [{
-        api: this.api,
-        stage: this.api.deploymentStage,
-      }],
-    });
-    plan.addApiKey(apiKey);
+    githubResource.addMethod('POST', new apigateway.LambdaIntegration(webhookFunction));
 
-    githubResource.addMethod('POST', new apigateway.LambdaIntegration(webhookFunction), {
-      apiKeyRequired: true,
-    });
+    // we need to validate the webhook with a GitHub secret in SSM parameter store
+    // see https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries
+    webhookFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter*'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/github/secret`]
+    }))
   }
 }
