@@ -12,3 +12,18 @@ The `cdk.json` file tells the CDK Toolkit how to execute your app.
 * `npx cdk deploy`  deploy this stack to your default AWS account/region
 * `npx cdk diff`    compare deployed stack with current state
 * `npx cdk synth`   emits the synthesized CloudFormation template
+
+### Steps for Local Testing with AWS SAM CLI
+
+1. **Synthesize the CDK project:**
+
+   Run the following command in the root of your project to generate the CloudFormation template:
+
+   ```bash
+   npx cdk synth > template.yaml
+
+
+sam local start-api --template-file cdk.out/EvoluaWebhookStack-dev.template.json
+
+
+
