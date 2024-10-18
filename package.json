@@ -27,6 +27,8 @@
     "@aws-lambda-powertools/logger": "^2.8.0",
     "@middy/core": "^4.7.0",
     "@middy/ssm": "^4.7.0",
+    "@octokit/auth-app": "^7.1.1",
+    "@octokit/rest": "^21.0.2",
     "aws-cdk-lib": "^2.161.1",
     "constructs": "^10.0.0",
     "jsonwebtoken": "^9.0.2",
