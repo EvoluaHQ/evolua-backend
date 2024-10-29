@@ -8,11 +8,12 @@ type Query {
 }
 
 type Mutation {
-  inviteUser(
-    tenantId: ID! 
-    name: String! 
-    email: AWSEmail!
-  ): User
+  connectRepo(repoId: ID!): Repo!
+}
+
+type Repo {
+  id: ID!
+  name: String!
 }
 
 type Tenant {

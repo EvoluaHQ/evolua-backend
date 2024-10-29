@@ -14,7 +14,8 @@ const publishEvent = async (eventId, source, eventType, data) => {
       eventId,
       version: '1',
       timestamp: new Date().toISOString(),
-      type: eventType,      
+      source,
+      type: eventType,
     },
     data
   };

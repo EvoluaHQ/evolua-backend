@@ -34,7 +34,7 @@ export class DataStack extends cdk.Stack {
       stringValue: this.eventBus.eventBusArn,
     });
 
-    this.createGitHubEventHandlerFunction();
+    this.createGitHubPrOpenedEventHandlerFunction();
   }
 
   private createEventBus(): events.EventBus {
@@ -84,10 +84,10 @@ export class DataStack extends cdk.Stack {
     });
   }
 
-  private createGitHubEventHandlerFunction() {
-    const githubHandler = new lambda.NodejsFunction(this, 'GitHubEventHandlerFunction', {
+  private createGitHubPrOpenedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'GitHubPrOpenedHandlerFunction', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-      entry: 'functions/github-event-handler.ts',
+      entry: 'functions/github-pr-opened.ts',
       handler: 'handler',
       memorySize: 1024,
       environment: {
@@ -95,13 +95,17 @@ export class DataStack extends cdk.Stack {
     });
 
     // add EventBridge event source for the githubHandler function    
-    const ghWebhookRule = new events.Rule(this, 'GithubWebhookRule', {
+    const ghWebhookRule = new events.Rule(this, 'GithubPrRule', {
       eventBus: this.eventBus,
       eventPattern: {
         source: ['github'],
-        detailType: ['webhook'],
+        detail: {
+          metadata: {
+            type: ['pull_request.opened'],
+          }
+        }
       }
     });
-    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(githubHandler));
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
   }
 }

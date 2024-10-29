@@ -3,6 +3,10 @@ const ulid = require('ulid');
 const { Webhooks } = require('@octokit/webhooks');
 const middy = require('@middy/core');
 const ssm = require('@middy/ssm');
+const { 
+  GH_PR_ACTIONS,
+  GH_INSTALL_ACTIONS
+} = require('./lib/constants');
 
 const { SSM_STAGE_NAME } = process.env;
 
@@ -24,8 +28,19 @@ const handler = async (event, context) => {
   const payload = event.body ? JSON.parse(event.body) : {};
   const eventId = ulid.ulid();
 
-  await events.publishEvent(eventId, 'github', 'webhook', payload);
-  await events.saveEvent('default-tenant', eventId, 'github', 'webhook', payload);
+  let eventCategory = 'uncategorized';
+  if (payload.pull_request && GH_PR_ACTIONS.includes(payload.action)) {
+    eventCategory = 'pull_request';
+  } else if (payload.installation && GH_INSTALL_ACTIONS.includes(payload.action)) {
+    eventCategory = 'installation';
+  }
+  // there are other categories, such as "issues" and "security_advisory"
+  // but we don't care about those for now
+
+  const eventType = `${eventCategory}.${payload.action}`;
+
+  await events.publishEvent(eventId, 'github', eventType, payload);
+  await events.saveEvent('default-tenant', eventId, 'github', eventType, payload);
 
   return {
     statusCode: 200
