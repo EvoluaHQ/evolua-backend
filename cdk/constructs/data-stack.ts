@@ -4,6 +4,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as eventTargets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { EvoluaStackProps } from './evolua-stack-props';
 import { Construct } from 'constructs';
 
@@ -90,6 +91,7 @@ export class DataStack extends cdk.Stack {
       entry: 'functions/github-pr-opened.js',
       handler: 'handler',
       memorySize: 1024,
+      timeout: cdk.Duration.minutes(5),
       environment: {
         STAGE_NAME: this.props.stageName,
         SSM_STAGE_NAME: this.props.ssmStageName,
@@ -109,5 +111,18 @@ export class DataStack extends cdk.Stack {
       }
     });
     ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    handler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter*'],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/github/app-id`,
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/github/private-key`,
+      ],
+    }));
+
+    handler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [ '*' ]
+    }));    
   }
 }
