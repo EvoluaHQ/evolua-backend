@@ -91,6 +91,7 @@ export class DataStack extends cdk.Stack {
       handler: 'handler',
       memorySize: 1024,
       environment: {
+        STAGE_NAME: this.props.stageName,
         SSM_STAGE_NAME: this.props.ssmStageName,
       }
     });
