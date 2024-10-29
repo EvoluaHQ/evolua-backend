@@ -1,6 +1,7 @@
 const middy = require('@middy/core');
 const ssm = require('@middy/ssm');
 const github = require('./lib/github-helper');
+const scans = require('./lib/scans');
 const { BedrockRuntimeClient, ConverseCommand } = require('@aws-sdk/client-bedrock-runtime');
 const bedrockClient = new BedrockRuntimeClient();
 const { GitHubEventDetail } = require('./github-pr-opened.event');
@@ -33,8 +34,8 @@ Do not provide any comment besides the findings list.
 <JSON format>
 {
   "summary": {
-    "total_issues": <number>,
-    "risk_levels": {
+    "issues": <number>,
+    "risks": {
       "critical": <number>,
       "high": <number>,
       "medium": <number>,
@@ -43,24 +44,23 @@ Do not provide any comment besides the findings list.
   },
   "issues": [
     {
-      "id": "VULN-001",
       "type": "vulnerability|code_quality|best_practice",
-      "risk_level": "critical|high|medium|low",
       "title": "Brief description",
+      "severity": "critical|high|medium|low",
       "location": {
-        "line_start": <number>,
-        "line_end": <number>
+        "start": <number>,
+        "end": <number>
       },
       "description": "Detailed explanation of the issue",
       "impact": "Potential consequences",
       "recommendation": "How to fix",
-      "cwe_id": "CWE-XXX (if applicable)"
+      "cwe": "CWE-XXX (if applicable)"
     }
   ]
 }
 </JSON format>`;
 
-  const scanResultPromises = prFileContent.map(async (file) => {
+  const scanResultsPromises = prFileContent.map(async (file) => {
     const resp = await bedrockClient.send(new ConverseCommand({
       modelId: "anthropic.claude-instant-v1",
       messages: [{
@@ -88,10 +88,33 @@ ${file.content}
         .join('\n\n');
       const comment = `${file.path}: **${findings.issues.length} issues found**\n\n${issues}`;
       await github.commentOnPR(detail.data.pull_request.node_id, comment);
-    }    
+    }
+
+    return {
+      file: file.path,
+      additions: file.additions,
+      deletions: file.deletions,
+      changeType: file.changeType,
+      sha: file.sha,
+      summary: findings.summary,
+      issues: findings.issues
+    }
   });
 
-  const allResults = await Promise.all(scanResultPromises);
+  const scanResults = await Promise.all(scanResultsPromises);
+  const pullRequest = {
+    id: detail.data.pull_request.id.toString(),
+    number: detail.data.pull_request.number,
+    title: detail.data.pull_request.title,
+    url: detail.data.pull_request.url,
+    createdAt: detail.data.pull_request.created_at,
+  }
+  const repoId = `github#${detail.data.repository.id}`;
+  await scans.saveScanResults(
+    repoId,
+    pullRequest,
+    scanResults
+  );
 };
 
 module.exports.handler = middy(_handler)

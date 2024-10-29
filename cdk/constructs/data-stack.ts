@@ -12,18 +12,31 @@ export class DataStack extends cdk.Stack {
   props: EvoluaStackProps;
   usersTable: dynamodb.Table;
   eventsTable: dynamodb.Table;
-  eventBus: events.EventBus;  
+  reposTable: dynamodb.Table;
+  scansTable: dynamodb.Table;
+  eventBus: events.EventBus;
+  dataRemovalPolicy: cdk.RemovalPolicy;
 
   constructor(scope: Construct, id: string, props: EvoluaStackProps) {
     super(scope, id);
 
     this.props = props;
 
+    this.dataRemovalPolicy = this.props.stageName === "prod" 
+      ? cdk.RemovalPolicy.RETAIN
+      : cdk.RemovalPolicy.DESTROY;
+
     this.usersTable = this.createUsersTable();
     this.createTableParameters('UsersTable', this.usersTable, 'users-table');
 
     this.eventsTable = this.createEventsTable();
     this.createTableParameters('EventsTable', this.eventsTable, 'events-table');
+
+    this.reposTable = this.createReposTable();
+    this.createTableParameters('ReposTable', this.reposTable, 'repos-table');
+
+    this.scansTable = this.createScansTable();
+    this.createTableParameters('ScanResultsTable', this.scansTable, 'scans-table');
 
     this.eventBus = this.createEventBus();
     new ssm.StringParameter(this, 'EventBusName', {
@@ -51,7 +64,8 @@ export class DataStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
     });
   }
 
@@ -66,7 +80,40 @@ export class DataStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
+    });
+  }
+
+  private createReposTable(): dynamodb.Table {
+    return new dynamodb.Table(this, 'ReposTable', {
+      partitionKey: {
+        name: 'tenantId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'repoId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
+    });
+  }
+
+  private createScansTable(): dynamodb.Table {
+    return new dynamodb.Table(this, 'ScansTable', {
+      partitionKey: {
+        name: 'repoId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'sk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
     });
   }
 
@@ -93,10 +140,11 @@ export class DataStack extends cdk.Stack {
       memorySize: 1024,
       timeout: cdk.Duration.minutes(5),
       environment: {
+        SCANS_TABLE_NAME: this.scansTable.tableName,
         STAGE_NAME: this.props.stageName,
         SSM_STAGE_NAME: this.props.ssmStageName,
       }
-    });
+    });    
 
     // add EventBridge event source for the githubHandler function    
     const ghWebhookRule = new events.Rule(this, 'GithubPrRule', {
@@ -123,6 +171,8 @@ export class DataStack extends cdk.Stack {
     handler.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
       resources: [ '*' ]
-    }));    
+    }));
+
+    this.scansTable.grantWriteData(handler);
   }
 }
