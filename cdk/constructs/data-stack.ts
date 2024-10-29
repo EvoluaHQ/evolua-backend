@@ -87,10 +87,11 @@ export class DataStack extends cdk.Stack {
   private createGitHubPrOpenedEventHandlerFunction() {
     const handler = new lambda.NodejsFunction(this, 'GitHubPrOpenedHandlerFunction', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-      entry: 'functions/github-pr-opened.ts',
+      entry: 'functions/github-pr-opened.js',
       handler: 'handler',
       memorySize: 1024,
       environment: {
+        SSM_STAGE_NAME: this.props.ssmStageName,
       }
     });
 
