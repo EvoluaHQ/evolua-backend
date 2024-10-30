@@ -35,8 +35,7 @@ export async function commentOnPR(pullRequestId: string, comment: string) {
   `;
 
   try {
-
-    const resp = await octokit.graphql(mutation, {
+    await octokit.graphql(mutation, {
       input: {
         body: comment,
         subjectId: pullRequestId
