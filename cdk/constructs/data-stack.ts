@@ -40,11 +40,11 @@ export class DataStack extends cdk.Stack {
 
     this.eventBus = this.createEventBus();
     new ssm.StringParameter(this, 'EventBusName', {
-      parameterName: `/evolua/${props.ssmStageName}/event-bus/name`,
+      parameterName: `/evolua/${props.stageName}/event-bus/name`,
       stringValue: this.eventBus.eventBusName,
     });
     new ssm.StringParameter(this, 'EventBusArn', {
-      parameterName: `/evolua/${props.ssmStageName}/event-bus/arn`,
+      parameterName: `/evolua/${props.stageName}/event-bus/arn`,
       stringValue: this.eventBus.eventBusArn,
     });
 
@@ -119,15 +119,15 @@ export class DataStack extends cdk.Stack {
 
   private createTableParameters(id: string, table: dynamodb.Table, ssmPath: string) {
     new ssm.StringParameter(this, `${id}Name`, {
-      parameterName: `/evolua/${this.props.ssmStageName}/dynamodb/${ssmPath}/name`,
+      parameterName: `/evolua/${this.props.stageName}/dynamodb/${ssmPath}/name`,
       stringValue: table.tableName,
     });
     new ssm.StringParameter(this, `${id}Arn`, {
-      parameterName: `/evolua/${this.props.ssmStageName}/dynamodb/${ssmPath}/arn`,
+      parameterName: `/evolua/${this.props.stageName}/dynamodb/${ssmPath}/arn`,
       stringValue: table.tableArn,
     });
     new ssm.StringParameter(this, `${id}StreamArn`, {
-      parameterName: `/evolua/${this.props.ssmStageName}/dynamodb/${ssmPath}/stream-arn`,
+      parameterName: `/evolua/${this.props.stageName}/dynamodb/${ssmPath}/stream-arn`,
       stringValue: table.tableStreamArn || '',
     });
   }
