@@ -51,15 +51,18 @@ export class DataStack extends cdk.Stack {
     this.createGitHubPrOpenedEventHandlerFunction();
 
     new cdk.CfnOutput(this, 'SSM_STAGE_NAME', {
+      key: 'SsmStageName',
       value: this.props.ssmStageName
     });
 
     new cdk.CfnOutput(this, 'AWS_REGION', {
+      key: 'AwsRegion',
       value: cdk.Aws.REGION
     });
 
     new cdk.CfnOutput(this, 'SCANS_TABLE_NAME', {
-      value: 'placeholder'
+      key: 'ScansTableName',
+      value: this.scansTable.tableName
     });
   }
 

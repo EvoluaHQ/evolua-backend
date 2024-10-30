@@ -43,10 +43,15 @@ for OUTPUT_KEY in $(aws cloudformation describe-stacks --stack-name "$STACK_NAME
 do
     OUTPUT_VALUE=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$REGION" | jq -r --arg OUTPUT_KEY "$OUTPUT_KEY" '.Stacks[0].Outputs[] | select(.OutputKey==$OUTPUT_KEY) .OutputValue')
     
+    # Format the OUTPUT_KEY to uppercase with underscores
+    # e.g. MyOutputKey becomes MY_OUTPUT_KEY
+    # This is because CloudFormation outputs doesn't allow _ in the key
+    FORMATTED_OUTPUT_KEY=$(echo "$OUTPUT_KEY" | sed -E 's/([a-z])([A-Z])/\1_\2/g' | tr '[:lower:]' '[:upper:]')
+
     # Check if the key already exists in the output file
     if ! grep -q "^$OUTPUT_KEY=" $OUTPUT_FILE; then
-        echo "$OUTPUT_KEY=$OUTPUT_VALUE" >> $OUTPUT_FILE
+        echo "$FORMATTED_OUTPUT_KEY=$OUTPUT_VALUE" >> $OUTPUT_FILE
     fi
 done
 
-echo "$OUTPUT_FILE file has been created/updated with environment variables from Lambda functions and CloudFormation stack outputs."
+echo "$OUTPUT_FILE file has been created/updated with CloudFormation stack outputs."

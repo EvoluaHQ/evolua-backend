@@ -23,8 +23,8 @@ To create a short-lived environment called `dev-yan` and reuse the SSM parameter
 
 To run the test scripts, e.g. `test:unit`, you need to first create a `.env` file and capture the information the test needs.
 
-To do this, execute the `export-env.sh` script with the name of your environment.
-For dev, run `./export-env.sh dev`
+To do this, execute the `export-env.sh` script with the name of your environment and region.
+For dev, run `./export-env.sh dev us-east-1`
 
 Make sure you have an active AWS credential or profile in the terminal session when you execute the script or run the tests.
 
