@@ -1,9 +1,9 @@
-const { GitHubEventDetail } = require('./clerk-webook.event');
+const { ClerkUserUpsertedEventDetail } = require('./clerk-webook.event');
 const ulid = require('ulid');
 const Users = require('./lib/users');
 
 /**
- * @param {import('aws-lambda').EventBridgeEvent<'user.created' | 'user.updated', GitHubEventDetail>} event
+ * @param {import('aws-lambda').EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>} event
  */
 module.exports.handler = async (event) => {
   const email = event.detail.data.data.email_addresses?.[0]?.email_address;
@@ -17,7 +17,7 @@ module.exports.handler = async (event) => {
   const id = user?.id || ulid.ulid();
   const now = new Date().toJSON();
   
-  await Users.saveUser({
+  await Users.upsertUser({
     id,
     email,
     username: event.detail.data.data.username,

@@ -49,7 +49,9 @@ export class DataStack extends cdk.Stack {
     });
 
     this.createGitHubPrOpenedEventHandlerFunction();
+
     this.createClerkUserUpsertedEventHandlerFunction();
+    this.createClerkUserDeletedEventHandlerFunction();
 
     new cdk.CfnOutput(this, 'SSM_STAGE_NAME', {
       key: 'SsmStageName',
@@ -237,6 +239,34 @@ export class DataStack extends cdk.Stack {
         detail: {
           metadata: {
             type: ['user.created', 'user.updated']
+          }
+        }
+      }
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+  }
+
+  private createClerkUserDeletedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'ClerkUserDeletedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/clerk-user-deleted.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        USERS_TABLE_NAME: this.usersTable.tableName
+      }
+    });    
+
+    const clerkWebhookRule = new events.Rule(this, 'ClerkUserDeleted', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['clerk'],
+        detail: {
+          metadata: {
+            type: ['user.deleted']
           }
         }
       }

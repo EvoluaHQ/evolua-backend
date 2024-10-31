@@ -1,5 +1,5 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
@@ -20,9 +20,10 @@ interface User {
   githubHandle?: string;
   createdAt: string;
   lastUpdatedAt: string;
+  deleted: boolean;
 }
 
-async function findUserByClerkUserId(clerkUserId: string) {
+export async function findUserByClerkUserId(clerkUserId: string) {
   if (!clerkUserId) {
     return null;
   }
@@ -39,7 +40,7 @@ async function findUserByClerkUserId(clerkUserId: string) {
   return Items?.[0] || null;  
 }
 
-async function findUserByEmail(email: string) {
+export async function findUserByEmail(email: string) {
   const { Items } = await DocumentClient.send(new QueryCommand({
     TableName: USERS_TABLE_NAME,
     IndexName: 'emailIndex',
@@ -52,7 +53,7 @@ async function findUserByEmail(email: string) {
   return Items?.[0] || null;  
 }
 
-async function findUserByGithubHandle(githubHandle: string) {
+export async function findUserByGithubHandle(githubHandle: string) {
   if (!githubHandle) {
     return null;
   }
@@ -79,9 +80,26 @@ export async function findUser(clerkUserId: string, email: string, githubHandle:
   return byClerkId || byEmail || byGhHandle;
 }
 
-export async function saveUser(user: User) {
+export async function upsertUser(user: User) {
   await DocumentClient.send(new PutCommand({
     TableName: USERS_TABLE_NAME,
-    Item: user,
+    Item: {
+      ...user,
+      deleted: false,
+    },
+  }));
+}
+
+export async function deleteUser(id: string) {
+  await DocumentClient.send(new UpdateCommand({
+    TableName: USERS_TABLE_NAME,
+    Key: {
+      id
+    },
+    UpdateExpression: 'SET deleted = :deleted, lastUpdatedAt = :lastUpdatedAt',
+    ExpressionAttributeValues: {
+      ':deleted': true,
+      'lastUpdatedAt': new Date().toISOString(),
+    },
   }));
 }

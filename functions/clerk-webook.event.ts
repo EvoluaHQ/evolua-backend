@@ -1,11 +1,13 @@
-export interface GitHubEventDetail {
-  metadata: {
-    eventId: string,
-    version: string,
-    timestamp: string,
-    source: string,
-    type: string,
-  },
+export interface Metadata {
+  eventId: string,
+  version: string,
+  timestamp: string,
+  source: string,
+  type: string,
+}
+
+export interface ClerkUserUpsertedEventDetail {
+  metadata: Metadata,
   data: {
     data: {
       created_at: number,
@@ -32,6 +34,18 @@ export interface GitHubEventDetail {
       locked: boolean,
       private_metadata: object,
       public_metadata: object,
+    },
+    timestamp: number,
+    type: string,
+  }
+}
+
+export interface ClerkUserDeletedEventDetail {
+  metadata: Metadata,
+  data: {
+    data: {
+      deleted: boolean,
+      id: string, // clerk user id
     },
     timestamp: number,
     type: string,
