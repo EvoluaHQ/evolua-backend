@@ -1,6 +1,8 @@
 require("../steps/init")
 const { handler } = require("../../functions/github-pr-opened")
-const { GitHubEventDetail } = require("../../types/github-pr-opened.event")
+const {
+  GitHubEventDetail,
+} = require("../../functions/types/github-pr-opened.event")
 const fs = require("fs")
 
 describe("GitHub Event Handler", () => {

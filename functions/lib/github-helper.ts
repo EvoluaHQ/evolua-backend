@@ -6,7 +6,7 @@ const logger = new Logger()
 
 let octokit: Octokit
 
-export default async function init(
+export async function init(
   appId: string,
   privateKey: string,
   installationId: number

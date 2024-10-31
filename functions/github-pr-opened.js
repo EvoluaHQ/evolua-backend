@@ -6,7 +6,7 @@ const {
   ConverseCommand,
 } = require("@aws-sdk/client-bedrock-runtime")
 const bedrockClient = new BedrockRuntimeClient()
-const { GitHubEventDetail } = require("./github-pr-opened.event")
+const { GitHubEventDetail } = require("./types/github-pr-opened.event")
 
 const { SSM_STAGE_NAME } = process.env
 
@@ -66,7 +66,7 @@ Do not provide any comment besides the findings list.
   const scanResultPromises = prFileContent.map(async (file) => {
     const resp = await bedrockClient.send(
       new ConverseCommand({
-        modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        modelId: "ai21.jamba-1-5-large-v1:0",
         messages: [
           {
             role: "user",

@@ -11,10 +11,11 @@ const { text } = require("stream/consumers")
 const bedrockClient = new BedrockRuntimeClient()
 
 const { SSM_STAGE_NAME } = process.env
-const MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+// const MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+const MODEL_ID = "ai21.jamba-1-5-large-v1:0"
 
 // System prompt with strong guardrails
-const SYSTEM_PROMPT = `You are a Senior Software Engineer specialized in code review assistance focused on security, quality, performance and best practices review. Your analysis must be:
+const SYSTEM_PROMPT = `You are a Senior Software Engineer specialized in code review assistance focused on code security, quality, performance and best practices. Your analysis must be:
 - Precise: Use specific line numbers and code references
 - Evidence-based: Only report issues clearly present in the code
 - Standardized: Reference industry standards (CWE IDs, OWASP categories, or standard best practices)
@@ -29,6 +30,7 @@ const promptTemplate = `Analyze the provided source code for concrete issues in 
 1. Security vulnerabilities
 2. Code quality issues
 3. Best practice violations
+4. Performance optimizations
 
 Rules:
 - Only report issues that are clearly present in the code
@@ -48,7 +50,7 @@ Schema:
       "critical": number, // Immediate security risk
       "high": number,     // Significant vulnerability or quality issue
       "medium": number,   // Important but not urgent issue
-      "low": number      // Minor issue worth noting
+      "low": number       // Minor issue worth noting
     }
   },
   "issues": [
@@ -62,12 +64,12 @@ Schema:
         "line_end": number
       },
       "description": string,      // Detailed explanation with code evidence
-      "impact": string,          // Specific consequences if not addressed
-      "recommendation": string,  // Concrete steps to fix the issue
-      "cwe_id": string,         // CWE identifier if applicable (e.g., "CWE-287")
-      "references": {           // Optional: Industry standard references
-        "standard": string,     // e.g., "OWASP", "CERT", "ISO-27001"
-        "rule_id": string      // e.g., "A1:2021", "MSC21-C"
+      "impact": string,           // Specific consequences if not addressed
+      "recommendation": string,   // Concrete steps to fix the issue
+      "cwe_id": string,           // CWE identifier if applicable (e.g., "CWE-287")
+      "references": {             // Optional: Industry standard references
+        "standard": string,       // e.g., "OWASP", "CERT", "ISO-27001"
+        "rule_id": string         // e.g., "A1:2021", "MSC21-C"
       }
     }
   ]
@@ -102,7 +104,10 @@ const analyzeFile = async (file) => {
         ],
         inferenceConfig: {
           maxTokens: 1000,
-          temperature: 0.5,
+          // TODO: Consider more inference config options
+          // temperature: 0.5,
+          // stopSequences: ["string"],
+          // topP: number,
         },
       })
     )
