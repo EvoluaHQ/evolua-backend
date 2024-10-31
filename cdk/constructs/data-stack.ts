@@ -49,6 +49,7 @@ export class DataStack extends cdk.Stack {
     });
 
     this.createGitHubPrOpenedEventHandlerFunction();
+    this.createClerkUserUpsertedEventHandlerFunction();
 
     new cdk.CfnOutput(this, 'SSM_STAGE_NAME', {
       key: 'SsmStageName',
@@ -73,7 +74,7 @@ export class DataStack extends cdk.Stack {
   }
 
   private createUsersTable(): dynamodb.Table {
-    return new dynamodb.Table(this, 'UsersTable', {
+    const table = new dynamodb.Table(this, 'UsersTable', {
       partitionKey: {
         name: 'id',
         type: dynamodb.AttributeType.STRING,
@@ -82,12 +83,38 @@ export class DataStack extends cdk.Stack {
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy
     });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'emailIndex',
+      partitionKey: {
+        name: 'email',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'clerkUserIdIndex',
+      partitionKey: {
+        name: 'clerkUserId',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'githubHandleIndex',
+      partitionKey: {
+        name: 'githubHandle',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    return table;
   }
 
   private createEventsTable(): dynamodb.Table {
     return new dynamodb.Table(this, 'EventsTable', {
       partitionKey: {
-        name: 'tenantId',
+        name: 'source',
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
@@ -189,5 +216,33 @@ export class DataStack extends cdk.Stack {
     }));
 
     this.scansTable.grantWriteData(handler);
+  }
+
+  private createClerkUserUpsertedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'ClerkUserUpsertedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/clerk-user-upserted.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        USERS_TABLE_NAME: this.usersTable.tableName
+      }
+    });    
+
+    const clerkWebhookRule = new events.Rule(this, 'ClerkUserUpserted', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['clerk'],
+        detail: {
+          metadata: {
+            type: ['user.created', 'user.updated']
+          }
+        }
+      }
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
   }
 }

@@ -40,7 +40,7 @@ const handler = async (event, context) => {
   const eventType = `${eventCategory}.${payload.action}`;
 
   await events.publishEvent(eventId, 'github', eventType, payload);
-  await events.saveEvent('default-tenant', eventId, 'github', eventType, payload);
+  await events.saveEvent(eventId, 'github', eventType, payload);
 
   return {
     statusCode: 200
