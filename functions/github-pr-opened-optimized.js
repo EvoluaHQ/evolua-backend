@@ -5,6 +5,7 @@ const {
   BedrockRuntimeClient,
   ConverseCommand,
 } = require("@aws-sdk/client-bedrock-runtime")
+const { text } = require("stream/consumers")
 
 // Initialize Bedrock client
 const bedrockClient = new BedrockRuntimeClient()
@@ -81,17 +82,15 @@ Analyze the following code:
 // Helper function to analyze a single file
 const analyzeFile = async (file) => {
   try {
-    // Normalize the code content to ensure consistent caching
     const normalizedContent = file.content.trim()
 
     const resp = await bedrockClient.send(
       new ConverseCommand({
         modelId: MODEL_ID,
+        system: {
+          text: SYSTEM_PROMPT,
+        },
         messages: [
-          {
-            role: "system",
-            content: SYSTEM_PROMPT,
-          },
           {
             role: "user",
             content: [
@@ -99,13 +98,12 @@ const analyzeFile = async (file) => {
                 text: `${promptTemplate}\n\n<source code>\n${normalizedContent}\n</source code>`,
               },
             ],
-            /**
-             * Set cache control to ephemeral to avoid caching sensitive data
-             * https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
-             **/
-            cache_control: { type: "ephemeral" },
           },
         ],
+        inferenceConfig: {
+          maxTokens: 1000,
+          temperature: 0.5,
+        },
       })
     )
 
@@ -113,11 +111,23 @@ const analyzeFile = async (file) => {
       ?.map((msg) => msg.text)
       .join("\n\n")
 
+    if (!output) {
+      throw new Error("No output received from Bedrock")
+    }
+
     const findingsRegex = /<findings>([\s\S]*?)<\/findings>/
-    return JSON.parse(output.match(findingsRegex)[1])
+    const match = output.match(findingsRegex)
+
+    if (!match?.[1]) {
+      throw new Error("Invalid findings format in response")
+    }
+
+    return JSON.parse(match[1])
   } catch (error) {
     console.error("Error analyzing file:", error)
-    throw new Error(`Failed to analyze ${file.path}: ${error.message}`)
+    throw new Error(
+      `Failed to analyze ${file.path}: ${error instanceof Error ? error.message : "Unknown error"}`
+    )
   }
 }
 
