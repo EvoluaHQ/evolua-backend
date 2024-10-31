@@ -10,7 +10,7 @@ module.exports.handler = async (event) => {
 
   const eventId = ulid.ulid();
 
-  await events.publishEvent(eventId, 'clerk', 'webhook', payload);
+  await events.publishEvent(eventId, 'clerk', eventType, payload);
   await events.saveEvent(eventId, 'clerk', eventType, payload);
 
   return {

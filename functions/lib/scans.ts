@@ -10,7 +10,7 @@ const BATCH_SIZE = 25;
 
 const SCANS_TABLE_NAME = process.env.SCANS_TABLE_NAME || '';
 if (!SCANS_TABLE_NAME) {
-  throw new Error('SCANS_TABLE is not set');
+  throw new Error('SCANS_TABLE_NAME env var is missing');
 }
 
 interface Issue {

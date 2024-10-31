@@ -6,10 +6,10 @@ const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
 const USERS_TABLE_NAME = process.env.USERS_TABLE_NAME || '';
 if (!USERS_TABLE_NAME) {
-  throw new Error('USERS_TABLE_NAME is not set');
+  throw new Error('USERS_TABLE_NAME env var is missing');
 }
 
-interface User {
+export interface User {
   id: string;
   email: string;
   username: string;
@@ -23,7 +23,7 @@ interface User {
   deleted: boolean;
 }
 
-export async function findUserByClerkUserId(clerkUserId: string) {
+export async function findUserByClerkUserId(clerkUserId: string): Promise<User | null> {
   if (!clerkUserId) {
     return null;
   }
@@ -37,10 +37,10 @@ export async function findUserByClerkUserId(clerkUserId: string) {
     },
   }));
   
-  return Items?.[0] || null;  
+  return Items?.[0] as User || null;  
 }
 
-export async function findUserByEmail(email: string) {
+export async function findUserByEmail(email: string): Promise<User | null> {
   const { Items } = await DocumentClient.send(new QueryCommand({
     TableName: USERS_TABLE_NAME,
     IndexName: 'emailIndex',
@@ -50,10 +50,10 @@ export async function findUserByEmail(email: string) {
     },
   }));
   
-  return Items?.[0] || null;  
+  return Items?.[0] as User || null;  
 }
 
-export async function findUserByGithubHandle(githubHandle: string) {
+export async function findUserByGithubHandle(githubHandle: string): Promise<User | null> {
   if (!githubHandle) {
     return null;
   }
@@ -67,7 +67,7 @@ export async function findUserByGithubHandle(githubHandle: string) {
     },
   }));
   
-  return Items?.[0] || null;  
+  return Items?.[0] as User || null;  
 }
 
 export async function findUser(clerkUserId: string, email: string, githubHandle: string) {

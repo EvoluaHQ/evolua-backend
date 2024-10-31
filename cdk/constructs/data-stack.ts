@@ -49,6 +49,8 @@ export class DataStack extends cdk.Stack {
     });
 
     this.createGitHubPrOpenedEventHandlerFunction();
+    this.createGitHubInstallationAddedEventHandlerFunction();
+    this.createGitHubInstallationRemovedEventHandlerFunction();
 
     this.createClerkUserUpsertedEventHandlerFunction();
     this.createClerkUserDeletedEventHandlerFunction();
@@ -130,7 +132,22 @@ export class DataStack extends cdk.Stack {
   }
 
   private createReposTable(): dynamodb.Table {
-    return new dynamodb.Table(this, 'ReposTable', {
+    const table = new dynamodb.Table(this, 'ReposTable', {
+      partitionKey: {
+        name: 'pk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'sk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'tenantIdIndex',
       partitionKey: {
         name: 'tenantId',
         type: dynamodb.AttributeType.STRING,
@@ -139,10 +156,9 @@ export class DataStack extends cdk.Stack {
         name: 'repoId',
         type: dynamodb.AttributeType.STRING,
       },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
-      removalPolicy: this.dataRemovalPolicy
     });
+
+    return table;
   }
 
   private createScansTable(): dynamodb.Table {
@@ -190,7 +206,6 @@ export class DataStack extends cdk.Stack {
       }
     });    
 
-    // add EventBridge event source for the githubHandler function    
     const ghWebhookRule = new events.Rule(this, 'GithubPrRule', {
       eventBus: this.eventBus,
       eventPattern: {
@@ -218,6 +233,64 @@ export class DataStack extends cdk.Stack {
     }));
 
     this.scansTable.grantWriteData(handler);
+  }
+
+  private createGitHubInstallationAddedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'GitHubInstallationAddedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/github-installation-added.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        REPOS_TABLE_NAME: this.reposTable.tableName,
+        USERS_TABLE_NAME: this.usersTable.tableName,
+      }
+    });    
+
+    const ghWebhookRule = new events.Rule(this, 'GithubInstallAddedRule', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['github'],
+        detail: {
+          metadata: {
+            type: ['installation.added'],
+          }
+        }
+      }
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.reposTable.grantWriteData(handler);
+    this.usersTable.grantReadData(handler);
+  }
+
+  private createGitHubInstallationRemovedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'GitHubInstallationRemovedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/github-installation-removed.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        REPOS_TABLE_NAME: this.reposTable.tableName
+      }
+    });    
+
+    const ghWebhookRule = new events.Rule(this, 'GithubInstallRemovedRule', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['github'],
+        detail: {
+          metadata: {
+            type: ['installation.removed'],
+          }
+        }
+      }
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.reposTable.grantWriteData(handler);
   }
 
   private createClerkUserUpsertedEventHandlerFunction() {
