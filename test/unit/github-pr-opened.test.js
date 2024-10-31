@@ -1,7 +1,7 @@
-require("../steps/init");
-const { handler } = require("../../functions/github-pr-opened");
-const { GitHubEventDetail } = require("../../functions/github-pr-opened.event");
-const fs = require("fs");
+require("../steps/init")
+const { handler } = require("../../functions/github-pr-opened")
+const { GitHubEventDetail } = require("../../types/github-pr-opened.event")
+const fs = require("fs")
 
 describe("GitHub Event Handler", () => {
   /**
@@ -27,22 +27,22 @@ describe("GitHub Event Handler", () => {
         },
         data,
       },
-    };
+    }
   }
 
   it("should handle PR opened event", async () => {
-    const data = fs.readFileSync("examples/github/pr-opened.json", "utf8");
-    const event = newGitHubEvent(JSON.parse(data));
+    const data = fs.readFileSync("examples/github/pr-opened.json", "utf8")
+    const event = newGitHubEvent(JSON.parse(data))
 
-    const result = await handler(event, {});
+    const result = await handler(event, {})
     // Add assertions based on your business logic
-  });
+  })
 
   it("should handle PR closed event", async () => {
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it("should handle PR updated event", async () => {
-    expect(true).toBe(true);
-  });
-});
+    expect(true).toBe(true)
+  })
+})

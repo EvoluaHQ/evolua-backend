@@ -1,24 +1,28 @@
-import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/core";
-import { Logger } from '@aws-lambda-powertools/logger';
+import { Logger } from "@aws-lambda-powertools/logger"
+import { createAppAuth } from "@octokit/auth-app"
+import { Octokit } from "@octokit/core"
 
-const logger = new Logger();
+const logger = new Logger()
 
-let octokit: Octokit;
+let octokit: Octokit
 
-export async function init(appId: string, privateKey: string, installationId: number) {
+export default async function init(
+  appId: string,
+  privateKey: string,
+  installationId: number
+) {
   const auth = createAppAuth({
     appId,
     privateKey,
     installationId,
-  });
+  })
 
-  const installationAuth = await auth({ type: "installation" });
+  const installationAuth = await auth({ type: "installation" })
   octokit = new Octokit({
     auth: installationAuth.token,
-  });
+  })
 
-  logger.debug('GitHub Octokit initialized');
+  logger.debug("GitHub Octokit initialized")
 }
 
 export async function commentOnPR(pullRequestId: string, comment: string) {
@@ -32,32 +36,39 @@ export async function commentOnPR(pullRequestId: string, comment: string) {
         }
       }
     }
-  `;
+  `
 
   try {
     await octokit.graphql(mutation, {
       input: {
         body: comment,
-        subjectId: pullRequestId
-      }
-    });
-    console.log('sent comment');
+        subjectId: pullRequestId,
+      },
+    })
+    console.log("sent comment")
   } catch (err) {
-    console.log('failed to send comment', err);
+    console.log("failed to send comment", err)
   }
 }
 
 // File change types from GitHub API
-type FileChangeType = "ADDED" | "DELETED" | "MODIFIED" | "RENAMED" | "COPIED" | "CHANGED" | "UNCHANGED";
+type FileChangeType =
+  | "ADDED"
+  | "DELETED"
+  | "MODIFIED"
+  | "RENAMED"
+  | "COPIED"
+  | "CHANGED"
+  | "UNCHANGED"
 
 // Interface for the processed file data
 interface PRFile {
-  path: string;
-  additions: number;
-  deletions: number;
-  changeType: FileChangeType;
-  sha: string;
-  content: string | null;
+  path: string
+  additions: number
+  deletions: number
+  changeType: FileChangeType
+  sha: string
+  content: string | null
 }
 
 interface FetchPRFilesResponse {
@@ -65,31 +76,31 @@ interface FetchPRFilesResponse {
     pullRequest: {
       headRef: {
         target: {
-          oid: string;
-        };
-      },
+          oid: string
+        }
+      }
       files: {
         pageInfo: {
-          hasNextPage: boolean;
-          endCursor: string | null;
-        };
+          hasNextPage: boolean
+          endCursor: string | null
+        }
         nodes: Array<{
-          path: string;
-          additions: number;
-          deletions: number;
-          changeType: FileChangeType;
-        }>;
-      };
-    };
-  };
+          path: string
+          additions: number
+          deletions: number
+          changeType: FileChangeType
+        }>
+      }
+    }
+  }
 }
 
 interface FetchPRFileContentResponse {
   repository: {
     object: {
-      text: string;
-    };
-  };
+      text: string
+    }
+  }
 }
 
 async function fetchPRFileContent(
@@ -108,18 +119,22 @@ async function fetchPRFileContent(
         }
       }
     }
-  `;
+  `
 
   const response = await octokit.graphql<FetchPRFileContentResponse>(query, {
     owner,
     repo,
     expression: `${sha}:${filePath}`,
-  });
+  })
 
-  return response.repository.object?.text ?? null;
+  return response.repository.object?.text ?? null
 }
 
-export async function fetchPRFiles(owner: string, repo: string, prNumber: number): Promise<PRFile[]> {
+export async function fetchPRFiles(
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<PRFile[]> {
   const query = `
     query getPRFiles($owner: String!, $repo: String!, $prNumber: Int!, $cursor: String) {
       repository(owner: $owner, name: $repo) {
@@ -144,41 +159,42 @@ export async function fetchPRFiles(owner: string, repo: string, prNumber: number
         }
       }
     }
-  `;
+  `
 
-  const files: PRFile[] = [];
-  let hasNextPage = true;
-  let cursor: string | null = null;
-  let sha: string;
+  const files: PRFile[] = []
+  let hasNextPage = true
+  let cursor: string | null = null
+  let sha: string
 
   while (hasNextPage) {
-    const response: FetchPRFilesResponse = await octokit.graphql<FetchPRFilesResponse>(query, {
-      owner,
-      repo,
-      prNumber,
-      cursor
-    });
+    const response: FetchPRFilesResponse =
+      await octokit.graphql<FetchPRFilesResponse>(query, {
+        owner,
+        repo,
+        prNumber,
+        cursor,
+      })
 
-    sha = response.repository.pullRequest.headRef.target.oid;
-    const prFiles = response.repository.pullRequest.files;
-    
+    sha = response.repository.pullRequest.headRef.target.oid
+    const prFiles = response.repository.pullRequest.files
+
     // Add files from current page to our collection
-    const fetchContentPromises = prFiles.nodes.map(async file => {
-      const content = await fetchPRFileContent(owner, repo, file.path, sha);
+    const fetchContentPromises = prFiles.nodes.map(async (file) => {
+      const content = await fetchPRFileContent(owner, repo, file.path, sha)
       return {
         ...file,
         content,
-        sha
-      };
-    });
+        sha,
+      }
+    })
 
-    const newFiles = await Promise.all(fetchContentPromises);
-    files.push(...newFiles);
+    const newFiles = await Promise.all(fetchContentPromises)
+    files.push(...newFiles)
 
     // Update pagination info
-    hasNextPage = prFiles.pageInfo.hasNextPage;
-    cursor = prFiles.pageInfo.endCursor;
+    hasNextPage = prFiles.pageInfo.hasNextPage
+    cursor = prFiles.pageInfo.endCursor
   }
 
-  return files;
+  return files
 }
