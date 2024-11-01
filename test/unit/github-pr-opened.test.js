@@ -1,5 +1,5 @@
 require("../steps/init")
-const { handler } = require("../../functions/github-pr-opened")
+const { handler } = require("../../functions/github-pr-opened-optimized")
 const {
   GitHubEventDetail,
 } = require("../../functions/types/github-pr-opened.event")
@@ -33,7 +33,7 @@ describe("GitHub Event Handler", () => {
   }
 
   it("should handle PR opened event", async () => {
-    const data = fs.readFileSync("examples/github/pr-opened.json", "utf8")
+    const data = fs.readFileSync("examples/github/pr-opened-2.json", "utf8")
     const event = newGitHubEvent(JSON.parse(data))
 
     const result = await handler(event, {})
