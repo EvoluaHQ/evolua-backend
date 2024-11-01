@@ -23,6 +23,10 @@ export class EvoluaApiStack extends cdk.Stack {
       this, `/evolua/${props.ssmStageName}/dynamodb/scans-table/arn`);
     const scansTable = dynamodb.Table.fromTableArn(this, 'ScansTable', scansTableArn);
 
+    const scanResultsTableArn = ssm.StringParameter.valueForStringParameter(
+      this, `/evolua/${props.ssmStageName}/dynamodb/scan-results-table/arn`);
+    const scanResultsTable = dynamodb.Table.fromTableArn(this, 'ScanResultsTable', scanResultsTableArn);
+
     // create a authorizer lambda function
     const authorizerFunction = new lambda.NodejsFunction(this, 'Authorizer', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
@@ -59,11 +63,13 @@ export class EvoluaApiStack extends cdk.Stack {
         USERS_TABLE_NAME: usersTable.tableName,
         REPOS_TABLE_NAME: reposTable.tableName,
         SCANS_TABLE_NAME: scansTable.tableName,
+        SCAN_RESULTS_TABLE_NAME: scanResultsTable.tableName,
       }
     });
 
     const reposTableDataSource = graphQlApi.addDynamoDbDataSource('ReposTableDataSource', reposTable);
     const scansTableDataSource = graphQlApi.addDynamoDbDataSource('ScansTableDataSource', scansTable);
+    const scanResultsTableDataSource = graphQlApi.addDynamoDbDataSource('ScanResultsTableDataSource', scanResultsTable);
 
     const listTenantReposFunction = new appsync.AppsyncFunction(this, 'ListTenantReposFunction', {
       api: graphQlApi,

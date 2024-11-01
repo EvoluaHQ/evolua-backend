@@ -1,5 +1,5 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutItemCommand } from "@aws-sdk/lib-dynamodb";
 import * as ulid from 'ulid';
 import * as helper from './dynamodb-helper';
 
@@ -7,8 +7,14 @@ const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
 const SCANS_TABLE_NAME = process.env.SCANS_TABLE_NAME || '';
+const SCAN_RESULTS_TABLE_NAME = process.env.SCAN_RESULTS_TABLE_NAME || '';
+
 if (!SCANS_TABLE_NAME) {
   throw new Error('SCANS_TABLE_NAME env var is missing');
+}
+
+if (!SCAN_RESULTS_TABLE_NAME) {
+  throw new Error('SCAN_RESULTS_TABLE_NAME env var is missing');
 }
 
 interface Issue {
@@ -60,34 +66,28 @@ export async function saveScanResults(repoId: string, pr: PullRequest, results: 
 
   const countIssues = (f: (summary: Summary) => number) => {
     return results.reduce((acc, result) => acc + f(result.summary), 0);
-  } 
-
-  const saveScanReq = {
-    PutRequest: {
-      Item: {
-        repoId,
-        sk: `PR#${prId}#SUMMARY#${scanId}`,
-        scanId,
-        type: 'SUMMARY',
-        timestamp,
-        pullRequest: pr,
-        filesScanned: results.length,
-        issuesCount: countIssues((summary) => summary.issues),
-        critical: countIssues((summary) => summary.risks.critical),
-        high: countIssues((summary) => summary.risks.high),
-        medium: countIssues((summary) => summary.risks.medium),
-        low: countIssues((summary) => summary.risks.low)
-      }
-    }
   }
+
+  await DocumentClient.send(new PutItemCommand({
+    TableName: SCANS_TABLE_NAME,
+    Item: {
+      repoId,
+      scanId,
+      timestamp,
+      pullRequest: pr,
+      filesScanned: results.length,
+      issuesCount: countIssues((summary) => summary.issues),
+      critical: countIssues((summary) => summary.risks.critical),
+      high: countIssues((summary) => summary.risks.high),
+      medium: countIssues((summary) => summary.risks.medium),
+      low: countIssues((summary) => summary.risks.low)
+    }
+  }));
 
   const saveResultsReqs = results.map(result => ({
     PutRequest: {
       Item: {
-        repoId,
-        sk: `PR#${prId}#RESULT#${scanId}#${result.file}`,
         scanId,
-        type: 'RESULT',
         file: result.file,
         timestamp,
         changes: {
@@ -106,7 +106,5 @@ export async function saveScanResults(repoId: string, pr: PullRequest, results: 
     }
   }));
 
-  const allRequests = [saveScanReq, ...saveResultsReqs];
-
-  await helper.executeBatchWriteCommand(DocumentClient, SCANS_TABLE_NAME, allRequests);
+  await helper.executeBatchWriteCommand(DocumentClient, SCANS_TABLE_NAME, saveResultsReqs);
 }

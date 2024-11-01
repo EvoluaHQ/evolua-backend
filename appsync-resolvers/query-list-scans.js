@@ -10,7 +10,7 @@ export function request(ctx) {
 
   return {
     operation: 'Query',
-    limit: 25,
+    limit: 10,
     nextToken: ctx.arguments.nextToken,
     query: {
       expression: '#repoId = :repoId',

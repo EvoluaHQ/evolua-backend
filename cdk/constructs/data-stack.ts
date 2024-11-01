@@ -14,6 +14,7 @@ export class DataStack extends cdk.Stack {
   eventsTable: dynamodb.Table;
   reposTable: dynamodb.Table;
   scansTable: dynamodb.Table;
+  scanResultsTable: dynamodb.Table;
   eventBus: events.EventBus;
   dataRemovalPolicy: cdk.RemovalPolicy;
 
@@ -36,7 +37,10 @@ export class DataStack extends cdk.Stack {
     this.createTableParameters('ReposTable', this.reposTable, 'repos-table');
 
     this.scansTable = this.createScansTable();
-    this.createTableParameters('ScanResultsTable', this.scansTable, 'scans-table');
+    this.createTableParameters('ScansTable', this.scansTable, 'scans-table');
+
+    this.scanResultsTable = this.createScanResultsTable();
+    this.createTableParameters('ScanResultsTable', this.scanResultsTable, 'scan-results-table');
 
     this.eventBus = this.createEventBus();
     new ssm.StringParameter(this, 'EventBusName', {
@@ -178,7 +182,23 @@ export class DataStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
-        name: 'sk',
+        name: 'scanId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
+    });
+  }
+
+  private createScanResultsTable(): dynamodb.Table {
+    return new dynamodb.Table(this, 'ScanResultsTable', {
+      partitionKey: {
+        name: 'scanId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'file',
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -211,6 +231,7 @@ export class DataStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(5),
       environment: {
         SCANS_TABLE_NAME: this.scansTable.tableName,
+        SCAN_RESULTS_TABLE_NAME: this.scansTable.tableName,
         STAGE_NAME: this.props.stageName,
         SSM_STAGE_NAME: this.props.ssmStageName,
       }
@@ -243,6 +264,7 @@ export class DataStack extends cdk.Stack {
     }));
 
     this.scansTable.grantWriteData(handler);
+    this.scanResultsTable.grantWriteData(handler);
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {
