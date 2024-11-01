@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { Message } from "@anthropic-ai/sdk/resources"
+import { Logger } from "@aws-lambda-powertools/logger"
 import {
   BedrockRuntimeClient,
   ContentBlock,
@@ -8,6 +9,9 @@ import {
 } from "@aws-sdk/client-bedrock-runtime"
 import { Sema } from "async-sema"
 import { commentOnPR, fetchPRFiles, init } from "./lib/github-helper"
+import { AnalysisResult, AnalysisResults, PRFile } from "./types/scan-types"
+
+const logger = new Logger()
 
 const middy = require("@middy/core")
 const ssm = require("@middy/ssm")
@@ -77,48 +81,6 @@ Analyze the following code:
 {code}
 </source code>`
 
-interface PRFile {
-  path: string
-  content: string | null
-}
-
-interface Finding {
-  id: string
-  type: "vulnerability" | "code_quality" | "best_practice"
-  risk_level: "critical" | "high" | "medium" | "low"
-  title: string
-  location: {
-    line_start: number
-    line_end: number
-  }
-  description: string
-  impact: string
-  recommendation: string
-  cwe_id?: string
-  references?: {
-    standard: string
-    rule_id: string
-  }
-}
-
-interface AnalysisResults {
-  summary: {
-    total_issues: number
-    risk_levels: {
-      critical: number
-      high: number
-      medium: number
-      low: number
-    }
-  }
-  issues: Finding[]
-}
-
-interface AnalysisResult {
-  file: PRFile
-  findings: AnalysisResults
-}
-
 const sendMessage = async (
   content: string
 ): Promise<ConverseCommandOutput | Message> => {
@@ -161,28 +123,36 @@ const sendMessage = async (
 
 const analyzeFile = async (
   file: PRFile & { content: string }
-): Promise<AnalysisResults> => {
+): Promise<AnalysisResults | null> => {
   try {
     const normalizedContent = file.content.trim()
-    const resp = (await sendMessage(normalizedContent)) as any
+    const resp = (await sendMessage(normalizedContent)) as any // TODO: Fix type
     const content = resp?.output?.message?.content || resp?.content
 
+    /**
+     * Example output:
+     * "<findings>{"summary": {"total_issues": 1}, "issues": [...]}</findings>"
+     */
     const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n")
 
     if (!output) {
       throw new Error("No output received!")
     }
 
+    // Extract content between <findings> tags. match[0] includes tags, match[1] contains only the JSON content
     const findingsRegex = /<findings>([\s\S]*?)<\/findings>/
     const match = output.match(findingsRegex)
+    logger.info("****************************** MATCH")
+    logger.info("file", file.path)
 
     if (!match?.[1]) {
-      throw new Error("Invalid findings format in response")
+      logger.info("No findings in the response.")
+      return null
     }
 
     return JSON.parse(match[1])
   } catch (error) {
-    console.error("Error analyzing file:", error)
+    logger.error("Error analyzing file:", error as Error)
     throw new Error(
       `Failed to analyze ${file.path}: ${error instanceof Error ? error.message : "Unknown error"}`
     )
@@ -196,8 +166,8 @@ const processFiles = async (
   // Initialize semaphore with concurrency limit
   const sema = new Sema(concurrencyLimit, {
     capacity: files.length,
-    pauseFn: () => console.log("Rate limit reached, pausing..."),
-    resumeFn: () => console.log("Resuming analysis..."),
+    pauseFn: () => logger.info("Rate limit reached, pausing..."),
+    resumeFn: () => logger.info("Resuming analysis..."),
   })
 
   // Filter out files with null content before processing
@@ -217,13 +187,15 @@ const processFiles = async (
     await sema.acquire()
     try {
       const findings = await analyzeFile(file)
-      if (findings.issues.length > 0) {
-        console.log(`Found ${findings.issues.length} issues in ${file.path}`)
+
+      if (findings && findings.issues.length > 0) {
+        logger.info(`Found ${findings.issues.length} issues in ${file.path}`)
         return { file, findings }
       }
+
       return null
     } catch (error) {
-      console.error(`Error analyzing ${file.path}:`, error)
+      logger.error(`Error analyzing ${file.path}:`, error as Error)
       return null
     } finally {
       // Release semaphore after processing

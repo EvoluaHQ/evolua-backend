@@ -39,15 +39,21 @@ export async function commentOnPR(pullRequestId: string, comment: string) {
   `
 
   try {
-    await octokit.graphql(mutation, {
+    const result = await octokit.graphql(mutation, {
       input: {
         body: comment,
         subjectId: pullRequestId,
       },
     })
-    console.log("sent comment")
+    logger.info(
+      "sent comment for",
+      `Pull Request ID: ${pullRequestId}: Comment: ${comment}`
+    )
+
+    return result
   } catch (err) {
-    console.log("failed to send comment", err)
+    logger.error("failed to send comment", err as Error)
+    return null
   }
 }
 
@@ -108,7 +114,7 @@ async function fetchPRFileContent(
   repo: string,
   filePath: string,
   sha: string
-): Promise<string> {
+): Promise<string | null> {
   const query = `
     query ($owner: String!, $repo: String!, $expression: String!) {
       repository(owner: $owner, name: $repo) {
@@ -120,14 +126,18 @@ async function fetchPRFileContent(
       }
     }
   `
+  try {
+    const response = await octokit.graphql<FetchPRFileContentResponse>(query, {
+      owner,
+      repo,
+      expression: `${sha}:${filePath}`,
+    })
 
-  const response = await octokit.graphql<FetchPRFileContentResponse>(query, {
-    owner,
-    repo,
-    expression: `${sha}:${filePath}`,
-  })
-
-  return response.repository.object?.text ?? null
+    return response.repository.object?.text ?? null
+  } catch (error) {
+    logger.error("Failed to fetch file content", error as Error)
+    return null
+  }
 }
 
 export async function fetchPRFiles(
@@ -161,40 +171,45 @@ export async function fetchPRFiles(
     }
   `
 
-  const files: PRFile[] = []
-  let hasNextPage = true
-  let cursor: string | null = null
-  let sha: string
+  try {
+    const files: PRFile[] = []
+    let hasNextPage = true
+    let cursor: string | null = null
+    let sha: string
 
-  while (hasNextPage) {
-    const response: FetchPRFilesResponse =
-      await octokit.graphql<FetchPRFilesResponse>(query, {
-        owner,
-        repo,
-        prNumber,
-        cursor,
+    while (hasNextPage) {
+      const response: FetchPRFilesResponse =
+        await octokit.graphql<FetchPRFilesResponse>(query, {
+          owner,
+          repo,
+          prNumber,
+          cursor,
+        })
+
+      sha = response.repository.pullRequest.headRef.target.oid
+      const prFiles = response.repository.pullRequest.files
+
+      // Add files from current page to our collection
+      const fetchContentPromises = prFiles.nodes.map(async (file) => {
+        const content = await fetchPRFileContent(owner, repo, file.path, sha)
+        return {
+          ...file,
+          content,
+          sha,
+        }
       })
 
-    sha = response.repository.pullRequest.headRef.target.oid
-    const prFiles = response.repository.pullRequest.files
+      const newFiles = await Promise.all(fetchContentPromises)
+      files.push(...newFiles)
 
-    // Add files from current page to our collection
-    const fetchContentPromises = prFiles.nodes.map(async (file) => {
-      const content = await fetchPRFileContent(owner, repo, file.path, sha)
-      return {
-        ...file,
-        content,
-        sha,
-      }
-    })
+      // Update pagination info
+      hasNextPage = prFiles.pageInfo.hasNextPage
+      cursor = prFiles.pageInfo.endCursor
+    }
 
-    const newFiles = await Promise.all(fetchContentPromises)
-    files.push(...newFiles)
-
-    // Update pagination info
-    hasNextPage = prFiles.pageInfo.hasNextPage
-    cursor = prFiles.pageInfo.endCursor
+    return files
+  } catch (error) {
+    logger.error("Failed to fetch PR files", error as Error)
+    return []
   }
-
-  return files
 }
