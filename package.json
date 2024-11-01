@@ -11,6 +11,7 @@
     "cdk": "cdk"
   },
   "devDependencies": {
+    "@aws-appsync/utils": "^1.10.1",
     "@aws-sdk/client-dynamodb": "^3.670.0",
     "@aws-sdk/client-eventbridge": "^3.670.0",
     "@aws-sdk/lib-dynamodb": "^3.670.0",

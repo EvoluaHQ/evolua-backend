@@ -15,6 +15,14 @@ export class EvoluaApiStack extends cdk.Stack {
       this, `/evolua/${props.ssmStageName}/dynamodb/users-table/arn`);
     const usersTable = dynamodb.Table.fromTableArn(this, 'UsersTable', usersTableArn);
 
+    const reposTableArn = ssm.StringParameter.valueForStringParameter(
+      this, `/evolua/${props.ssmStageName}/dynamodb/repos-table/arn`);
+    const reposTable = dynamodb.Table.fromTableArn(this, 'ReposTable', reposTableArn);
+
+    const scansTableArn = ssm.StringParameter.valueForStringParameter(
+      this, `/evolua/${props.ssmStageName}/dynamodb/scans-table/arn`);
+    const scansTable = dynamodb.Table.fromTableArn(this, 'ScansTable', scansTableArn);
+
     // create a authorizer lambda function
     const authorizerFunction = new lambda.NodejsFunction(this, 'Authorizer', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
@@ -22,15 +30,15 @@ export class EvoluaApiStack extends cdk.Stack {
       handler: 'handler',
       memorySize: 1024,
       environment: {
-        JWKS_URI: 'https://dev-agq5zy2bqhbravbt.us.auth0.com/.well-known/jwks.json',
-        AUDIENCE: 'https://dev.evolua.io/api',
-        TOKEN_ISSUER: 'https://dev-agq5zy2bqhbravbt.us.auth0.com/',
         USERS_TABLE_NAME: usersTable.tableName,
       }
     });
-    usersTable.grantReadWriteData(authorizerFunction);
+    authorizerFunction.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${usersTable.tableArn}/index/clerkUserIdIndex`],
+    }));
 
-    new appsync.GraphqlApi(this, 'Api', {
+    const graphQlApi = new appsync.GraphqlApi(this, 'Api', {
       name: `${props.serviceName}-${props.stageName}`,
       definition: {
         schema: appsync.SchemaFile.fromAsset('schema.graphql'),
@@ -47,7 +55,61 @@ export class EvoluaApiStack extends cdk.Stack {
         },
       },
       xrayEnabled: true,
+      environmentVariables: {
+        USERS_TABLE_NAME: usersTable.tableName,
+        REPOS_TABLE_NAME: reposTable.tableName,
+        SCANS_TABLE_NAME: scansTable.tableName,
+      }
     });
+
+    const reposTableDataSource = graphQlApi.addDynamoDbDataSource('ReposTableDataSource', reposTable);
+    const scansTableDataSource = graphQlApi.addDynamoDbDataSource('ScansTableDataSource', scansTable);
+
+    const listTenantReposFunction = new appsync.AppsyncFunction(this, 'ListTenantReposFunction', {
+      api: graphQlApi,
+      name: 'listTenantRepos',
+      dataSource: reposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-list-tenant-repos.js'),
+    });
+
+    const hydrateTenantReposFunction = new appsync.AppsyncFunction(this, 'HydrateTenantReposFunction', {
+      api: graphQlApi,
+      name: 'hydrateTenantRepos',
+      dataSource: reposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-hydrate-tenant-repos.js')
+    });
+
+    graphQlApi.createResolver('QueryListReposResolver', {
+      typeName: 'Query',
+      fieldName: 'listRepos',
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/query-list-repos.js'),
+      pipelineConfig: [
+        listTenantReposFunction,
+        hydrateTenantReposFunction,
+      ]
+    });
+
+    graphQlApi.createResolver('RepoScansResolver', {
+      typeName: 'Repo',
+      fieldName: 'scans',
+      dataSource: scansTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/repo-scans.js'),
+    });
+
+    graphQlApi.createResolver('QueryListScansResolver', {
+      typeName: 'Query',
+      fieldName: 'listScans',
+      dataSource: scansTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/query-list-scans.js'),
+    });
+
+    reposTable.grantReadData(reposTableDataSource);
+    scansTable.grantReadData(scansTableDataSource);
   }
 
   private getIntrospectionConfig(stageName: string): appsync.IntrospectionConfig {

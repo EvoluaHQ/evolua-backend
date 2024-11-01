@@ -1,12 +1,10 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import * as ulid from 'ulid';
+import * as helper from './dynamodb-helper';
 
 const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
-
-// DynamoDB's batch operations also allow this many items in a batch
-const BATCH_SIZE = 25;
 
 const SCANS_TABLE_NAME = process.env.SCANS_TABLE_NAME || '';
 if (!SCANS_TABLE_NAME) {
@@ -109,17 +107,6 @@ export async function saveScanResults(repoId: string, pr: PullRequest, results: 
   }));
 
   const allRequests = [saveScanReq, ...saveResultsReqs];
-  const batches = [];
 
-  for (let i = 0; i < allRequests.length; i += BATCH_SIZE) {
-    const requests = allRequests.slice(i, i + BATCH_SIZE);
-    const batch = DocumentClient.send(new BatchWriteCommand({
-      RequestItems: {
-        [SCANS_TABLE_NAME]: requests
-      }
-    }));
-    batches.push(batch);
-  }
-
-  await Promise.all(batches);
+  await helper.executeBatchWriteCommand(DocumentClient, SCANS_TABLE_NAME, allRequests);
 }

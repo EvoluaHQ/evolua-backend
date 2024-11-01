@@ -65,6 +65,16 @@ export class DataStack extends cdk.Stack {
       value: cdk.Aws.REGION
     });
 
+    new cdk.CfnOutput(this, 'USERS_TABLE_NAME', {
+      key: 'UsersTableName',
+      value: this.usersTable.tableName
+    });
+
+    new cdk.CfnOutput(this, 'REPOS_TABLE_NAME', {
+      key: 'ReposTableName',
+      value: this.reposTable.tableName
+    });
+
     new cdk.CfnOutput(this, 'SCANS_TABLE_NAME', {
       key: 'ScansTableName',
       value: this.scansTable.tableName
