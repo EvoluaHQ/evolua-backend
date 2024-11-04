@@ -28,21 +28,26 @@ import { commentOnPR, fetchPRFiles, init } from "./lib/github-helper"
 import { AnalysisResult, AnalysisResults, PRFile } from "./types/scan-types"
 
 /**
+ * Initialize observability tools with consistent service naming
+ */
+const SERVICE_NAME = "code-review-service"
+
+/**
  * Initialize AWS Lambda Powertools for enhanced observability
  * These tools provide structured logging, metrics, and tracing capabilities
  */
 const logger = new Logger({
-  serviceName: "code-review-service",
+  serviceName: SERVICE_NAME,
   logLevel: "INFO",
 })
 
 const metrics = new Metrics({
   namespace: "CodeReview",
-  serviceName: "code-review-service",
+  serviceName: SERVICE_NAME,
 })
 
 const tracer = new Tracer({
-  serviceName: "code-review-service",
+  serviceName: SERVICE_NAME,
 })
 
 // Import middleware for AWS Systems Manager Parameter Store
@@ -61,36 +66,47 @@ const {
 } = process.env
 
 /**
- * Configuration constants for the analysis process
- * Includes AI model parameters, rate limiting, and file handling settings
+ * Configuration constants for file processing and analysis
+ * Size thresholds are based on:
+ * - AI model token limits
+ * - Processing efficiency
+ * - Response quality considerations
+ * - Cost optimization
  */
 const ANALYSIS_CONFIG = {
-  maxTokens: {
-    small: 1024, // For files < 1000 chars
-    medium: 2048, // For files < 5000 chars
-    large: 4096, // For larger files
+  // File size thresholds in characters
+  fileSize: {
+    small: 10_000, // 10KB - Process as is
+    medium: 30_000, // 30KB - Process with higher token limit
+    large: 50_000, // 50KB - Split into chunks
+    max: 500_000, // 500KB - Maximum total file size to process
   },
-  temperature: 0.1, // Lower temperature for more consistent results
-  concurrencyLimit: 5, // Maximum parallel file analyses
-  maxFileSize: 100_000, // 100KB threshold for large file splitting
+  // Token allocation based on file size
+  maxTokens: {
+    small: 1_024, // For files < 10KB
+    medium: 2_048, // For files < 30KB
+    large: 4_096, // For larger files/chunks
+  },
+  // AI model configuration
+  model: {
+    id: "claude-3-5-sonnet-20241022",
+    temperature: 0.1, // Lower temperature for more consistent results
+  },
+  // Concurrency and processing
+  concurrency: {
+    limit: 5, // Maximum parallel processes
+    retryLimit: 3, // Maximum retry attempts
+    retryDelay: 1000, // Base delay between retries (ms)
+  },
 } as const
 
-/**
- * AI model configuration
- * Currently using Claude 3 Sonnet for optimal performance/cost ratio
- */
-const MODEL_ID = "claude-3-5-sonnet-20241022"
-const byPassBedrock = BY_PASS_BEDROCK === "true"
-
-/**
- * Initialize AI service clients
- * Supports both direct Anthropic API and AWS Bedrock
- */
+// Initialize AI clients
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-const bedrockClient = tracer.captureAWSClient(new BedrockRuntimeClient())
+const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient())
+const byPassBedrock = BY_PASS_BEDROCK === "true"
 
 /**
  * System prompt that guides the AI's behavior
@@ -145,16 +161,12 @@ Return findings in <findings> tags using this JSON schema:
  */
 const getMaxTokens = (content: string): number => {
   const size = content.length
-  if (size < 1000) return ANALYSIS_CONFIG.maxTokens.small
-  if (size < 5000) return ANALYSIS_CONFIG.maxTokens.medium
+  if (size < ANALYSIS_CONFIG.fileSize.small)
+    return ANALYSIS_CONFIG.maxTokens.small
+  if (size < ANALYSIS_CONFIG.fileSize.medium)
+    return ANALYSIS_CONFIG.maxTokens.medium
   return ANALYSIS_CONFIG.maxTokens.large
 }
-
-/**
- * Utility function for implementing delay in retry logic
- * @param ms - Milliseconds to delay
- */
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * Sends code analysis request to the configured AI service
@@ -170,19 +182,17 @@ const sendMessage = async (
   const message = `${ANALYSIS_PROMPT}\n\n<source code>\n${content}\n</source code>`
 
   if (byPassBedrock) {
-    // Direct Anthropic API call
     return await anthropic.messages.create({
-      model: MODEL_ID,
+      model: ANALYSIS_CONFIG.model.id,
       max_tokens: maxTokens,
-      temperature: ANALYSIS_CONFIG.temperature,
+      temperature: ANALYSIS_CONFIG.model.temperature,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: message }],
     })
   } else {
-    // AWS Bedrock API call
     return await bedrockClient.send(
       new ConverseCommand({
-        modelId: MODEL_ID,
+        modelId: ANALYSIS_CONFIG.model.id,
         system: [
           {
             text: SYSTEM_PROMPT,
@@ -199,7 +209,7 @@ const sendMessage = async (
           },
         ],
         inferenceConfig: {
-          temperature: ANALYSIS_CONFIG.temperature,
+          temperature: ANALYSIS_CONFIG.model.temperature,
           maxTokens,
         },
       })
@@ -210,6 +220,7 @@ const sendMessage = async (
 /**
  * Analyzes a single file for code issues
  * Includes performance monitoring and error handling
+ * Handles size-based processing decisions and error tracking
  *
  * @param file - The file to analyze
  * @returns Promise containing analysis results or null if no issues found
@@ -218,24 +229,44 @@ const analyzeFile = async (
   file: PRFile & { content: string }
 ): Promise<AnalysisResults | null> => {
   const startTime = Date.now()
+  const fileSize = file.content.length
+
   try {
+    // Skip extremely large files
+    if (fileSize > ANALYSIS_CONFIG.fileSize.max) {
+      logger.warn(`File too large to process`, {
+        filePath: file.path,
+        size: fileSize,
+        maxAllowed: ANALYSIS_CONFIG.fileSize.max,
+      })
+      metrics.addMetric("SkippedFiles", MetricUnit.Count, 1)
+      return null
+    }
+
     // Handle large files by splitting them into manageable chunks
-    if (file.content.length > ANALYSIS_CONFIG.maxFileSize) {
+    if (fileSize > ANALYSIS_CONFIG.fileSize.large) {
+      logger.info(`Processing large file in chunks`, {
+        filePath: file.path,
+        size: fileSize,
+      })
+
       return await analyzeLargeFile(file)
     }
 
+    // Process normal sized file
     const normalizedContent = file.content.trim()
-    const resp = (await sendMessage(normalizedContent)) as any
+    const resp = (await sendMessage(normalizedContent)) as any // TODO: Add type for response
     const content = resp?.output?.message?.content || resp?.content
 
     // Parse and combine AI response content blocks
     const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n")
 
     if (!output) {
-      throw new Error("No output received!")
+      throw new Error("No output received from AI service")
     }
 
-    // Extract findings from the response
+    // Extract content between <findings> tags. match[0] contains full match with tags,
+    // match[1] contains only the JSON content. [\s\S] matches any char including newlines
     const findingsRegex = /<findings>([\s\S]*?)<\/findings>/
     const match = output.match(findingsRegex)
 
@@ -246,19 +277,25 @@ const analyzeFile = async (
 
     // Parse and validate findings
     const findings = JSON.parse(match[1]) as AnalysisResults
+
+    // Record metrics
     metrics.addMetric(
       "AnalysisTime",
       MetricUnit.Milliseconds,
       Date.now() - startTime
     )
+    metrics.addMetric("ProcessedFileSize", MetricUnit.Bytes, fileSize)
 
     return findings
   } catch (error) {
     logger.error("Analysis failed", {
       filePath: file.path,
+      size: fileSize,
       error: error as Error,
       duration: Date.now() - startTime,
     })
+
+    metrics.addMetric("AnalysisErrors", MetricUnit.Count, 1)
     throw error
   }
 }
@@ -273,6 +310,7 @@ const analyzeFile = async (
 const analyzeLargeFile = async (
   file: PRFile & { content: string }
 ): Promise<AnalysisResults | null> => {
+  const chunkSize = ANALYSIS_CONFIG.fileSize.medium
   /**
    * Splits a large file content into chunks of maximum 100,000 characters
    * Uses Regular Expression to divide the content:
@@ -286,13 +324,22 @@ const analyzeLargeFile = async (
    * Input: "This is a very long string..."
    * Output: ["First 100000 chars", "Next 100000 chars", ...]
    */
+  const regexForLargeFiles = new RegExp(`.{1,${chunkSize}}`, "g")
+  const chunks = file.content.match(regexForLargeFiles) || []
 
-  const chunks = file.content.match(/.{1,100000}/g) || []
+  logger.info(`Splitting large file for analysis`, {
+    filePath: file.path,
+    totalSize: file.content.length,
+    chunks: chunks.length,
+    chunkSize,
+  })
+
   const results = await Promise.all(
     chunks.map(async (chunk, index) => {
-      return analyzeFile({
+      return await analyzeFile({
         ...file,
         content: chunk,
+        path: `${file.path} (part ${index + 1}/${chunks.length})`,
       })
     })
   )
@@ -344,7 +391,7 @@ const aggregateResults = (
  */
 const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
   // Initialize semaphore for concurrency control
-  const sema = new Sema(ANALYSIS_CONFIG.concurrencyLimit, {
+  const sema = new Sema(ANALYSIS_CONFIG.concurrency.limit, {
     capacity: files.length,
     pauseFn: () => logger.info("Rate limit reached, pausing..."),
     resumeFn: () => logger.info("Resuming analysis..."),
@@ -355,6 +402,7 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
     (file): file is PRFile & { content: string } => {
       if (!file.content) {
         logger.warn(`Skipping file ${file.path}: null content`)
+        metrics.addMetric("SkippedFiles", MetricUnit.Count, 1)
         return false
       }
       return true
@@ -366,7 +414,7 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
     await sema.acquire()
     try {
       const findings = await analyzeFile(file)
-      if (findings && findings?.issues?.length > 0) {
+      if (findings && findings?.issues.length > 0) {
         logger.info(`Found ${findings.issues.length} issues in ${file.path}`)
         return { file, findings }
       }
@@ -420,18 +468,18 @@ const _handler = async (event: any, context: any) => {
   try {
     const detail = event.detail
 
-    // Initialize observability tools with context
+    // Initialize observability tools
     logger.addContext(context)
-    tracer.putAnnotation("service", "CodeReview")
+    tracer.putAnnotation("service", SERVICE_NAME)
     metrics.addMetadata("environment", ENVIRONMENT)
 
-    // Initialize GitHub client with credentials
+    // Initialize GitHub client
     const installationId = detail.data.installation.id
     const ghAppId = context.GITHUB_APP_ID
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY
     await init(ghAppId, ghPrivateKey, installationId)
 
-    // Fetch files from the pull request
+    // Fetch PR files
     const prFileContent = await fetchPRFiles(
       detail.data.repository.owner.login,
       detail.data.repository.name,
@@ -457,15 +505,15 @@ const _handler = async (event: any, context: any) => {
     )
 
     // Record execution metrics
-    metrics.addMetric(
-      "ProcessingTime",
-      MetricUnit.Milliseconds,
-      Date.now() - startTime
-    )
-
+    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration)
     metrics.addMetric("FilesAnalyzed", MetricUnit.Count, prFileContent.length)
-
     metrics.addMetric("IssuesFound", MetricUnit.Count, totalIssues)
+
+    logger.info("Analysis completed successfully", {
+      filesAnalyzed: prFileContent.length,
+      issuesFound: totalIssues,
+      duration,
+    })
 
     // Return success response with metrics
     return {
@@ -480,12 +528,17 @@ const _handler = async (event: any, context: any) => {
       }),
     }
   } catch (error) {
+    const duration = Date.now() - startTime
+
     // Log error details and record error metric
     logger.error("Handler execution failed", {
       error: error as Error,
-      duration: Date.now() - startTime,
+      duration,
     })
+
     metrics.addMetric("HandlerErrors", MetricUnit.Count, 1)
+    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration)
+
     throw error
   }
 }
