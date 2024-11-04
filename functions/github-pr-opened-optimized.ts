@@ -138,16 +138,19 @@ Return findings in <findings> tags using this JSON schema:
   },
   "issues": [
     {
-      "id": string,
+      "id": string,                // e.g., "VULN-001", "QUAL-002"
       "type": "vulnerability|code_quality|best_practice",
       "risk_level": "critical|high|medium|low",
       "title": string,
       "location": { "line_start": number, "line_end": number },
       "description": string,
       "impact": string,
-      "recommendation": string,
-      "cwe_id": string,
-      "references": { "standard": string, "rule_id": string }
+      "recommendation": string,   // Steps to fix the issue. Use MDX Markdown format if necessary to show code snippets
+      "cwe_id": string,           // e.g., "CWE-287"
+      "references": {             // Optional: Industry standard references
+        "standard": string,       // e.g., "OWASP", "CERT", "ISO-27001"
+        "rule_id": string         // e.g., "A1:2021", "MSC21-C"
+      }
     }
   ]
 }`
