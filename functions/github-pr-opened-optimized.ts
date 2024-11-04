@@ -24,8 +24,9 @@ import {
   ConverseCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime"
 import { Sema } from "async-sema"
-import { commentOnPR, fetchPRFiles, init } from "./lib/github-helper"
-import { AnalysisResult, AnalysisResults, PRFile } from "./types/scan-types"
+import { shouldSkipFile } from "./lib/file-ignore"
+import { fetchPRFiles, init, submitPRReview } from "./lib/github-helper"
+import { AnalysisResult, AnalysisResults, PRFile } from "./types/github"
 
 /**
  * Initialize observability tools with consistent service naming
@@ -403,11 +404,20 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
   // Filter out files with null content
   const validFiles = files.filter(
     (file): file is PRFile & { content: string } => {
+      // Check if file content is null
       if (!file.content) {
         logger.warn(`Skipping file ${file.path}: null content`)
         metrics.addMetric("SkippedFiles", MetricUnit.Count, 1)
         return false
       }
+
+      // Check if file should be skipped based on filters
+      if (shouldSkipFile(file.path)) {
+        logger.info(`Skipping excluded file: ${file.path}`)
+        metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1)
+        return false
+      }
+
       return true
     }
   )
@@ -435,30 +445,6 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
 }
 
 /**
- * Formats analysis results into a GitHub comment
- * Includes summary and detailed findings in markdown format
- *
- * @param file - The analyzed file
- * @param findings - Analysis results for the file
- * @returns Formatted markdown string for GitHub comment
- */
-const formatComment = (file: PRFile, findings: AnalysisResults): string => {
-  const issues = findings.issues
-    .map((issue) => JSON.stringify(issue, null, 2))
-    .map((json) => `\`\`\`json\n${json}\n\`\`\``)
-    .join("\n\n")
-
-  const summary = `### Code Review Summary
-- Total Issues: ${findings.summary.total_issues}
-- Critical: ${findings.summary.risk_levels.critical}
-- High: ${findings.summary.risk_levels.high}
-- Medium: ${findings.summary.risk_levels.medium}
-- Low: ${findings.summary.risk_levels.low}`
-
-  return `${file.path}: **${findings.issues.length} issues found**\n\n${summary}\n\n${issues}`
-}
-
-/**
  * Main Lambda handler function
  * Orchestrates the entire code review process
  *
@@ -482,23 +468,20 @@ const _handler = async (event: any, context: any) => {
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY
     await init(ghAppId, ghPrivateKey, installationId)
 
-    // Fetch PR files
-    const prFileContent = await fetchPRFiles(
-      detail.data.repository.owner.login,
-      detail.data.repository.name,
-      detail.data.pull_request.number
-    )
+    const owner = detail.data.repository.owner.login
+    const repo = detail.data.repository.name
+    const pullNumber = detail.data.pull_request.number
+    const pullRequestId = detail.data.pull_request.id
+    const commitId = detail.data.pull_request.head.sha
 
-    // Process files with concurrent analysis
+    // Fetch and analyze files
+    const prFileContent = await fetchPRFiles(owner, repo, pullNumber)
     const results = await processFiles(prFileContent)
 
-    // Post analysis results as PR comments
-    await Promise.all(
-      results.map(async ({ file, findings }) => {
-        const comment = formatComment(file, findings)
-        return await commentOnPR(detail.data.pull_request.node_id, comment)
-      })
-    )
+    // Submit review with all comments
+    if (results.length > 0) {
+      await submitPRReview(pullRequestId, commitId, results)
+    }
 
     // Calculate final metrics
     const duration = Date.now() - startTime
