@@ -14,6 +14,7 @@ export class DataStack extends cdk.Stack {
   eventsTable: dynamodb.Table;
   reposTable: dynamodb.Table;
   scansTable: dynamodb.Table;
+  scanResultsTable: dynamodb.Table;
   eventBus: events.EventBus;
   dataRemovalPolicy: cdk.RemovalPolicy;
 
@@ -36,7 +37,10 @@ export class DataStack extends cdk.Stack {
     this.createTableParameters('ReposTable', this.reposTable, 'repos-table');
 
     this.scansTable = this.createScansTable();
-    this.createTableParameters('ScanResultsTable', this.scansTable, 'scans-table');
+    this.createTableParameters('ScansTable', this.scansTable, 'scans-table');
+
+    this.scanResultsTable = this.createScanResultsTable();
+    this.createTableParameters('ScanResultsTable', this.scanResultsTable, 'scan-results-table');
 
     this.eventBus = this.createEventBus();
     new ssm.StringParameter(this, 'EventBusName', {
@@ -49,6 +53,11 @@ export class DataStack extends cdk.Stack {
     });
 
     this.createGitHubPrOpenedEventHandlerFunction();
+    this.createGitHubInstallationAddedEventHandlerFunction();
+    this.createGitHubInstallationRemovedEventHandlerFunction();
+
+    this.createClerkUserUpsertedEventHandlerFunction();
+    this.createClerkUserDeletedEventHandlerFunction();
 
     new cdk.CfnOutput(this, 'SSM_STAGE_NAME', {
       key: 'SsmStageName',
@@ -58,6 +67,16 @@ export class DataStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AWS_REGION', {
       key: 'AwsRegion',
       value: cdk.Aws.REGION
+    });
+
+    new cdk.CfnOutput(this, 'USERS_TABLE_NAME', {
+      key: 'UsersTableName',
+      value: this.usersTable.tableName
+    });
+
+    new cdk.CfnOutput(this, 'REPOS_TABLE_NAME', {
+      key: 'ReposTableName',
+      value: this.reposTable.tableName
     });
 
     new cdk.CfnOutput(this, 'SCANS_TABLE_NAME', {
@@ -73,7 +92,7 @@ export class DataStack extends cdk.Stack {
   }
 
   private createUsersTable(): dynamodb.Table {
-    return new dynamodb.Table(this, 'UsersTable', {
+    const table = new dynamodb.Table(this, 'UsersTable', {
       partitionKey: {
         name: 'id',
         type: dynamodb.AttributeType.STRING,
@@ -82,12 +101,38 @@ export class DataStack extends cdk.Stack {
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy
     });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'emailIndex',
+      partitionKey: {
+        name: 'email',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'clerkUserIdIndex',
+      partitionKey: {
+        name: 'clerkUserId',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'githubHandleIndex',
+      partitionKey: {
+        name: 'githubHandle',
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
+    return table;
   }
 
   private createEventsTable(): dynamodb.Table {
     return new dynamodb.Table(this, 'EventsTable', {
       partitionKey: {
-        name: 'tenantId',
+        name: 'source',
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
@@ -101,7 +146,22 @@ export class DataStack extends cdk.Stack {
   }
 
   private createReposTable(): dynamodb.Table {
-    return new dynamodb.Table(this, 'ReposTable', {
+    const table = new dynamodb.Table(this, 'ReposTable', {
+      partitionKey: {
+        name: 'pk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'sk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: 'tenantIdIndex',
       partitionKey: {
         name: 'tenantId',
         type: dynamodb.AttributeType.STRING,
@@ -110,10 +170,9 @@ export class DataStack extends cdk.Stack {
         name: 'repoId',
         type: dynamodb.AttributeType.STRING,
       },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
-      removalPolicy: this.dataRemovalPolicy
     });
+
+    return table;
   }
 
   private createScansTable(): dynamodb.Table {
@@ -123,7 +182,23 @@ export class DataStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
-        name: 'sk',
+        name: 'scanId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
+    });
+  }
+
+  private createScanResultsTable(): dynamodb.Table {
+    return new dynamodb.Table(this, 'ScanResultsTable', {
+      partitionKey: {
+        name: 'scanId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'file',
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -156,12 +231,12 @@ export class DataStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(5),
       environment: {
         SCANS_TABLE_NAME: this.scansTable.tableName,
+        SCAN_RESULTS_TABLE_NAME: this.scansTable.tableName,
         STAGE_NAME: this.props.stageName,
         SSM_STAGE_NAME: this.props.ssmStageName,
       }
     });    
 
-    // add EventBridge event source for the githubHandler function    
     const ghWebhookRule = new events.Rule(this, 'GithubPrRule', {
       eventBus: this.eventBus,
       eventPattern: {
@@ -189,5 +264,120 @@ export class DataStack extends cdk.Stack {
     }));
 
     this.scansTable.grantWriteData(handler);
+    this.scanResultsTable.grantWriteData(handler);
+  }
+
+  private createGitHubInstallationAddedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'GitHubInstallationAddedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/github-installation-added.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        REPOS_TABLE_NAME: this.reposTable.tableName,
+        USERS_TABLE_NAME: this.usersTable.tableName,
+      }
+    });    
+
+    const ghWebhookRule = new events.Rule(this, 'GithubInstallAddedRule', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['github'],
+        detail: {
+          metadata: {
+            type: ['installation.added'],
+          }
+        }
+      }
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.reposTable.grantWriteData(handler);
+    this.usersTable.grantReadData(handler);
+  }
+
+  private createGitHubInstallationRemovedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'GitHubInstallationRemovedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/github-installation-removed.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        REPOS_TABLE_NAME: this.reposTable.tableName
+      }
+    });    
+
+    const ghWebhookRule = new events.Rule(this, 'GithubInstallRemovedRule', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['github'],
+        detail: {
+          metadata: {
+            type: ['installation.removed'],
+          }
+        }
+      }
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.reposTable.grantWriteData(handler);
+  }
+
+  private createClerkUserUpsertedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'ClerkUserUpsertedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/clerk-user-upserted.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        USERS_TABLE_NAME: this.usersTable.tableName
+      }
+    });    
+
+    const clerkWebhookRule = new events.Rule(this, 'ClerkUserUpserted', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['clerk'],
+        detail: {
+          metadata: {
+            type: ['user.created', 'user.updated']
+          }
+        }
+      }
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+  }
+
+  private createClerkUserDeletedEventHandlerFunction() {
+    const handler = new lambda.NodejsFunction(this, 'ClerkUserDeletedHandlerFunction', {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+      entry: 'functions/clerk-user-deleted.js',
+      handler: 'handler',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(6),
+      environment: {
+        USERS_TABLE_NAME: this.usersTable.tableName
+      }
+    });    
+
+    const clerkWebhookRule = new events.Rule(this, 'ClerkUserDeleted', {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ['clerk'],
+        detail: {
+          metadata: {
+            type: ['user.deleted']
+          }
+        }
+      }
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
   }
 }

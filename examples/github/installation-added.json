@@ -1,0 +1,109 @@
+{
+  "action": "added",
+  "installation": {
+    "id": 56399413,
+    "client_id": "Iv23lipTVqEwLjFISGde",
+    "account": {
+      "login": "theburningmonk",
+      "id": 546969,
+      "node_id": "MDQ6VXNlcjU0Njk2OQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/546969?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/theburningmonk",
+      "html_url": "https://github.com/theburningmonk",
+      "followers_url": "https://api.github.com/users/theburningmonk/followers",
+      "following_url": "https://api.github.com/users/theburningmonk/following{/other_user}",
+      "gists_url": "https://api.github.com/users/theburningmonk/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/theburningmonk/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/theburningmonk/subscriptions",
+      "organizations_url": "https://api.github.com/users/theburningmonk/orgs",
+      "repos_url": "https://api.github.com/users/theburningmonk/repos",
+      "events_url": "https://api.github.com/users/theburningmonk/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/theburningmonk/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "repository_selection": "selected",
+    "access_tokens_url": "https://api.github.com/app/installations/56399413/access_tokens",
+    "repositories_url": "https://api.github.com/installation/repositories",
+    "html_url": "https://github.com/settings/installations/56399413",
+    "app_id": 1026323,
+    "app_slug": "evolua-ai-dev",
+    "target_id": 546969,
+    "target_type": "User",
+    "permissions": {
+      "administration": "read",
+      "checks": "read",
+      "contents": "read",
+      "discussions": "read",
+      "issues": "write",
+      "metadata": "read",
+      "pull_requests": "write",
+      "repository_advisories": "read",
+      "secret_scanning_alerts": "read",
+      "security_events": "read",
+      "statuses": "read",
+      "vulnerability_alerts": "read"
+    },
+    "events": [
+      "check_run",
+      "code_scanning_alert",
+      "commit_comment",
+      "discussion_comment",
+      "pull_request",
+      "pull_request_review",
+      "pull_request_review_comment",
+      "pull_request_review_thread",
+      "push",
+      "release",
+      "repository",
+      "secret_scanning_alert",
+      "security_and_analysis"
+    ],
+    "created_at": "2024-10-25T19:02:09.000+02:00",
+    "updated_at": "2024-10-31T20:27:14.000+01:00",
+    "single_file_name": null,
+    "has_multiple_single_files": false,
+    "single_file_paths": [
+
+    ],
+    "suspended_by": null,
+    "suspended_at": null
+  },
+  "repository_selection": "selected",
+  "repositories_added": [
+    {
+      "id": 855455062,
+      "node_id": "R_kgDOMv01Vg",
+      "name": "api-gateway-auth-cognito-access-token-demo",
+      "full_name": "theburningmonk/api-gateway-auth-cognito-access-token-demo",
+      "private": false
+    }
+  ],
+  "repositories_removed": [
+
+  ],
+  "requester": null,
+  "sender": {
+    "login": "theburningmonk",
+    "id": 546969,
+    "node_id": "MDQ6VXNlcjU0Njk2OQ==",
+    "avatar_url": "https://avatars.githubusercontent.com/u/546969?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/theburningmonk",
+    "html_url": "https://github.com/theburningmonk",
+    "followers_url": "https://api.github.com/users/theburningmonk/followers",
+    "following_url": "https://api.github.com/users/theburningmonk/following{/other_user}",
+    "gists_url": "https://api.github.com/users/theburningmonk/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/theburningmonk/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/theburningmonk/subscriptions",
+    "organizations_url": "https://api.github.com/users/theburningmonk/orgs",
+    "repos_url": "https://api.github.com/users/theburningmonk/repos",
+    "events_url": "https://api.github.com/users/theburningmonk/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/theburningmonk/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  }
+}

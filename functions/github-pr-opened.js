@@ -1,17 +1,18 @@
 const middy = require("@middy/core")
 const ssm = require("@middy/ssm")
 const github = require("./lib/github-helper")
+const scans = require("./lib/scans")
 const {
   BedrockRuntimeClient,
   ConverseCommand,
 } = require("@aws-sdk/client-bedrock-runtime")
 const bedrockClient = new BedrockRuntimeClient()
-const { GitHubEventDetail } = require("./types/github-pr-opened.event")
+const { GitHubPROpenedEventDetail } = require("./github-webhook.event")
 
 const { SSM_STAGE_NAME } = process.env
 
 /**
- * @param {import('aws-lambda').EventBridgeEvent<'pull_request.opened', GitHubEventDetail>} event
+ * @param {import('aws-lambda').EventBridgeEvent<'pull_request.opened', GitHubPROpenedEventDetail>} event
  */
 const _handler = async (event, context) => {
   // see examples/github/pr-opened.json for an example event

@@ -33,11 +33,10 @@ const publishEvent = async (eventId, source, eventType, data) => {
   await ebClient.send(command);
 }
 
-const saveEvent = async (tenantId, eventId, source, eventType, data) => {
+const saveEvent = async (eventId, source, eventType, data) => {
   const command = new ddb.PutCommand({
     TableName: EVENTS_TABLE_NAME,
     Item: {
-      tenantId,
       eventId,
       source,
       eventType,

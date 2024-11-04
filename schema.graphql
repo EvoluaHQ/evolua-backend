@@ -4,37 +4,55 @@ schema {
 }
 
 type Query {
-  getProfile: MyProfile!
+  listRepos(
+    nextToken: String
+  ): ReposPage!
+
+  listScans(
+    provider: String! 
+    providerId: String!
+    nextToken: String
+  ): ScansPage!
 }
 
 type Mutation {
-  connectRepo(repoId: ID!): Repo!
+}
+
+type ReposPage {
+  repos: [Repo!]
+  nextToken: String
 }
 
 type Repo {
-  id: ID!
+  provider: String!
+  providerId: String!
   name: String!
+  fullName: String!
+  private: Boolean!
+  scans: ScansPage!
 }
 
-type Tenant {
-  id: ID!
-  name: String!
+type ScansPage {
+  scans: [Scan!]
+  nextToken: String
 }
 
-type MyProfile {
-  id: ID!
-  name: String!
-  email: AWSEmail!
+type Scan {
+  scanId: String!
+  timestamp: String!
+  pullRequest: PullRequest
+  filesScanned: Int!
+  issuesCount: Int!
+  critical: Int!
+  high: Int!
+  medium: Int!
+  low: Int!
 }
 
-type User {
-  id: ID!
-  name: String!
-  email: AWSEmail!
-}
-
-enum TenantRole {
-  Owner
-  Member
-  Viewer
+type PullRequest {
+  id: String!
+  number: Int!
+  url: String!
+  title: String!
+  createdAt: String!
 }
