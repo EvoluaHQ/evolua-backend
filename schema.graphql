@@ -29,7 +29,7 @@ type Repo {
   name: String!
   fullName: String!
   private: Boolean!
-  scans: ScansPage!
+  enabled: Boolean!
 }
 
 type ScansPage {
@@ -47,6 +47,50 @@ type Scan {
   high: Int!
   medium: Int!
   low: Int!
+  results: [ScanResult!]
+}
+
+type ScanResult {
+  scanId: String!
+  file: String!
+  timestamp: String!
+  issuesCount: Int!
+  critical: Int!
+  high: Int!
+  medium: Int!
+  low: Int!
+  changes: Change!
+  issues: [Issue!]
+}
+
+type Change {
+  additions: Int!
+  deletions: Int!
+  changeType: String!
+  sha: String!
+}
+
+type Issue {
+  id: String!
+  type: String!
+  title: String!
+  risk_level: String!
+  description: String
+  impact: String
+  recommendation: String!
+  cwe_id: String
+  references: IssueReference
+  location: IssueLocation!
+}
+
+type IssueLocation {
+  line_start: Int!
+  line_end: Int!
+}
+
+type IssueReference {
+  standard: String
+  rule_id: String
 }
 
 type PullRequest {

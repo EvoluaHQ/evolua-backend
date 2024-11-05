@@ -13,6 +13,7 @@ export class DataStack extends cdk.Stack {
   usersTable: dynamodb.Table;
   eventsTable: dynamodb.Table;
   reposTable: dynamodb.Table;
+  tenantReposTable: dynamodb.Table;
   scansTable: dynamodb.Table;
   scanResultsTable: dynamodb.Table;
   eventBus: events.EventBus;
@@ -35,6 +36,9 @@ export class DataStack extends cdk.Stack {
 
     this.reposTable = this.createReposTable();
     this.createTableParameters('ReposTable', this.reposTable, 'repos-table');
+
+    this.tenantReposTable = this.createTenantReposTable();
+    this.createTableParameters('TenantReposTable', this.tenantReposTable, 'tenant-repos-table');
 
     this.scansTable = this.createScansTable();
     this.createTableParameters('ScansTable', this.scansTable, 'scans-table');
@@ -79,9 +83,18 @@ export class DataStack extends cdk.Stack {
       value: this.reposTable.tableName
     });
 
+    new cdk.CfnOutput(this, 'TENANT_REPOS_TABLE_NAME', {
+      key: 'TenantReposTableName',
+      value: this.tenantReposTable.tableName
+    });
+
     new cdk.CfnOutput(this, 'SCANS_TABLE_NAME', {
       key: 'ScansTableName',
       value: this.scansTable.tableName
+    });
+    new cdk.CfnOutput(this, 'SCAN_RESULTS_TABLE_NAME', {
+      key: 'ScanResultsTableName',
+      value: this.scanResultsTable.tableName
     });
   }
 
@@ -148,11 +161,7 @@ export class DataStack extends cdk.Stack {
   private createReposTable(): dynamodb.Table {
     const table = new dynamodb.Table(this, 'ReposTable', {
       partitionKey: {
-        name: 'pk',
-        type: dynamodb.AttributeType.STRING,
-      },
-      sortKey: {
-        name: 'sk',
+        name: 'repoId',
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -160,8 +169,11 @@ export class DataStack extends cdk.Stack {
       removalPolicy: this.dataRemovalPolicy
     });
 
-    table.addGlobalSecondaryIndex({
-      indexName: 'tenantIdIndex',
+    return table;
+  }
+
+  private createTenantReposTable(): dynamodb.Table {
+    const table = new dynamodb.Table(this, 'TenantReposTable', {
       partitionKey: {
         name: 'tenantId',
         type: dynamodb.AttributeType.STRING,
@@ -170,6 +182,9 @@ export class DataStack extends cdk.Stack {
         name: 'repoId',
         type: dynamodb.AttributeType.STRING,
       },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy
     });
 
     return table;
@@ -231,7 +246,7 @@ export class DataStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(5),
       environment: {
         SCANS_TABLE_NAME: this.scansTable.tableName,
-        SCAN_RESULTS_TABLE_NAME: this.scansTable.tableName,
+        SCAN_RESULTS_TABLE_NAME: this.scanResultsTable.tableName,
         STAGE_NAME: this.props.stageName,
         SSM_STAGE_NAME: this.props.ssmStageName,
       }
@@ -276,6 +291,7 @@ export class DataStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(6),
       environment: {
         REPOS_TABLE_NAME: this.reposTable.tableName,
+        TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
         USERS_TABLE_NAME: this.usersTable.tableName,
       }
     });    
@@ -294,6 +310,7 @@ export class DataStack extends cdk.Stack {
     ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
     this.reposTable.grantWriteData(handler);
+    this.tenantReposTable.grantWriteData(handler);
     this.usersTable.grantReadData(handler);
   }
 

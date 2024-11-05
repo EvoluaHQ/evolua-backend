@@ -13,14 +13,9 @@ export function request(ctx) {
     limit: 25,
     nextToken: ctx.arguments.nextToken,
     query: {
-      expression: '#pk = :pk AND begins_with(#sk, :sk)',
-      expressionNames: {
-        '#pk': 'pk',
-        '#sk': 'sk',
-      },
+      expression: 'tenantId = :tenantId',
       expressionValues: util.dynamodb.toMapValues({
-        ':pk': `TENANT#${tenantId}`,
-        ':sk': 'REPO#',
+        ':tenantId': tenantId,
       }),
     },
   }
