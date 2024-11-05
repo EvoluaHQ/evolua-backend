@@ -79,16 +79,26 @@ const {
 const ANALYSIS_CONFIG = {
   // File size thresholds in characters
   fileSize: {
-    small: 10_000, // 10KB - Process as is
-    medium: 30_000, // 30KB - Process with higher token limit
-    large: 50_000, // 50KB - Split into chunks
-    max: 500_000, // 500KB - Maximum total file size to process
+    small: {
+      maxSize: 10_000, // 10KB
+      tokens: 2_048,
+    },
+    medium: {
+      maxSize: 30_000, // 30KB
+      tokens: 4_096,
+    },
+    large: {
+      maxSize: 100_000, // 100KB
+      tokens: 8_192,
+    },
+    max: 500_000, // 500KB
   },
   // Token allocation based on file size
-  maxTokens: {
-    small: 1_024, // For files < 10KB
-    medium: 2_048, // For files < 30KB
-    large: 4_096, // For larger files/chunks
+  tokens: {
+    maxContextTokens: 200_000, // Claude's max context window
+    maxOutputTokens: 8_192, // Maximum response size
+    reservedTokens: 1_000, // Reserved for prompts and overhead
+    charsPerToken: 3.5, // Average characters per token for code
   },
   // AI model configuration
   model: {
@@ -127,8 +137,9 @@ Keep responses concise and structured. Only report concrete, evidence-based issu
  * Uses a structured JSON schema for consistent and parseable results
  */
 const ANALYSIS_PROMPT = `Analyze the provided code for security vulnerabilities, code quality issues, and best practice violations.
-Return findings in <findings> tags using this JSON schema:
+Return findings in <findings> tags using the following JSON schema:
 
+<JSON format>
 {
   "summary": {
     "total_issues": number,
@@ -141,11 +152,14 @@ Return findings in <findings> tags using this JSON schema:
   },
   "issues": [
     {
-      "id": string,                // e.g., "VULN-001", "QUAL-002"
+      "id": string,             // e.g., "VULN-001", "QUAL-002"
       "type": "vulnerability|code_quality|best_practice",
       "risk_level": "critical|high|medium|low",
       "title": string,
-      "location": { "line_start": number, "line_end": number },
+      "location": { 
+        "line_start": number,   // Absolute line number in the file (1-based)
+        "line_end": number      // Absolute line number in the file (1-based)
+      },
       "description": string,
       "impact": string,
       "recommendation": string,   // Steps to fix the issue. Use MDX Markdown format if necessary to show code snippets
@@ -156,23 +170,8 @@ Return findings in <findings> tags using this JSON schema:
       }
     }
   ]
-}`
-
-/**
- * Determines appropriate token limit based on content size
- * This helps optimize costs while ensuring adequate context for analysis
- *
- * @param content - The code content to analyze
- * @returns The appropriate token limit for the content size
- */
-const getMaxTokens = (content: string): number => {
-  const size = content.length
-  if (size < ANALYSIS_CONFIG.fileSize.small)
-    return ANALYSIS_CONFIG.maxTokens.small
-  if (size < ANALYSIS_CONFIG.fileSize.medium)
-    return ANALYSIS_CONFIG.maxTokens.medium
-  return ANALYSIS_CONFIG.maxTokens.large
 }
+  </JSON format>`
 
 /**
  * Sends code analysis request to the configured AI service
@@ -184,13 +183,15 @@ const getMaxTokens = (content: string): number => {
 const sendMessage = async (
   content: string
 ): Promise<ConverseCommandOutput | Message> => {
-  const maxTokens = getMaxTokens(content)
+  // Get optimal token limit
+  const tokenLimit = getTokenLimit(content)
+
   const message = `${ANALYSIS_PROMPT}\n\n<source code>\n${content}\n</source code>`
 
   if (byPassBedrock) {
     return await anthropic.messages.create({
       model: ANALYSIS_CONFIG.model.id,
-      max_tokens: maxTokens,
+      max_tokens: tokenLimit,
       temperature: ANALYSIS_CONFIG.model.temperature,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: message }],
@@ -216,11 +217,45 @@ const sendMessage = async (
         ],
         inferenceConfig: {
           temperature: ANALYSIS_CONFIG.model.temperature,
-          maxTokens,
+          maxTokens: tokenLimit,
         },
       })
     )
   }
+}
+
+/**
+ * Determines appropriate token limit based on content size
+ * This helps optimize costs while ensuring adequate context for analysis
+ *
+ * @param content - The code content to analyze
+ * @returns The appropriate token limit for the content size
+ */
+const getTokenLimit = (content: string): number => {
+  const size = content.length
+
+  // Quick return for small files using predefined tiers
+  if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
+    return ANALYSIS_CONFIG.fileSize.small.tokens
+  }
+  if (size <= ANALYSIS_CONFIG.fileSize.medium.maxSize) {
+    return ANALYSIS_CONFIG.fileSize.medium.tokens
+  }
+  if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
+    return ANALYSIS_CONFIG.fileSize.large.tokens
+  }
+
+  // For larger files, calculate exact token need
+  const estimatedTokens = Math.ceil(size / ANALYSIS_CONFIG.tokens.charsPerToken)
+  const availableTokens =
+    ANALYSIS_CONFIG.tokens.maxContextTokens -
+    ANALYSIS_CONFIG.tokens.reservedTokens
+
+  return Math.min(
+    estimatedTokens,
+    availableTokens,
+    ANALYSIS_CONFIG.tokens.maxOutputTokens
+  )
 }
 
 /**
@@ -249,23 +284,15 @@ const analyzeFile = async (
       return null
     }
 
-    // Handle large files by splitting them into manageable chunks
-    if (fileSize > ANALYSIS_CONFIG.fileSize.large) {
-      logger.info(`Processing large file in chunks`, {
-        filePath: file.path,
-        size: fileSize,
-      })
-
-      return await analyzeLargeFile(file)
-    }
-
     // Process normal sized file
-    const normalizedContent = file.content.trim()
-    const resp = (await sendMessage(normalizedContent)) as any // TODO: Add type for response
+    // const normalizedContent = file.content.trim()
+    const resp = (await sendMessage(file.content.trim())) as any // TODO: Add type for response
     const content = resp?.output?.message?.content || resp?.content
 
     // Parse and combine AI response content blocks
     const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n")
+
+    console.log(JSON.stringify(content, null, 2))
 
     if (!output) {
       throw new Error("No output received from AI service")
@@ -303,88 +330,6 @@ const analyzeFile = async (
 
     metrics.addMetric("AnalysisErrors", MetricUnit.Count, 1)
     throw error
-  }
-}
-
-/**
- * Handles analysis of large files by splitting them into manageable chunks
- * Aggregates results from multiple chunks while avoiding duplicates
- *
- * @param file - The large file to analyze
- * @returns Promise containing combined analysis results
- */
-const analyzeLargeFile = async (
-  file: PRFile & { content: string }
-): Promise<AnalysisResults | null> => {
-  const chunkSize = ANALYSIS_CONFIG.fileSize.medium
-  /**
-   * Splits a large file content into chunks of maximum 100,000 characters
-   * Uses Regular Expression to divide the content:
-   * /.{1,100000}/g breakdown:
-   * - . matches any character
-   * - {1,100000} matches between 1 and 100000 characters
-   * - /g global flag to match all occurrences
-   * - || [] provides empty array fallback if no matches found
-   *
-   * @example
-   * Input: "This is a very long string..."
-   * Output: ["First 100000 chars", "Next 100000 chars", ...]
-   */
-  const regexForLargeFiles = new RegExp(`.{1,${chunkSize}}`, "g")
-  const chunks = file.content.match(regexForLargeFiles) || []
-
-  logger.info(`Splitting large file for analysis`, {
-    filePath: file.path,
-    totalSize: file.content.length,
-    chunks: chunks.length,
-    chunkSize,
-  })
-
-  const results = await Promise.all(
-    chunks.map(async (chunk, index) => {
-      return await analyzeFile({
-        ...file,
-        content: chunk,
-        path: `${file.path} (part ${index + 1}/${chunks.length})`,
-      })
-    })
-  )
-
-  return aggregateResults(results.filter(Boolean) as AnalysisResults[])
-}
-
-/**
- * Combines multiple analysis results into a single result
- * Handles deduplication of issues and summation of metrics
- *
- * @param results - Array of analysis results to combine
- * @returns Combined and deduplicated analysis results
- */
-const aggregateResults = (
-  results: AnalysisResults[]
-): AnalysisResults | null => {
-  if (results.length === 0) return null
-  if (results.length === 1) return results[0]
-
-  return {
-    summary: {
-      total_issues: results.reduce((sum, r) => sum + r.summary.total_issues, 0),
-      risk_levels: results.reduce(
-        (acc, r) => ({
-          critical: acc.critical + r.summary.risk_levels.critical,
-          high: acc.high + r.summary.risk_levels.high,
-          medium: acc.medium + r.summary.risk_levels.medium,
-          low: acc.low + r.summary.risk_levels.low,
-        }),
-        { critical: 0, high: 0, medium: 0, low: 0 }
-      ),
-    },
-    issues: results
-      .flatMap((r) => r.issues)
-      .filter(
-        (issue, index, self) =>
-          index === self.findIndex((i) => i.id === issue.id)
-      ),
   }
 }
 
@@ -473,7 +418,6 @@ const _handler = async (event: any, context: any) => {
     const owner = detail.data.repository.owner.login
     const repo = detail.data.repository.name
     const pullNumber = detail.data.pull_request.number
-    const pullRequestId = detail.data.pull_request.id
     const commitId = detail.data.pull_request.head.sha
 
     // Fetch and analyze files

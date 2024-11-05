@@ -9,6 +9,7 @@ import {
   FetchPRFilesResponse,
   GetPRIDResponse,
   PRFile,
+  PullRequestReviewComment,
 } from "../types/github"
 
 const logger = new Logger()
@@ -190,11 +191,7 @@ export async function createPRReview(
   repo: string,
   prId: string,
   commitId: string,
-  comments: Array<{
-    path: string
-    line: number
-    body: string
-  }>
+  comments: PullRequestReviewComment[]
 ) {
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
@@ -214,17 +211,27 @@ export async function createPRReview(
     }
   `
 
+  console.log(
+    JSON.stringify(
+      {
+        pullRequestId: prId,
+        commitOID: commitId,
+        body: "Code Review Findings",
+        comments,
+        event: "COMMENT",
+      },
+      null,
+      2
+    )
+  )
+
   try {
     const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
       input: {
         pullRequestId: prId,
         commitOID: commitId,
         body: "Code Review Findings",
-        comments: comments.map((comment) => ({
-          path: comment.path,
-          position: comment.line,
-          body: comment.body,
-        })),
+        comments,
         event: "COMMENT",
       },
     })
@@ -356,16 +363,18 @@ export async function submitPRReview(
 ) {
   try {
     // Prepare all comments
-    const comments = results.flatMap(({ file, findings }) =>
-      findings.issues.map((issue) => ({
-        path: file.path,
-        line: issue.location.line_start,
-        body: formatIssueComment(issue),
-      }))
+    const comments: PullRequestReviewComment[] = results.flatMap(
+      ({ file, findings }) =>
+        findings.issues.map((issue) => ({
+          path: file.path,
+          position: issue.location.line_start,
+          body: formatIssueComment(issue),
+        }))
     )
 
     // Get PR ID
     const prId = await getPullRequestId(owner, repo, prNumber)
+    console.log("PR IdddddIdddddIdddddIdddddIdddddIdddddIddddd", prId)
 
     // Create review with all comments
     await createPRReview(owner, repo, prId, commitId, comments)

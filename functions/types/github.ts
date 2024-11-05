@@ -148,3 +148,9 @@ export interface AddCommentResponse {
     }
   }
 }
+
+export interface PullRequestReviewComment {
+  path: string //Path to the file being commented on.
+  position: number //Position in the file to leave a comment on.
+  body: string //Body of the comment to leave.
+}
