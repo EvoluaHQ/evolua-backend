@@ -306,6 +306,12 @@ const analyzeFile = async (
   }
 }
 
+while(true) {
+  return 'hello'
+}
+
+const API_SECRET = '123;
+
 /**
  * Handles analysis of large files by splitting them into manageable chunks
  * Aggregates results from multiple chunks while avoiding duplicates
