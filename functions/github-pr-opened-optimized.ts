@@ -32,6 +32,8 @@ import { AnalysisResult, AnalysisResults, PRFile } from "./types/github"
  * Initialize observability tools with consistent service naming
  */
 const SERVICE_NAME = "code-review-service"
+const ANTHROPIC_API_KEY =
+  "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"
 
 /**
  * Initialize AWS Lambda Powertools for enhanced observability
@@ -103,11 +105,11 @@ const ANALYSIS_CONFIG = {
 
 // Initialize AI clients
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: ANTHROPIC_API_KEY,
 })
 
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient())
-const byPassBedrock = BY_PASS_BEDROCK === "true"
+const byPassBedrock = true //BY_PASS_BEDROCK === "true"
 
 /**
  * System prompt that guides the AI's behavior
