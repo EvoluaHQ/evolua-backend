@@ -112,6 +112,20 @@ const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient())
 const byPassBedrock = true //BY_PASS_BEDROCK === "true"
 const API_SECRET = 123
 
+const test1 = "asdf"
+
+while (true) {
+  console.log(API_SECRET)
+}
+
+const test2 = "asdf"
+
+while (true) {
+  console.log(API_SECRET)
+}
+
+const test3 = "asdf"
+
 while (true) {
   console.log(API_SECRET)
 }
