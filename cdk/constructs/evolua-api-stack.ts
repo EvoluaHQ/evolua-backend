@@ -103,14 +103,6 @@ export class EvoluaApiStack extends cdk.Stack {
       ]
     });
 
-    graphQlApi.createResolver('RepoScansResolver', {
-      typeName: 'Repo',
-      fieldName: 'scans',
-      dataSource: scansTableDataSource,
-      runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/repo-scans.js'),
-    });
-
     graphQlApi.createResolver('QueryListScansResolver', {
       typeName: 'Query',
       fieldName: 'listScans',
