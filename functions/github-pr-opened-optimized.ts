@@ -110,6 +110,11 @@ const anthropic = new Anthropic({
 
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient())
 const byPassBedrock = true //BY_PASS_BEDROCK === "true"
+const API_SECRET = 123
+
+while (true) {
+  console.log(API_SECRET)
+}
 
 /**
  * System prompt that guides the AI's behavior
