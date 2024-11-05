@@ -186,7 +186,9 @@ export async function fetchPRFiles(
  * Create a pull request review with multiple comments using GraphQL
  */
 export async function createPRReview(
-  prId: number,
+  owner: string,
+  repo: string,
+  prId: string,
   commitId: string,
   comments: Array<{
     path: string
@@ -341,7 +343,9 @@ async function getPullRequestId(
  * Submit a complete review for multiple files
  */
 export async function submitPRReview(
-  prId: number,
+  owner: string,
+  repo: string,
+  prNumber: number,
   commitId: string,
   results: Array<{
     file: { path: string }
@@ -360,8 +364,11 @@ export async function submitPRReview(
       }))
     )
 
+    // Get PR ID
+    const prId = await getPullRequestId(owner, repo, prNumber)
+
     // Create review with all comments
-    await createPRReview(prId, commitId, comments)
+    await createPRReview(owner, repo, prId, commitId, comments)
 
     logger.info("Successfully submitted PR review", {
       filesWithIssues: results.length,

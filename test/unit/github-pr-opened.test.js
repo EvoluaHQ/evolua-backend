@@ -1,13 +1,13 @@
 require("../steps/init")
 const { handler } = require("../../functions/github-pr-opened-optimized")
 const {
-  GitHubEventDetail,
-} = require("../../functions/types/github-pr-opened.event")
+  GitHubPROpenedEventDetail,
+} = require("../../functions/github-webhook.event")
 const fs = require("fs")
 
 describe("GitHub Event Handler", () => {
   /**
-   * @returns {import('aws-lambda').EventBridgeEvent<'pull_request.opened', GitHubEventDetail>}
+   * @returns {import('aws-lambda').EventBridgeEvent<'pull_request.opened', GitHubPROpenedEventDetail>}
    */
   function newGitHubEvent(data) {
     return {
@@ -33,7 +33,7 @@ describe("GitHub Event Handler", () => {
   }
 
   it("should handle PR opened event", async () => {
-    const data = fs.readFileSync("examples/github/pr-opened-2.json", "utf8")
+    const data = fs.readFileSync("examples/github/pr-opened-3.json", "utf8")
     const event = newGitHubEvent(JSON.parse(data))
 
     const result = await handler(event, {})

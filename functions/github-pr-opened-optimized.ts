@@ -482,7 +482,7 @@ const _handler = async (event: any, context: any) => {
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReview(pullRequestId, commitId, results)
+      await submitPRReview(owner, repo, pullNumber, commitId, results)
     }
 
     // Calculate final metrics
