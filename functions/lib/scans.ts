@@ -17,6 +17,7 @@ if (!SCAN_RESULTS_TABLE_NAME) {
   throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
 }
 
+// TODO: Yan we need to normalize this, we already have a type for this /types/scans, let's try to keep types in one place
 interface Issue {
   id: string
   type: string

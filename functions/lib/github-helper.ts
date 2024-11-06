@@ -1,22 +1,32 @@
 import { Logger } from "@aws-lambda-powertools/logger"
 import { createAppAuth } from "@octokit/auth-app"
 import { Octokit } from "@octokit/core"
+/**
+ * Fetch all PR files with changes
+ */
+import { Sema } from "async-sema"
 import {
   AddCommentResponse,
   AddPRReviewResponse,
+  AIResponse,
+  AnalysisResults,
   CodeIssue,
   FetchPRFileContentResponse,
-  FetchPRFilesResponse,
   FileChanges,
   FileChangeType,
   GetPRIDResponse,
   GitHubFileResponse,
-  PRFile,
   PRFileChanges,
   PullRequestReviewComment,
-} from "../types/github"
+} from "../types"
 
 const logger = new Logger()
+
+// Configuration for rate limiting
+const GITHUB_API_RATE_LIMIT = {
+  maxConcurrent: 5, // Maximum concurrent API calls
+  waitTime: 1000, // Time to wait between batches in ms
+}
 
 let octokit: Octokit
 
@@ -274,7 +284,8 @@ async function fetchPRFileContent(
 }
 
 /**
- * Fetch all PR files with changes
+ * Fetch all PR files with changes.
+ * Process files with rate limiting.
  */
 export async function fetchPRFiles(
   owner: string,
@@ -286,6 +297,15 @@ export async function fetchPRFiles(
     const perPage = 100
     const files: PRFileChanges[] = []
     let hasNextPage = true
+
+    // Create semaphores for different API operations
+    const processSemaphore = new Sema(GITHUB_API_RATE_LIMIT.maxConcurrent, {
+      capacity: 100, // Allow queuing of requests
+    })
+
+    const contentSemaphore = new Sema(GITHUB_API_RATE_LIMIT.maxConcurrent, {
+      capacity: 100,
+    })
 
     // Get the PR commit SHA first
     const shaResponse = await octokit.graphql<{
@@ -337,27 +357,71 @@ export async function fetchPRFiles(
         }
       )
 
-      // Process files in parallel
+      // Process files with rate limiting
+      const processWithRateLimit = async (file: GitHubFileResponse) => {
+        await processSemaphore.acquire()
+        try {
+          return await processPRFile(file, sha)
+        } finally {
+          processSemaphore.release()
+        }
+      }
+
       const processedFiles = await Promise.all(
-        filesPage.map((file) => processPRFile(file, sha))
+        filesPage.map((file) => processWithRateLimit(file))
       )
 
-      // Get file contents only for files with changes
-      await Promise.all(
+      // Get file contents with rate limiting
+      const fetchContentWithRateLimit = async (file: PRFileChanges) => {
+        await contentSemaphore.acquire()
+        try {
+          file.content = await fetchPRFileContent(owner, repo, file.path, sha)
+          return file
+        } finally {
+          contentSemaphore.release()
+        }
+      }
+
+      // Only fetch content for files with changes
+      const filesWithContent = await Promise.all(
         processedFiles
-          .filter(hasChanges) // Using helper function
-          .map(async (file) => {
-            file.content = await fetchPRFileContent(owner, repo, file.path, sha)
-          })
+          .filter(hasChanges)
+          .map((file) => fetchContentWithRateLimit(file))
       )
 
-      files.push(...processedFiles)
+      files.push(...filesWithContent)
 
       // Check for next page
       const links = headers.link
       hasNextPage = !!(links && links.includes('rel="next"'))
       if (hasNextPage) page++
+
+      // Log progress
+      logger.info("Processed PR files page", {
+        page,
+        filesInPage: filesWithContent.length,
+        totalFiles: files.length,
+        filesWithChanges: filesWithContent.filter(hasChanges).length,
+      })
+
+      // Add a small delay between pages to be extra careful with rate limits
+      if (hasNextPage) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, GITHUB_API_RATE_LIMIT.waitTime)
+        )
+      }
     }
+
+    // Log summary of processed files
+    const filesWithChanges = files.filter(hasChanges)
+    logger.info("Completed processing PR files", {
+      totalFiles: files.length,
+      filesWithChanges: filesWithChanges.length,
+      totalChunks: files.reduce(
+        (sum, file) => sum + file.changes.chunks.length,
+        0
+      ),
+    })
 
     return files
   } catch (error) {
@@ -447,7 +511,7 @@ export function formatIssueComment(issue: CodeIssue): string {
       high: "⚠️",
       medium: "⚡",
       low: "ℹ️",
-    }[issue.risk_level.toLowerCase()] || "🔍"
+    }[issue.riskLevel.toLowerCase()] || "🔍"
 
   let comment = `_${severityEmoji} ${issue.title}_\n\n`
 
@@ -460,16 +524,13 @@ export function formatIssueComment(issue: CodeIssue): string {
   }
 
   // Reference section (if CWE or other references exist)
-  if (
-    issue.cwe_id ||
-    (issue.references?.standard && issue.references?.rule_id)
-  ) {
+  if (issue.cweId || (issue.references?.standard && issue.references?.ruleId)) {
     comment += "### References\n"
-    if (issue.cwe_id) {
-      comment += `- [${issue.cwe_id}](https://cwe.mitre.org/data/definitions/${issue.cwe_id.replace("CWE-", "")}.html)\n`
+    if (issue.cweId) {
+      comment += `- [${issue.cweId}](https://cwe.mitre.org/data/definitions/${issue.cweId.replace("CWE-", "")}.html)\n`
     }
-    if (issue.references?.standard && issue.references?.rule_id) {
-      comment += `- ${issue.references.standard}: ${issue.references.rule_id}\n`
+    if (issue.references?.standard && issue.references?.ruleId) {
+      comment += `- ${issue.references.standard}: ${issue.references.ruleId}\n`
     }
     comment += "\n"
   }
@@ -560,17 +621,17 @@ export async function submitPRReview(
       .flatMap(({ file, findings }) =>
         findings.issues
           .filter((issue) =>
-            file.changes.lineNumbers.includes(issue.location.line_start)
+            file.changes.lineNumbers.includes(issue.location.lineStart)
           )
           .map((issue) => {
             const diffPosition = file.changes.lineToDiffPosition.get(
-              issue.location.line_start
+              issue.location.lineStart
             )
 
             if (diffPosition === undefined) {
               logger.warn("Missing diff position for line", {
                 file: file.path,
-                line: issue.location.line_start,
+                line: issue.location.lineStart,
               })
               return null
             }
@@ -611,5 +672,42 @@ export async function submitPRReview(
   } catch (error) {
     logger.error("Failed to submit PR review", error as Error)
     throw error
+  }
+}
+
+export function processAIResponse(rawResponse: AIResponse): AnalysisResults {
+  return {
+    summary: {
+      totalIssues: rawResponse.summary.total_issues,
+      riskLevels: {
+        critical: rawResponse.summary.risk_levels.critical,
+        high: rawResponse.summary.risk_levels.high,
+        medium: rawResponse.summary.risk_levels.medium,
+        low: rawResponse.summary.risk_levels.low,
+      },
+    },
+    issues: rawResponse.issues.map((issue) => ({
+      id: issue.id,
+      type: issue.type,
+      riskLevel: issue.risk_level,
+      title: issue.title,
+      location: {
+        lineStart: issue.location.line_start,
+        lineEnd: issue.location.line_end,
+      },
+      description: issue.description,
+      impact: issue.impact,
+      recommendation: {
+        description: issue.recommendation.description,
+        code: issue.recommendation.code,
+      },
+      cweId: issue.cwe_id,
+      references: issue.references
+        ? {
+            standard: issue.references.standard,
+            ruleId: issue.references.rule_id,
+          }
+        : undefined,
+    })),
   }
 }
