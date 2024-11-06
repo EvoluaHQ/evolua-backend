@@ -1,10 +1,10 @@
-import { Logger } from "@aws-lambda-powertools/logger"
-import { createAppAuth } from "@octokit/auth-app"
-import { Octokit } from "@octokit/core"
+import { Logger } from "@aws-lambda-powertools/logger";
+import { createAppAuth } from "@octokit/auth-app";
+import { Octokit } from "@octokit/core";
 /**
  * Fetch all PR files with changes
  */
-import { Sema } from "async-sema"
+import { Sema } from "async-sema";
 import {
   AddCommentResponse,
   AddPRReviewResponse,
@@ -18,17 +18,17 @@ import {
   GitHubFileResponse,
   PRFileChanges,
   PullRequestReviewComment,
-} from "../types"
+} from "../types";
 
-const logger = new Logger()
+const logger = new Logger();
 
 // Configuration for rate limiting
 const GITHUB_API_RATE_LIMIT = {
   maxConcurrent: 5, // Maximum concurrent API calls
   waitTime: 1000, // Time to wait between batches in ms
-}
+};
 
-let octokit: Octokit
+let octokit: Octokit;
 
 export async function init(
   appId: string,
@@ -39,14 +39,14 @@ export async function init(
     appId,
     privateKey,
     installationId,
-  })
+  });
 
-  const installationAuth = await auth({ type: "installation" })
+  const installationAuth = await auth({ type: "installation" });
   octokit = new Octokit({
     auth: installationAuth.token,
-  })
+  });
 
-  logger.info("GitHub Octokit initialized")
+  logger.info("GitHub Octokit initialized");
 }
 
 /**
@@ -62,29 +62,29 @@ function parseFileChanges(patch?: string): FileChanges {
   const changes = {
     lineNumbers: [] as number[],
     chunks: [] as Array<{
-      start: number
-      end: number
-      content: string
-      header: string
-      changedLines: number[]
+      start: number;
+      end: number;
+      content: string;
+      header: string;
+      changedLines: number[];
     }>,
     lineToDiffPosition: new Map<number, number>(),
-  }
+  };
 
-  if (!patch) return changes
+  if (!patch) return changes;
 
-  logger.info("Processing patch", { patch })
+  logger.info("Processing patch", { patch });
 
-  const lines = patch.split("\n")
-  let currentNewLine = 0
-  let chunkStart = 0
-  let chunkLines: string[] = []
-  let chunkHeader = ""
-  let chunkChangedLines: number[] = []
-  let currentDiffPosition = 0
+  const lines = patch.split("\n");
+  let currentNewLine = 0;
+  let chunkStart = 0;
+  let chunkLines: string[] = [];
+  let chunkHeader = "";
+  let chunkChangedLines: number[] = [];
+  let currentDiffPosition = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
+    const line = lines[i];
 
     // Parse chunk header
     if (line.startsWith("@@")) {
@@ -96,41 +96,41 @@ function parseFileChanges(patch?: string): FileChanges {
           content: chunkLines.join("\n"),
           header: chunkHeader,
           changedLines: [...chunkChangedLines],
-        })
-        chunkLines = []
-        chunkChangedLines = []
+        });
+        chunkLines = [];
+        chunkChangedLines = [];
       }
 
-      const match = line.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/)
+      const match = line.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/);
       if (match) {
-        currentNewLine = parseInt(match[2], 10)
-        chunkStart = currentNewLine
-        chunkHeader = line
-        currentDiffPosition = 1 // Reset diff position for new chunk
+        currentNewLine = parseInt(match[2], 10);
+        chunkStart = currentNewLine;
+        chunkHeader = line;
+        currentDiffPosition = 1; // Reset diff position for new chunk
       }
-      continue
+      continue;
     }
 
     if (line.startsWith("+")) {
       // Added or modified line
-      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition)
-      chunkChangedLines.push(currentNewLine)
+      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition);
+      chunkChangedLines.push(currentNewLine);
       if (!changes.lineNumbers.includes(currentNewLine)) {
-        changes.lineNumbers.push(currentNewLine)
+        changes.lineNumbers.push(currentNewLine);
       }
-      chunkLines.push(line.slice(1))
-      currentNewLine++
-      currentDiffPosition++
+      chunkLines.push(line.slice(1));
+      currentNewLine++;
+      currentDiffPosition++;
     } else if (line.startsWith("-")) {
       // Removed line - only increment diff position
-      chunkLines.push(line.slice(1))
-      currentDiffPosition++
+      chunkLines.push(line.slice(1));
+      currentDiffPosition++;
     } else if (line.startsWith(" ")) {
       // Context line
-      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition)
-      chunkLines.push(line.slice(1))
-      currentNewLine++
-      currentDiffPosition++
+      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition);
+      chunkLines.push(line.slice(1));
+      currentNewLine++;
+      currentDiffPosition++;
     }
   }
 
@@ -142,10 +142,10 @@ function parseFileChanges(patch?: string): FileChanges {
       content: chunkLines.join("\n"),
       header: chunkHeader,
       changedLines: [...chunkChangedLines],
-    })
+    });
   }
 
-  changes.lineNumbers.sort((a, b) => a - b)
+  changes.lineNumbers.sort((a, b) => a - b);
 
   logger.info("Parsed file changes", {
     totalChangedLines: changes.lineNumbers.length,
@@ -157,9 +157,9 @@ function parseFileChanges(patch?: string): FileChanges {
       end: chunk.end,
       changedLines: chunk.changedLines,
     })),
-  })
+  });
 
-  return changes
+  return changes;
 }
 
 function mapChangeType(status: string): FileChangeType {
@@ -171,9 +171,9 @@ function mapChangeType(status: string): FileChangeType {
     copied: "COPIED",
     changed: "CHANGED",
     unchanged: "UNCHANGED",
-  }
+  };
 
-  return statusMap[status] || "MODIFIED"
+  return statusMap[status] || "MODIFIED";
 }
 
 /**
@@ -183,7 +183,7 @@ export async function processPRFile(
   file: GitHubFileResponse,
   sha: string
 ): Promise<PRFileChanges> {
-  const changes = parseFileChanges(file.patch)
+  const changes = parseFileChanges(file.patch);
 
   logger.info("File changes processed", {
     file: file.filename,
@@ -196,7 +196,7 @@ export async function processPRFile(
       changedLines: chunk.changedLines,
       linesCount: chunk.content.split("\n").length,
     })),
-  })
+  });
 
   return {
     path: file.filename,
@@ -206,7 +206,7 @@ export async function processPRFile(
     sha,
     content: null, // Will be filled later if needed
     changes,
-  }
+  };
 }
 
 export async function commentOnPR(pullRequestId: string, comment: string) {
@@ -221,7 +221,7 @@ export async function commentOnPR(pullRequestId: string, comment: string) {
         }
       }
     }
-  `
+  `;
 
   try {
     const response = await octokit.graphql<AddCommentResponse>(mutation, {
@@ -229,17 +229,17 @@ export async function commentOnPR(pullRequestId: string, comment: string) {
         body: comment,
         subjectId: pullRequestId,
       },
-    })
+    });
 
     logger.info("Comment added successfully", {
       commentId: response.addComment.commentEdge.node.id,
       pullRequestId,
-    })
+    });
 
-    return response
+    return response;
   } catch (err) {
-    logger.error("Failed to send comment", err as Error)
-    throw err
+    logger.error("Failed to send comment", err as Error);
+    throw err;
   }
 }
 
@@ -261,25 +261,25 @@ async function fetchPRFileContent(
         }
       }
     }
-  `
+  `;
   try {
     const response = await octokit.graphql<FetchPRFileContentResponse>(query, {
       owner,
       repo,
       expression: `${sha}:${filePath}`,
-    })
+    });
 
     if (response.repository.object?.isTruncated) {
       logger.warn("File content truncated", {
         filePath,
         byteSize: response.repository.object.byteSize,
-      })
+      });
     }
 
-    return response.repository.object?.text ?? null
+    return response.repository.object?.text ?? null;
   } catch (error) {
-    logger.error("Failed to fetch file content", error as Error)
-    return null
+    logger.error("Failed to fetch file content", error as Error);
+    return null;
   }
 }
 
@@ -293,19 +293,19 @@ export async function fetchPRFiles(
   prNumber: number
 ): Promise<PRFileChanges[]> {
   try {
-    let page = 1
-    const perPage = 100
-    const files: PRFileChanges[] = []
-    let hasNextPage = true
+    let page = 1;
+    const perPage = 100;
+    const files: PRFileChanges[] = [];
+    let hasNextPage = true;
 
     // Create semaphores for different API operations
     const processSemaphore = new Sema(GITHUB_API_RATE_LIMIT.maxConcurrent, {
       capacity: 100, // Allow queuing of requests
-    })
+    });
 
     const contentSemaphore = new Sema(GITHUB_API_RATE_LIMIT.maxConcurrent, {
       capacity: 100,
-    })
+    });
 
     // Get the PR commit SHA first
     const shaResponse = await octokit.graphql<{
@@ -313,11 +313,11 @@ export async function fetchPRFiles(
         pullRequest: {
           headRef: {
             target: {
-              oid: string
-            }
-          }
-        }
-      }
+              oid: string;
+            };
+          };
+        };
+      };
     }>(
       `
       query($owner: String!, $repo: String!, $prNumber: Int!) {
@@ -337,9 +337,9 @@ export async function fetchPRFiles(
         repo,
         prNumber,
       }
-    )
+    );
 
-    const sha = shaResponse.repository.pullRequest.headRef.target.oid
+    const sha = shaResponse.repository.pullRequest.headRef.target.oid;
 
     while (hasNextPage) {
       // Fetch files for current page
@@ -355,46 +355,50 @@ export async function fetchPRFiles(
             "X-GitHub-Api-Version": "2022-11-28",
           },
         }
-      )
+      );
+
+      while (true) {
+        return;
+      }
 
       // Process files with rate limiting
       const processWithRateLimit = async (file: GitHubFileResponse) => {
-        await processSemaphore.acquire()
+        await processSemaphore.acquire();
         try {
-          return await processPRFile(file, sha)
+          return await processPRFile(file, sha);
         } finally {
-          processSemaphore.release()
+          processSemaphore.release();
         }
-      }
+      };
 
       const processedFiles = await Promise.all(
         filesPage.map((file) => processWithRateLimit(file))
-      )
+      );
 
       // Get file contents with rate limiting
       const fetchContentWithRateLimit = async (file: PRFileChanges) => {
-        await contentSemaphore.acquire()
+        await contentSemaphore.acquire();
         try {
-          file.content = await fetchPRFileContent(owner, repo, file.path, sha)
-          return file
+          file.content = await fetchPRFileContent(owner, repo, file.path, sha);
+          return file;
         } finally {
-          contentSemaphore.release()
+          contentSemaphore.release();
         }
-      }
+      };
 
       // Only fetch content for files with changes
       const filesWithContent = await Promise.all(
         processedFiles
           .filter(hasChanges)
           .map((file) => fetchContentWithRateLimit(file))
-      )
+      );
 
-      files.push(...filesWithContent)
+      files.push(...filesWithContent);
 
       // Check for next page
-      const links = headers.link
-      hasNextPage = !!(links && links.includes('rel="next"'))
-      if (hasNextPage) page++
+      const links = headers.link;
+      hasNextPage = !!(links && links.includes('rel="next"'));
+      if (hasNextPage) page++;
 
       // Log progress
       logger.info("Processed PR files page", {
@@ -402,18 +406,18 @@ export async function fetchPRFiles(
         filesInPage: filesWithContent.length,
         totalFiles: files.length,
         filesWithChanges: filesWithContent.filter(hasChanges).length,
-      })
+      });
 
       // Add a small delay between pages to be extra careful with rate limits
       if (hasNextPage) {
         await new Promise((resolve) =>
           setTimeout(resolve, GITHUB_API_RATE_LIMIT.waitTime)
-        )
+        );
       }
     }
 
     // Log summary of processed files
-    const filesWithChanges = files.filter(hasChanges)
+    const filesWithChanges = files.filter(hasChanges);
     logger.info("Completed processing PR files", {
       totalFiles: files.length,
       filesWithChanges: filesWithChanges.length,
@@ -421,17 +425,17 @@ export async function fetchPRFiles(
         (sum, file) => sum + file.changes.chunks.length,
         0
       ),
-    })
+    });
 
-    return files
+    return files;
   } catch (error) {
     logger.error("Failed to fetch PR files", {
       error: error as Error,
       owner,
       repo,
       prNumber,
-    })
-    return []
+    });
+    return [];
   }
 }
 
@@ -439,14 +443,14 @@ export async function fetchPRFiles(
  * Helper function to check if file has changes
  */
 function hasChanges(file: PRFileChanges): boolean {
-  return file.changes.lineNumbers.length > 0
+  return file.changes.lineNumbers.length > 0;
 }
 
 /**
  * Helper function to get total changed lines
  */
 function getChangedLinesCount(file: PRFileChanges): number {
-  return file.changes.lineNumbers.length
+  return file.changes.lineNumbers.length;
 }
 
 /**
@@ -475,7 +479,7 @@ export async function createPRReview(
         }
       }
     }
-  `
+  `;
 
   try {
     const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
@@ -486,18 +490,18 @@ export async function createPRReview(
         comments,
         event: "COMMENT",
       },
-    })
+    });
 
     logger.info("Created PR review with comments", {
       reviewId: response.addPullRequestReview.pullRequestReview.id,
       commentsCount:
         response.addPullRequestReview.pullRequestReview.comments.nodes.length,
-    })
+    });
 
-    return response
+    return response;
   } catch (error) {
-    logger.error("Failed to create PR review", error as Error)
-    throw error
+    logger.error("Failed to create PR review", error as Error);
+    throw error;
   }
 }
 
@@ -511,33 +515,33 @@ export function formatIssueComment(issue: CodeIssue): string {
       high: "⚠️",
       medium: "⚡",
       low: "ℹ️",
-    }[issue.riskLevel.toLowerCase()] || "🔍"
+    }[issue.riskLevel.toLowerCase()] || "🔍";
 
-  let comment = `_${severityEmoji} ${issue.title}_\n\n`
+  let comment = `_${severityEmoji} ${issue.title}_\n\n`;
 
   // Main description
-  comment += `**${issue.description}**\n\n`
+  comment += `**${issue.description}**\n\n`;
 
   // Impact section
   if (issue.impact) {
-    comment += `### Impact\n${issue.impact}\n\n`
+    comment += `### Impact\n${issue.impact}\n\n`;
   }
 
   // Reference section (if CWE or other references exist)
   if (issue.cweId || (issue.references?.standard && issue.references?.ruleId)) {
-    comment += "### References\n"
+    comment += "### References\n";
     if (issue.cweId) {
-      comment += `- [${issue.cweId}](https://cwe.mitre.org/data/definitions/${issue.cweId.replace("CWE-", "")}.html)\n`
+      comment += `- [${issue.cweId}](https://cwe.mitre.org/data/definitions/${issue.cweId.replace("CWE-", "")}.html)\n`;
     }
     if (issue.references?.standard && issue.references?.ruleId) {
-      comment += `- ${issue.references.standard}: ${issue.references.ruleId}\n`
+      comment += `- ${issue.references.standard}: ${issue.references.ruleId}\n`;
     }
-    comment += "\n"
+    comment += "\n";
   }
 
   // Recommendation section with suggestion block
   if (issue?.recommendation?.description) {
-    comment += `### Recommendation\n${issue.recommendation.description}\n\n`
+    comment += `### Recommendation\n${issue.recommendation.description}\n\n`;
 
     // Only add suggestion block if we have valid suggestion code
     if (issue.recommendation.code?.trim()) {
@@ -558,13 +562,13 @@ ${issue?.recommendation?.code?.trim()}
 
 </details>
 <!-- suggestion_end -->
-`
+`;
     }
   }
 
-  comment += "\n<!-- This is an auto-generated comment by Evolua -->"
+  comment += "\n<!-- This is an auto-generated comment by Evolua -->";
 
-  return comment
+  return comment;
 }
 
 /**
@@ -583,19 +587,19 @@ async function getPullRequestId(
         }
       }
     }
-  `
+  `;
 
   try {
     const response = await octokit.graphql<GetPRIDResponse>(query, {
       owner,
       repo,
       number: prNumber,
-    })
+    });
 
-    return response.repository.pullRequest.id
+    return response.repository.pullRequest.id;
   } catch (error) {
-    logger.error("Failed to fetch PR ID", error as Error)
-    throw error
+    logger.error("Failed to fetch PR ID", error as Error);
+    throw error;
   }
 }
 
@@ -608,10 +612,10 @@ export async function submitPRReview(
   prNumber: number,
   commitId: string,
   results: Array<{
-    file: PRFileChanges
+    file: PRFileChanges;
     findings: {
-      issues: CodeIssue[]
-    }
+      issues: CodeIssue[];
+    };
   }>
 ) {
   try {
@@ -626,52 +630,52 @@ export async function submitPRReview(
           .map((issue) => {
             const diffPosition = file.changes.lineToDiffPosition.get(
               issue.location.lineStart
-            )
+            );
 
             if (diffPosition === undefined) {
               logger.warn("Missing diff position for line", {
                 file: file.path,
                 line: issue.location.lineStart,
-              })
-              return null
+              });
+              return null;
             }
 
             return {
               path: file.path,
               position: diffPosition,
               body: formatIssueComment(issue),
-            }
+            };
           })
           .filter(
             (comment): comment is PullRequestReviewComment => comment !== null
           )
-      )
+      );
 
     if (comments.length === 0) {
-      logger.info("No valid issues found in changed lines")
-      return
+      logger.info("No valid issues found in changed lines");
+      return;
     }
 
     logger.info("Prepared PR review comments", {
       totalComments: comments.length,
       commentsByFile: comments.reduce(
         (acc, comment) => {
-          acc[comment.path] = (acc[comment.path] || 0) + 1
-          return acc
+          acc[comment.path] = (acc[comment.path] || 0) + 1;
+          return acc;
         },
         {} as Record<string, number>
       ),
-    })
+    });
 
-    const prId = await getPullRequestId(owner, repo, prNumber)
-    await createPRReview(owner, repo, prId, commitId, comments)
+    const prId = await getPullRequestId(owner, repo, prNumber);
+    await createPRReview(owner, repo, prId, commitId, comments);
 
     logger.info("Successfully submitted PR review", {
       totalComments: comments.length,
-    })
+    });
   } catch (error) {
-    logger.error("Failed to submit PR review", error as Error)
-    throw error
+    logger.error("Failed to submit PR review", error as Error);
+    throw error;
   }
 }
 
@@ -709,5 +713,5 @@ export function processAIResponse(rawResponse: AIResponse): AnalysisResults {
           }
         : undefined,
     })),
-  }
+  };
 }
