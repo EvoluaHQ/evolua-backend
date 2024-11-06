@@ -10,13 +10,11 @@ export function request(ctx) {
 
   return {
     operation: 'Query',
+    scanIndexForward: false,
     limit: 10,
     nextToken: ctx.arguments.nextToken,
     query: {
-      expression: '#repoId = :repoId',
-      expressionNames: {
-        '#repoId': 'repoId'
-      },
+      expression: 'repoId = :repoId',
       expressionValues: util.dynamodb.toMapValues({
         ':repoId': repoId
       }),

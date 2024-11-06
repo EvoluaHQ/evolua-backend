@@ -1,5 +1,5 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, PutItemCommand } from "@aws-sdk/lib-dynamodb"
+import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb"
 import * as ulid from "ulid"
 import * as helper from "./dynamodb-helper"
 
@@ -18,25 +18,27 @@ if (!SCAN_RESULTS_TABLE_NAME) {
 }
 
 interface Issue {
+  id: string
   type: string
   title: string
-  severity: string
+  risk_level: string
   location: {
-    start: number
-    end: number
+    line_start: number
+    line_end: number
   }
-  description: string
-  impact: string
-  recommendation: {
-    description: string
-    suggestion: string
+  description?: string
+  impact?: string
+  recommendation: string
+  cwe_id?: string
+  references: {
+    standard?: string
+    rule_id?: string
   }
-  cwe: string
 }
 
 interface Summary {
-  issues: number
-  risks: {
+  total_issues: number
+  risk_levels: {
     critical: number
     high: number
     medium: number
@@ -55,7 +57,7 @@ interface ScanResult {
 }
 
 interface PullRequest {
-  id: string
+  id: number
   number: number
   url: string
   title: string
@@ -68,7 +70,7 @@ export async function saveScanResults(
   results: ScanResult[]
 ) {
   const timestamp = new Date().toISOString()
-  const prId = pr.id
+  const prId = pr.id.toString()
   const scanId = ulid.ulid()
 
   const countIssues = (f: (summary: Summary) => number) => {
@@ -76,19 +78,26 @@ export async function saveScanResults(
   }
 
   await DocumentClient.send(
-    new PutItemCommand({
+    new PutCommand({
       TableName: SCANS_TABLE_NAME,
       Item: {
         repoId,
         scanId,
         timestamp,
-        pullRequest: pr,
+        pullRequestId: prId,
+        pullRequest: {
+          id: prId,
+          number: pr.number,
+          url: pr.url,
+          title: pr.title,
+          createdAt: pr.createdAt,
+        },
         filesScanned: results.length,
-        issuesCount: countIssues((summary) => summary.issues),
-        critical: countIssues((summary) => summary.risks.critical),
-        high: countIssues((summary) => summary.risks.high),
-        medium: countIssues((summary) => summary.risks.medium),
-        low: countIssues((summary) => summary.risks.low),
+        issuesCount: countIssues((summary) => summary.total_issues),
+        critical: countIssues((summary) => summary.risk_levels.critical),
+        high: countIssues((summary) => summary.risk_levels.high),
+        medium: countIssues((summary) => summary.risk_levels.medium),
+        low: countIssues((summary) => summary.risk_levels.low),
       },
     })
   )
@@ -105,11 +114,11 @@ export async function saveScanResults(
           changeType: result.changeType,
           sha: result.sha,
         },
-        issuesCount: result.summary.issues,
-        critical: result.summary.risks.critical,
-        high: result.summary.risks.high,
-        medium: result.summary.risks.medium,
-        low: result.summary.risks.low,
+        issuesCount: result.summary.total_issues,
+        critical: result.summary.risk_levels.critical,
+        high: result.summary.risk_levels.high,
+        medium: result.summary.risk_levels.medium,
+        low: result.summary.risk_levels.low,
         issues: result.issues,
       },
     },
@@ -117,7 +126,7 @@ export async function saveScanResults(
 
   await helper.executeBatchWriteCommand(
     DocumentClient,
-    SCANS_TABLE_NAME,
+    SCAN_RESULTS_TABLE_NAME,
     saveResultsReqs
   )
 }

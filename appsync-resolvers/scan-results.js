@@ -8,15 +8,10 @@ import { util } from '@aws-appsync/utils'
 export function request(ctx) {
   return {
     operation: 'Query',
-    limit: 10,
-    nextToken: ctx.arguments.nextToken,
     query: {
-      expression: '#repoId = :repoId',
-      expressionNames: {
-        '#repoId': 'repoId'
-      },
+      expression: 'scanId = :scanId',
       expressionValues: util.dynamodb.toMapValues({
-        ':repoId': `${ctx.source.provider}#${ctx.source.providerId}`,
+        ':scanId': ctx.source.scanId,
       }),
     },
   }
@@ -26,11 +21,5 @@ export function request(ctx) {
 * @param {import('@aws-appsync/utils').Context} ctx 
 */
 export function response(ctx) {
-  const scans = ctx.result.items
-  const nextToken = ctx.result.nextToken
-
-  return {
-    scans,
-    nextToken
-  }
+  return ctx.result.items
 }

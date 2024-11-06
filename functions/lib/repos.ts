@@ -5,11 +5,6 @@ import * as helper from './dynamodb-helper';
 const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
-const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
-if (!REPOS_TABLE_NAME) {
-  throw new Error('REPOS_TABLE_NAME env var is missing');
-}
-
 export interface Repo {
   provider: string;
   providerId: string;
@@ -19,27 +14,38 @@ export interface Repo {
 }
 
 export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
+  const TENANT_REPOS_TABLE_NAME = process.env.TENANT_REPOS_TABLE_NAME || '';
+  if (!TENANT_REPOS_TABLE_NAME) {
+    throw new Error('TENANT_REPOS_TABLE_NAME env var is missing');
+  }
+
   const allRequests = repos.map(repo => ({
     PutRequest: {
       Item: {
-        pk: `TENANT#${tenantId}`,
-        sk: `REPO#${repo.provider}#${repo.providerId}`,
         tenantId,
+        repoId: `${repo.provider}#${repo.providerId}`,
         provider: repo.provider,
-        providerId: repo.providerId
+        providerId: repo.providerId,
+        name: repo.name,
+        fullName: repo.fullName,
+        private: repo.private
       }
     }
   }));
 
-  await helper.executeBatchWriteCommand(DocumentClient, REPOS_TABLE_NAME, allRequests);
+  await helper.executeBatchWriteCommand(DocumentClient, TENANT_REPOS_TABLE_NAME, allRequests);
 }
 
 export async function saveRepos(repos: Repo[]) {
+  const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
+  if (!REPOS_TABLE_NAME) {
+    throw new Error('REPOS_TABLE_NAME env var is missing');
+  }
+
   const allRequests = repos.map(repo => ({
     PutRequest: {
       Item: {
-        pk: 'REPO',
-        sk: `${repo.provider}#${repo.providerId}`,
+        repoId: `${repo.provider}#${repo.providerId}`,
         provider: repo.provider,
         providerId: repo.providerId,
         name: repo.name,
@@ -53,11 +59,15 @@ export async function saveRepos(repos: Repo[]) {
 }
 
 export async function deleteRepos(repos: Repo[]) {
+  const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
+  if (!REPOS_TABLE_NAME) {
+    throw new Error('REPOS_TABLE_NAME env var is missing');
+  }
+
   const allRequests = repos.map(repo => ({
     DeleteRequest: {
       Key: {
-        pk: 'REPO',
-        sk: `${repo.provider}#${repo.providerId}`
+        repoId: `${repo.provider}#${repo.providerId}`
       }
     }
   }));

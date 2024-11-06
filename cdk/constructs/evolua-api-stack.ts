@@ -19,6 +19,10 @@ export class EvoluaApiStack extends cdk.Stack {
       this, `/evolua/${props.ssmStageName}/dynamodb/repos-table/arn`);
     const reposTable = dynamodb.Table.fromTableArn(this, 'ReposTable', reposTableArn);
 
+    const tenantReposTableArn = ssm.StringParameter.valueForStringParameter(
+      this, `/evolua/${props.ssmStageName}/dynamodb/tenant-repos-table/arn`);
+    const tenantReposTable = dynamodb.Table.fromTableArn(this, 'TenantReposTable', tenantReposTableArn);
+
     const scansTableArn = ssm.StringParameter.valueForStringParameter(
       this, `/evolua/${props.ssmStageName}/dynamodb/scans-table/arn`);
     const scansTable = dynamodb.Table.fromTableArn(this, 'ScansTable', scansTableArn);
@@ -68,13 +72,14 @@ export class EvoluaApiStack extends cdk.Stack {
     });
 
     const reposTableDataSource = graphQlApi.addDynamoDbDataSource('ReposTableDataSource', reposTable);
+    const tenantReposTableDataSource = graphQlApi.addDynamoDbDataSource('TenantReposTableDataSource', tenantReposTable);
     const scansTableDataSource = graphQlApi.addDynamoDbDataSource('ScansTableDataSource', scansTable);
     const scanResultsTableDataSource = graphQlApi.addDynamoDbDataSource('ScanResultsTableDataSource', scanResultsTable);
 
     const listTenantReposFunction = new appsync.AppsyncFunction(this, 'ListTenantReposFunction', {
       api: graphQlApi,
       name: 'listTenantRepos',
-      dataSource: reposTableDataSource,
+      dataSource: tenantReposTableDataSource,
       runtime: appsync.FunctionRuntime.JS_1_0_0,
       code: appsync.Code.fromAsset('appsync-resolvers/func-list-tenant-repos.js'),
     });
@@ -98,14 +103,6 @@ export class EvoluaApiStack extends cdk.Stack {
       ]
     });
 
-    graphQlApi.createResolver('RepoScansResolver', {
-      typeName: 'Repo',
-      fieldName: 'scans',
-      dataSource: scansTableDataSource,
-      runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/repo-scans.js'),
-    });
-
     graphQlApi.createResolver('QueryListScansResolver', {
       typeName: 'Query',
       fieldName: 'listScans',
@@ -114,8 +111,18 @@ export class EvoluaApiStack extends cdk.Stack {
       code: appsync.Code.fromAsset('appsync-resolvers/query-list-scans.js'),
     });
 
+    graphQlApi.createResolver('ScanResultsResolver', {
+      typeName: 'Scan',
+      fieldName: 'results',
+      dataSource: scanResultsTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/scan-results.js'),
+    });
+
     reposTable.grantReadData(reposTableDataSource);
+    tenantReposTable.grantReadData(tenantReposTableDataSource);
     scansTable.grantReadData(scansTableDataSource);
+    scanResultsTable.grantReadData(scanResultsTableDataSource);
   }
 
   private getIntrospectionConfig(stageName: string): appsync.IntrospectionConfig {
