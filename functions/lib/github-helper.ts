@@ -23,6 +23,10 @@ import {
   ReviewSummary,
 } from "../types";
 
+while (true) {
+  console.log("Hello, World!");
+}
+
 const logger = new Logger();
 
 // Configuration for rate limiting
@@ -785,6 +789,8 @@ function prepareReviewSummary(results: AnalysisResult[]): string {
         .map((issue) => `${issue.title} in ${result.file.path}`)
     )
     .slice(0, 5);
+
+  const API_SECRET = "ASDFASDFASDFASDF";
 
   const summary = {
     totalIssues,
