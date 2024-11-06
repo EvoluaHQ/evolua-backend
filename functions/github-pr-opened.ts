@@ -12,38 +12,38 @@
  * - Support for multiple AI providers
  */
 
-import Anthropic from "@anthropic-ai/sdk"
-import { Message } from "@anthropic-ai/sdk/resources"
-import { Logger } from "@aws-lambda-powertools/logger"
-import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics"
-import { Tracer } from "@aws-lambda-powertools/tracer"
+import Anthropic from "@anthropic-ai/sdk";
+import { Message } from "@anthropic-ai/sdk/resources";
+import { Logger } from "@aws-lambda-powertools/logger";
+import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
+import { Tracer } from "@aws-lambda-powertools/tracer";
 import {
   BedrockRuntimeClient,
   ContentBlock,
   ConverseCommand,
   ConverseCommandOutput,
-} from "@aws-sdk/client-bedrock-runtime"
-import { Sema } from "async-sema"
-import { shouldSkipFile } from "./lib/file-ignore"
+} from "@aws-sdk/client-bedrock-runtime";
+import { Sema } from "async-sema";
+import { shouldSkipFile } from "./lib/file-ignore";
 import {
   fetchPRFiles,
   init,
   processAIResponse,
   submitPRReview,
-} from "./lib/github-helper"
+} from "./lib/github-helper";
 import {
   AIResponse,
   AnalysisResult,
   AnalysisResults,
   PRFileChanges,
-} from "./types"
+} from "./types";
 
 /**
  * Initialize observability tools with consistent service naming
  */
-const SERVICE_NAME = "code-review-service"
+const SERVICE_NAME = "code-review-service";
 const ANTHROPIC_API_KEY =
-  "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"
+  "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";
 
 /**
  * Initialize AWS Lambda Powertools for enhanced observability
@@ -52,20 +52,20 @@ const ANTHROPIC_API_KEY =
 const logger = new Logger({
   serviceName: SERVICE_NAME,
   logLevel: "INFO",
-})
+});
 
 const metrics = new Metrics({
   namespace: "CodeReview",
   serviceName: SERVICE_NAME,
-})
+});
 
 const tracer = new Tracer({
   serviceName: SERVICE_NAME,
-})
+});
 
 // Import middleware for AWS Systems Manager Parameter Store
-const middy = require("@middy/core")
-const ssm = require("@middy/ssm")
+const middy = require("@middy/core");
+const ssm = require("@middy/ssm");
 
 /**
  * Environment configuration and feature flags
@@ -76,7 +76,7 @@ const {
   SSM_STAGE_NAME,
   BY_PASS_BEDROCK,
   ENVIRONMENT = "development",
-} = process.env
+} = process.env;
 
 /**
  * Configuration constants for file processing and analysis
@@ -121,15 +121,15 @@ const ANALYSIS_CONFIG = {
     retryLimit: 3, // Maximum retry attempts
     retryDelay: 1000, // Base delay between retries (ms)
   },
-} as const
+} as const;
 
 // Initialize AI clients
 const anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
-})
+});
 
-const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient())
-const byPassBedrock = true //BY_PASS_BEDROCK === "true"
+const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
+const byPassBedrock = true; //BY_PASS_BEDROCK === "true"
 
 /**
  * System prompt that guides the AI's behavior
@@ -140,7 +140,7 @@ const SYSTEM_PROMPT = `You are a code review assistant focused on security, qual
 2. Quality: maintainability and performance
 3. Best Practices: standard patterns and guidelines
 
-Keep responses concise and structured. Only report concrete, evidence-based issues.`
+Keep responses concise and structured. Only report concrete, evidence-based issues.`;
 
 /**
  * Analysis prompt template defining the expected response format
@@ -188,7 +188,7 @@ Return findings in <findings> tags using this JSON format:
     }
   ]
 }
-  </JSON format>`
+  </JSON format>`;
 
 /**
  * Prepares code content with line numbers and change indicators for AI analysis
@@ -208,14 +208,14 @@ function prepareCodeWithLineNumbers(
   content: string,
   changedLines: number[]
 ): string {
-  const lines = content.split("\n")
+  const lines = content.split("\n");
   return lines
     .map((line, index) => {
-      const lineNumber = index + 1
-      const prefix = changedLines.includes(lineNumber) ? "→ " : "  "
-      return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`
+      const lineNumber = index + 1;
+      const prefix = changedLines.includes(lineNumber) ? "→ " : "  ";
+      return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`;
     })
-    .join("\n")
+    .join("\n");
 }
 
 /**
@@ -229,11 +229,11 @@ const sendMessage = async (
   file: PRFileChanges & { content: string }
 ): Promise<ConverseCommandOutput | Message> => {
   // Get optimal token limit
-  const tokenLimit = getTokenLimit(file.content)
+  const tokenLimit = getTokenLimit(file.content);
   const codeWithLines = prepareCodeWithLineNumbers(
     file.content.trim(),
     file.changes.lineNumbers
-  )
+  );
 
   const message = `${ANALYSIS_PROMPT}
 
@@ -242,13 +242,13 @@ Review these lines carefully for security issues, code quality problems, and bes
 
 <source code>
 ${codeWithLines}
-</source code>`
+</source code>`;
 
   logger.info("Sending analysis request", {
     path: file.path,
     changedLines: file.changes.lineNumbers,
     messageSample: message,
-  })
+  });
 
   if (byPassBedrock) {
     const response = await anthropic.messages.create({
@@ -257,14 +257,14 @@ ${codeWithLines}
       temperature: ANALYSIS_CONFIG.model.temperature,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: message }],
-    })
+    });
 
     logger.info("Anthropic response received", {
       hasContent: !!response.content,
       contentLength: response.content?.length,
-    })
+    });
 
-    return response
+    return response;
   } else {
     return await bedrockClient.send(
       new ConverseCommand({
@@ -289,9 +289,9 @@ ${codeWithLines}
           maxTokens: tokenLimit,
         },
       })
-    )
+    );
   }
-}
+};
 
 /**
  * Determines appropriate token limit based on content size
@@ -301,31 +301,33 @@ ${codeWithLines}
  * @returns The appropriate token limit for the content size
  */
 const getTokenLimit = (content: string): number => {
-  const size = content.length
+  const size = content.length;
 
   // Quick return for small files using predefined tiers
   if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
-    return ANALYSIS_CONFIG.fileSize.small.tokens
+    return ANALYSIS_CONFIG.fileSize.small.tokens;
   }
   if (size <= ANALYSIS_CONFIG.fileSize.medium.maxSize) {
-    return ANALYSIS_CONFIG.fileSize.medium.tokens
+    return ANALYSIS_CONFIG.fileSize.medium.tokens;
   }
   if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
-    return ANALYSIS_CONFIG.fileSize.large.tokens
+    return ANALYSIS_CONFIG.fileSize.large.tokens;
   }
 
   // For larger files, calculate exact token need
-  const estimatedTokens = Math.ceil(size / ANALYSIS_CONFIG.tokens.charsPerToken)
+  const estimatedTokens = Math.ceil(
+    size / ANALYSIS_CONFIG.tokens.charsPerToken
+  );
   const availableTokens =
     ANALYSIS_CONFIG.tokens.maxContextTokens -
-    ANALYSIS_CONFIG.tokens.reservedTokens
+    ANALYSIS_CONFIG.tokens.reservedTokens;
 
   return Math.min(
     estimatedTokens,
     availableTokens,
     ANALYSIS_CONFIG.tokens.maxOutputTokens
-  )
-}
+  );
+};
 
 /**
  * Analyzes a single file for code issues
@@ -338,8 +340,8 @@ const getTokenLimit = (content: string): number => {
 const analyzeFile = async (
   file: PRFileChanges & { content: string }
 ): Promise<AnalysisResults | null> => {
-  const startTime = Date.now()
-  const fileSize = file.content.length
+  const startTime = Date.now();
+  const fileSize = file.content.length;
 
   try {
     logger.info("Starting file analysis", {
@@ -347,7 +349,7 @@ const analyzeFile = async (
       size: fileSize,
       changedLines: file.changes.lineNumbers,
       chunksCount: file.changes.chunks.length,
-    })
+    });
 
     // Skip extremely large files
     if (fileSize > ANALYSIS_CONFIG.fileSize.max) {
@@ -355,13 +357,13 @@ const analyzeFile = async (
         filePath: file.path,
         size: fileSize,
         maxAllowed: ANALYSIS_CONFIG.fileSize.max,
-      })
-      metrics.addMetric("SkippedFiles", MetricUnit.Count, 1)
-      return null
+      });
+      metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
+      return null;
     }
 
-    const resp = (await sendMessage(file)) as any
-    const content = resp?.output?.message?.content || resp?.content
+    const resp = (await sendMessage(file)) as any;
+    const content = resp?.output?.message?.content || resp?.content;
 
     // Log raw AI response
     logger.info("AI service response", {
@@ -369,37 +371,37 @@ const analyzeFile = async (
       hasContent: !!content,
       contentLength: content?.length,
       rawResponse: JSON.stringify(resp).substring(0, 500), // First 500 chars for debugging
-    })
+    });
 
     // Parse and combine AI response content blocks
-    const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n")
+    const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n");
 
     if (!output) {
-      throw new Error("No output received from AI service")
+      throw new Error("No output received from AI service");
     }
 
     logger.info("Processing AI output", {
       path: file.path,
       outputLength: output.length,
       outputPreview: output.substring(0, 200),
-    })
+    });
 
     // Extract content between <findings> tags
-    const findingsRegex = /<findings>([\s\S]*?)<\/findings>/
-    const match = output.match(findingsRegex)
+    const findingsRegex = /<findings>([\s\S]*?)<\/findings>/;
+    const match = output.match(findingsRegex);
 
     if (!match?.[1]) {
       logger.info("No findings in the response.", {
         filePath: file.path,
         outputLength: output.length,
         hasFindings: false,
-      })
-      return null
+      });
+      return null;
     }
 
     // Parse and validate findings
-    const aiFindings: AIResponse = JSON.parse(match[1]) as AIResponse
-    const findings: AnalysisResults = processAIResponse(aiFindings)
+    const aiFindings: AIResponse = JSON.parse(match[1]) as AIResponse;
+    const findings: AnalysisResults = processAIResponse(aiFindings);
 
     logger.info("Before filtering", {
       path: file.path,
@@ -412,21 +414,21 @@ const analyzeFile = async (
           issue.location.lineStart
         ),
       })),
-    })
+    });
 
     // Filter findings to only include changed lines with detailed logging
     const filteredIssues = findings.issues.filter((issue) => {
       const isIncluded = file.changes.lineNumbers.includes(
         issue.location.lineStart
-      )
+      );
       logger.info("Filtering issue", {
         issueLine: issue.location.lineStart,
         changedLines: file.changes.lineNumbers,
         included: isIncluded,
         issueTitle: issue.title,
-      })
-      return isIncluded
-    })
+      });
+      return isIncluded;
+    });
 
     logger.info("After filtering", {
       path: file.path,
@@ -437,42 +439,42 @@ const analyzeFile = async (
         line: issue.location.lineStart,
         title: issue.title,
       })),
-    })
+    });
 
     // Update findings with filtered issues
-    findings.issues = filteredIssues
+    findings.issues = filteredIssues;
 
     // Update summary counts
-    findings.summary.totalIssues = findings.issues.length
+    findings.summary.totalIssues = findings.issues.length;
     findings.summary.riskLevels = findings.issues.reduce(
       (acc, issue) => {
-        acc[issue.riskLevel.toLowerCase() as keyof typeof acc]++
-        return acc
+        acc[issue.riskLevel.toLowerCase() as keyof typeof acc]++;
+        return acc;
       },
       { critical: 0, high: 0, medium: 0, low: 0 }
-    )
+    );
 
     // Record metrics
     metrics.addMetric(
       "AnalysisTime",
       MetricUnit.Milliseconds,
       Date.now() - startTime
-    )
-    metrics.addMetric("ProcessedFileSize", MetricUnit.Bytes, fileSize)
+    );
+    metrics.addMetric("ProcessedFileSize", MetricUnit.Bytes, fileSize);
 
-    return findings.issues.length > 0 ? findings : null
+    return findings.issues.length > 0 ? findings : null;
   } catch (error) {
     logger.error("Analysis failed", {
       filePath: file.path,
       size: fileSize,
       error: error as Error,
       duration: Date.now() - startTime,
-    })
+    });
 
-    metrics.addMetric("AnalysisErrors", MetricUnit.Count, 1)
-    throw error
+    metrics.addMetric("AnalysisErrors", MetricUnit.Count, 1);
+    throw error;
   }
-}
+};
 
 /**
  * Processes multiple files concurrently with rate limiting
@@ -492,41 +494,41 @@ const processFiles = async (
       changesCount: f.changes.lineNumbers.length,
       shouldSkip: shouldSkipFile(f.path),
     })),
-  })
+  });
 
   // Initialize semaphore for concurrency control
   const sema = new Sema(ANALYSIS_CONFIG.concurrency.limit, {
     capacity: files.length,
     pauseFn: () => logger.info("Rate limit reached, pausing..."),
     resumeFn: () => logger.info("Resuming analysis..."),
-  })
+  });
 
   // Filter out files with null content
   const validFiles = files.filter(
     (file): file is PRFileChanges & { content: string } => {
       // Check if file content is null
       if (!file.content) {
-        logger.warn(`Skipping file ${file.path}: null content`)
-        metrics.addMetric("SkippedFiles", MetricUnit.Count, 1)
-        return false
+        logger.warn(`Skipping file ${file.path}: null content`);
+        metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
+        return false;
       }
 
       // Check if file should be skipped based on filters
       if (shouldSkipFile(file.path)) {
-        logger.info(`Skipping excluded file: ${file.path}`)
-        metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1)
-        return false
+        logger.info(`Skipping excluded file: ${file.path}`);
+        metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1);
+        return false;
       }
 
       // Check if file has any changes
       if (file.changes.lineNumbers.length === 0) {
-        logger.info(`Skipping file with no changes: ${file.path}`)
-        return false
+        logger.info(`Skipping file with no changes: ${file.path}`);
+        return false;
       }
 
-      return true
+      return true;
     }
-  )
+  );
 
   logger.info("Files after filtering", {
     originalCount: files.length,
@@ -535,41 +537,41 @@ const processFiles = async (
       path: f.path,
       changesCount: f.changes.lineNumbers.length,
     })),
-  })
+  });
 
   logger.info("Before analysisPromises", {
     validFiles,
-  })
+  });
 
   // Process each file with semaphore control
   const analysisPromises = validFiles.map(async (file) => {
-    await sema.acquire()
+    await sema.acquire();
     try {
-      const findings = await analyzeFile(file)
+      const findings = await analyzeFile(file);
 
       logger.info("File analysis result", {
         path: file.path,
         hasFindings: !!findings,
         issuesCount: findings?.issues?.length ?? 0,
-      })
+      });
 
       if (findings && findings?.issues.length > 0) {
         logger.info(
           `Found ${findings.issues.length} issues in changed lines of ${file.path}`
-        )
-        return { file, findings }
+        );
+        return { file, findings };
       }
-      return null
+      return null;
     } catch (error) {
-      logger.error(`Error analyzing ${file.path}:`, error as Error)
-      return null
+      logger.error(`Error analyzing ${file.path}:`, error as Error);
+      return null;
     } finally {
-      sema.release()
+      sema.release();
     }
-  })
+  });
 
-  const analysisResults = await Promise.all(analysisPromises)
-  const filteredResults = analysisResults.filter(Boolean) as AnalysisResult[]
+  const analysisResults = await Promise.all(analysisPromises);
+  const filteredResults = analysisResults.filter(Boolean) as AnalysisResult[];
 
   logger.info("Analysis results summary", {
     totalProcessed: validFiles.length,
@@ -578,10 +580,10 @@ const processFiles = async (
       path: r.file.path,
       issuesCount: r.findings.issues.length,
     })),
-  })
+  });
 
-  return filteredResults
-}
+  return filteredResults;
+};
 
 /**
  * Main Lambda handler function
@@ -592,54 +594,54 @@ const processFiles = async (
  * @returns Promise containing execution results
  */
 const _handler = async (event: any, context: any) => {
-  const startTime = Date.now()
+  const startTime = Date.now();
   try {
-    const detail = event.detail
+    const detail = event.detail;
 
     // Initialize observability tools
-    logger.addContext(context)
-    tracer.putAnnotation("service", SERVICE_NAME)
-    metrics.addMetadata("environment", ENVIRONMENT)
+    logger.addContext(context);
+    tracer.putAnnotation("service", SERVICE_NAME);
+    metrics.addMetadata("environment", ENVIRONMENT);
 
     // Initialize GitHub client
-    const installationId = detail.data.installation.id
-    const ghAppId = context.GITHUB_APP_ID
-    const ghPrivateKey = context.GITHUB_PRIVATE_KEY
-    await init(ghAppId, ghPrivateKey, installationId)
+    const installationId = detail.data.installation.id;
+    const ghAppId = context.GITHUB_APP_ID;
+    const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
+    await init(ghAppId, ghPrivateKey, installationId);
 
-    const owner = detail.data.repository.owner.login
-    const repo = detail.data.repository.name
-    const pullNumber = detail.data.pull_request.number
-    const commitId = detail.data.pull_request.head.sha
+    const owner = detail.data.repository.owner.login;
+    const repo = detail.data.repository.name;
+    const pullNumber = detail.data.pull_request.number;
+    const commitId = detail.data.pull_request.head.sha;
 
     // Fetch and analyze files
-    const prFileContent = await fetchPRFiles(owner, repo, pullNumber)
-    const results = await processFiles(prFileContent)
+    const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
+    const results = await processFiles(prFileContent);
 
-    console.log("RESULTS", results)
+    console.log("RESULTS", results);
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReview(owner, repo, pullNumber, commitId, results)
+      await submitPRReview(owner, repo, pullNumber, commitId, results);
     }
 
     // Calculate final metrics
-    const duration = Date.now() - startTime
+    const duration = Date.now() - startTime;
     const totalIssues = results.reduce(
       (sum, { findings }) => sum + findings.issues.length,
       0
-    )
+    );
 
     // Record execution metrics
-    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration)
-    metrics.addMetric("FilesAnalyzed", MetricUnit.Count, prFileContent.length)
-    metrics.addMetric("IssuesFound", MetricUnit.Count, totalIssues)
+    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
+    metrics.addMetric("FilesAnalyzed", MetricUnit.Count, prFileContent.length);
+    metrics.addMetric("IssuesFound", MetricUnit.Count, totalIssues);
 
     logger.info("Analysis completed successfully", {
       filesAnalyzed: prFileContent.length,
       issuesFound: totalIssues,
       duration,
-    })
+    });
 
     // Return success response with metrics
     return {
@@ -652,22 +654,22 @@ const _handler = async (event: any, context: any) => {
           processingTimeMs: duration,
         },
       }),
-    }
+    };
   } catch (error) {
-    const duration = Date.now() - startTime
+    const duration = Date.now() - startTime;
 
     // Log error details and record error metric
     logger.error("Handler execution failed", {
       error: error as Error,
       duration,
-    })
+    });
 
-    metrics.addMetric("HandlerErrors", MetricUnit.Count, 1)
-    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration)
+    metrics.addMetric("HandlerErrors", MetricUnit.Count, 1);
+    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
 
-    throw error
+    throw error;
   }
-}
+};
 
 /**
  * Middleware configuration for AWS Systems Manager Parameter Store
@@ -681,10 +683,10 @@ const ssmConfig = {
     GITHUB_APP_ID: `/evolua/${SSM_STAGE_NAME}/github/app-id`,
     GITHUB_PRIVATE_KEY: `/evolua/${SSM_STAGE_NAME}/github/private-key`,
   },
-}
+};
 
 /**
  * Export the handler with middleware
  * Adds SSM parameter fetching capability to the base handler
  */
-export const handler = middy().use(ssm(ssmConfig)).handler(_handler)
+export const handler = middy().use(ssm(ssmConfig)).handler(_handler);
