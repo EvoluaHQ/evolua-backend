@@ -177,7 +177,7 @@ Return findings in <findings> tags using this JSON format:
       "description": string,
       "impact": string,
       "recommendation": {
-        "description": string,  // Step-by-step explanation of how to fix. Use markdown for formatting for code snippets if needed.
+        "description": string,  // Step-by-step explanation of how to fix. Use MDX markdown for formatting for code snippets if needed.
         "code": string          // ONLY the exact code that should replace the original.
       },
       "cwe_id": string,           // e.g., "CWE-287"

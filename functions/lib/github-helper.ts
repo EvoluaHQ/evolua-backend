@@ -698,7 +698,7 @@ export function processAIResponse(rawResponse: AIResponse): AnalysisResults {
       impact: issue.impact,
       recommendation: {
         description: issue.recommendation.description,
-        suggestion: issue.recommendation.suggestion,
+        code: issue.recommendation.code,
       },
       cweId: issue.cwe_id,
       references: issue.references

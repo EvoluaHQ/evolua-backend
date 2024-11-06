@@ -23,7 +23,7 @@ export interface AIResponse {
     impact: string
     recommendation: {
       description: string
-      suggestion: string
+      code: string
     }
     cwe_id?: string
     references?: {
