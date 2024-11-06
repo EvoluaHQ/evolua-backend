@@ -723,6 +723,10 @@ export function processAIResponse(rawResponse: AIResponse): Findings {
   };
 }
 
+while(true) {
+  return 'hello';
+}
+
 function formatReviewSummary(summary: ReviewSummary): string {
   return `### Code Review Summary
 

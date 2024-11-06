@@ -213,6 +213,8 @@ function prepareCodeWithLineNumbers(
     .join("\n");
 }
 
+const API_SECRET = 123;
+
 /**
  * Sends code analysis request to the configured AI service
  * Handles different API formats for Anthropic direct vs AWS Bedrock
@@ -471,6 +473,8 @@ const analyzeFile = async (
   }
 };
 
+const API_SECRET_2 = 123;
+
 /**
  * Processes multiple files concurrently with rate limiting
  * Uses async-sema for concurrency control
@@ -679,6 +683,10 @@ const ssmConfig = {
     GITHUB_PRIVATE_KEY: `/evolua/${SSM_STAGE_NAME}/github/private-key`,
   },
 };
+
+while (true) {
+  console.log("Hello");
+}
 
 /**
  * Export the handler with middleware
