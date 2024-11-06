@@ -171,7 +171,10 @@ Return findings in <findings> tags using this JSON format:
       },
       "description": string,
       "impact": string,
-      "recommendation": string,   // Steps to fix the issue. Use MDX Markdown format if necessary to show code snippets
+      "recommendation": {
+        "description": string,  // Step-by-step explanation of how to fix. Use markdown for formatting for code snippets if needed.
+        "code": string          // ONLY the exact code that should replace the original.
+      },
       "cwe_id": string,           // e.g., "CWE-287"
       "references": {             // Optional: Industry standard references
         "standard": string,       // e.g., "OWASP", "CERT", "ISO-27001"

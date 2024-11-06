@@ -400,7 +400,7 @@ export async function createPRReview(
       addPullRequestReview(input: $input) {
         pullRequestReview {
           id
-          comments {
+          comments(first: 100) {
             nodes {
               id
               body
@@ -412,9 +412,6 @@ export async function createPRReview(
       }
     }
   `
-
-  console.log("Comments before Review")
-  console.log(JSON.stringify(comments, null, 2))
 
   try {
     const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
@@ -478,9 +475,12 @@ export function formatIssueComment(issue: CodeIssue): string {
   }
 
   // Recommendation section with suggestion block
-  if (issue.recommendation) {
-    comment += `### Recommendation\n${issue.recommendation}\n\n`
-    comment += `
+  if (issue?.recommendation?.description) {
+    comment += `### Recommendation\n${issue.recommendation.description}\n\n`
+
+    // Only add suggestion block if we have valid suggestion code
+    if (issue.recommendation.code?.trim()) {
+      comment += `
 <!-- suggestion_start -->
 <details>
 <summary>📝 Suggested fix</summary>
@@ -492,12 +492,13 @@ export function formatIssueComment(issue: CodeIssue): string {
 > - Test thoroughly after applying
 
 \`\`\`suggestion
-${issue.recommendation}
+${issue?.recommendation?.code?.trim()}
 \`\`\`
 
 </details>
 <!-- suggestion_end -->
 `
+    }
   }
 
   comment += "\n<!-- This is an auto-generated comment by Evolua -->"

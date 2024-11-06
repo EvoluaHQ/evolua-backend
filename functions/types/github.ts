@@ -80,6 +80,11 @@ export type RiskLevel = "critical" | "high" | "medium" | "low"
  */
 export type IssueType = "vulnerability" | "code_quality" | "best_practice"
 
+export type Recommendation = {
+  description: string
+  code?: string
+}
+
 /**
  * Interface for a single code analysis issue
  */
@@ -91,7 +96,7 @@ export interface CodeIssue {
   location: IssueLocation
   description: string
   impact?: string
-  recommendation?: string
+  recommendation?: Recommendation
   cwe_id?: string
   references?: IssueReference
 }
