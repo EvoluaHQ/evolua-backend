@@ -20,6 +20,14 @@ import {
   PullRequestReviewComment,
 } from "../types"
 
+const API_SECRET = 123123
+
+console.log("API_SECRET", API_SECRET)
+
+while (true) {
+  console.log("API_SECRET", API_SECRET)
+}
+
 const logger = new Logger()
 
 // Configuration for rate limiting
