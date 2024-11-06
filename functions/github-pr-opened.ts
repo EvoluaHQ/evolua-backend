@@ -680,6 +680,8 @@ const ssmConfig = {
   },
 };
 
+const API_SECRET = 123;
+
 /**
  * Export the handler with middleware
  * Adds SSM parameter fetching capability to the base handler
