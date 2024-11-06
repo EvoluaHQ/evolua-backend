@@ -8,17 +8,17 @@ import { Sema } from "async-sema"
 import {
   AddCommentResponse,
   AddPRReviewResponse,
+  AIResponse,
+  AnalysisResults,
   CodeIssue,
   FetchPRFileContentResponse,
-  FetchPRFilesResponse,
   FileChanges,
   FileChangeType,
   GetPRIDResponse,
   GitHubFileResponse,
-  PRFile,
   PRFileChanges,
   PullRequestReviewComment,
-} from "../types/github"
+} from "../types"
 
 const logger = new Logger()
 
@@ -510,7 +510,7 @@ export function formatIssueComment(issue: CodeIssue): string {
       high: "⚠️",
       medium: "⚡",
       low: "ℹ️",
-    }[issue.risk_level.toLowerCase()] || "🔍"
+    }[issue.riskLevel.toLowerCase()] || "🔍"
 
   let comment = `_${severityEmoji} ${issue.title}_\n\n`
 
@@ -523,16 +523,13 @@ export function formatIssueComment(issue: CodeIssue): string {
   }
 
   // Reference section (if CWE or other references exist)
-  if (
-    issue.cwe_id ||
-    (issue.references?.standard && issue.references?.rule_id)
-  ) {
+  if (issue.cweId || (issue.references?.standard && issue.references?.ruleId)) {
     comment += "### References\n"
-    if (issue.cwe_id) {
-      comment += `- [${issue.cwe_id}](https://cwe.mitre.org/data/definitions/${issue.cwe_id.replace("CWE-", "")}.html)\n`
+    if (issue.cweId) {
+      comment += `- [${issue.cweId}](https://cwe.mitre.org/data/definitions/${issue.cweId.replace("CWE-", "")}.html)\n`
     }
-    if (issue.references?.standard && issue.references?.rule_id) {
-      comment += `- ${issue.references.standard}: ${issue.references.rule_id}\n`
+    if (issue.references?.standard && issue.references?.ruleId) {
+      comment += `- ${issue.references.standard}: ${issue.references.ruleId}\n`
     }
     comment += "\n"
   }
@@ -623,17 +620,17 @@ export async function submitPRReview(
       .flatMap(({ file, findings }) =>
         findings.issues
           .filter((issue) =>
-            file.changes.lineNumbers.includes(issue.location.line_start)
+            file.changes.lineNumbers.includes(issue.location.lineStart)
           )
           .map((issue) => {
             const diffPosition = file.changes.lineToDiffPosition.get(
-              issue.location.line_start
+              issue.location.lineStart
             )
 
             if (diffPosition === undefined) {
               logger.warn("Missing diff position for line", {
                 file: file.path,
-                line: issue.location.line_start,
+                line: issue.location.lineStart,
               })
               return null
             }
@@ -674,5 +671,42 @@ export async function submitPRReview(
   } catch (error) {
     logger.error("Failed to submit PR review", error as Error)
     throw error
+  }
+}
+
+export function processAIResponse(rawResponse: AIResponse): AnalysisResults {
+  return {
+    summary: {
+      totalIssues: rawResponse.summary.total_issues,
+      riskLevels: {
+        critical: rawResponse.summary.risk_levels.critical,
+        high: rawResponse.summary.risk_levels.high,
+        medium: rawResponse.summary.risk_levels.medium,
+        low: rawResponse.summary.risk_levels.low,
+      },
+    },
+    issues: rawResponse.issues.map((issue) => ({
+      id: issue.id,
+      type: issue.type,
+      riskLevel: issue.risk_level,
+      title: issue.title,
+      location: {
+        lineStart: issue.location.line_start,
+        lineEnd: issue.location.line_end,
+      },
+      description: issue.description,
+      impact: issue.impact,
+      recommendation: {
+        description: issue.recommendation.description,
+        suggestion: issue.recommendation.suggestion,
+      },
+      cweId: issue.cwe_id,
+      references: issue.references
+        ? {
+            standard: issue.references.standard,
+            ruleId: issue.references.rule_id,
+          }
+        : undefined,
+    })),
   }
 }

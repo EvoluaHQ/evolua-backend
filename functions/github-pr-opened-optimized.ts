@@ -25,13 +25,18 @@ import {
 } from "@aws-sdk/client-bedrock-runtime"
 import { Sema } from "async-sema"
 import { shouldSkipFile } from "./lib/file-ignore"
-import { fetchPRFiles, init, submitPRReview } from "./lib/github-helper"
 import {
+  fetchPRFiles,
+  init,
+  processAIResponse,
+  submitPRReview,
+} from "./lib/github-helper"
+import {
+  AIResponse,
   AnalysisResult,
   AnalysisResults,
-  PRFile,
   PRFileChanges,
-} from "./types/github"
+} from "./types"
 
 /**
  * Initialize observability tools with consistent service naming
@@ -393,17 +398,18 @@ const analyzeFile = async (
     }
 
     // Parse and validate findings
-    const findings = JSON.parse(match[1]) as AnalysisResults
+    const aiFindings: AIResponse = JSON.parse(match[1]) as AIResponse
+    const findings: AnalysisResults = processAIResponse(aiFindings)
 
     logger.info("Before filtering", {
       path: file.path,
       changedLines: file.changes.lineNumbers,
       allIssues: findings.issues.map((issue) => ({
         id: issue.id,
-        line: issue.location.line_start,
+        line: issue.location.lineStart,
         title: issue.title,
         isInChangedLines: file.changes.lineNumbers.includes(
-          issue.location.line_start
+          issue.location.lineStart
         ),
       })),
     })
@@ -411,10 +417,10 @@ const analyzeFile = async (
     // Filter findings to only include changed lines with detailed logging
     const filteredIssues = findings.issues.filter((issue) => {
       const isIncluded = file.changes.lineNumbers.includes(
-        issue.location.line_start
+        issue.location.lineStart
       )
       logger.info("Filtering issue", {
-        issueLine: issue.location.line_start,
+        issueLine: issue.location.lineStart,
         changedLines: file.changes.lineNumbers,
         included: isIncluded,
         issueTitle: issue.title,
@@ -428,7 +434,7 @@ const analyzeFile = async (
       filteredIssuesCount: filteredIssues.length,
       filteredIssues: filteredIssues.map((issue) => ({
         id: issue.id,
-        line: issue.location.line_start,
+        line: issue.location.lineStart,
         title: issue.title,
       })),
     })
@@ -437,10 +443,10 @@ const analyzeFile = async (
     findings.issues = filteredIssues
 
     // Update summary counts
-    findings.summary.total_issues = findings.issues.length
-    findings.summary.risk_levels = findings.issues.reduce(
+    findings.summary.totalIssues = findings.issues.length
+    findings.summary.riskLevels = findings.issues.reduce(
       (acc, issue) => {
-        acc[issue.risk_level.toLowerCase() as keyof typeof acc]++
+        acc[issue.riskLevel.toLowerCase() as keyof typeof acc]++
         return acc
       },
       { critical: 0, high: 0, medium: 0, low: 0 }
