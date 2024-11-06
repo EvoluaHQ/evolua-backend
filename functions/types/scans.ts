@@ -80,20 +80,33 @@ export interface CodeIssue {
   references?: IssueReference;
 }
 
-export interface AnalysisResults {
-  summary: {
-    totalIssues: number;
-    riskLevels: {
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-    };
+export interface Summary {
+  totalIssues: number;
+  riskLevels: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
   };
+}
+
+export interface Findings {
+  summary: Summary;
   issues: CodeIssue[];
 }
 
 export interface AnalysisResult {
   file: PRFileChanges;
-  findings: AnalysisResults;
+  findings: Findings;
+}
+
+export interface ReviewStats {
+  path: string;
+  changes: number;
+  issues: number;
+}
+
+export interface ReviewSummary extends Summary {
+  files: ReviewStats[];
+  keyFindings: string[];
 }

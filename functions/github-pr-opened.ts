@@ -31,12 +31,7 @@ import {
   processAIResponse,
   submitPRReview,
 } from "./lib/github-helper";
-import {
-  AIResponse,
-  AnalysisResult,
-  AnalysisResults,
-  PRFileChanges,
-} from "./types";
+import { AIResponse, AnalysisResult, Findings, PRFileChanges } from "./types";
 
 /**
  * Initialize observability tools with consistent service naming
@@ -339,7 +334,7 @@ const getTokenLimit = (content: string): number => {
  */
 const analyzeFile = async (
   file: PRFileChanges & { content: string }
-): Promise<AnalysisResults | null> => {
+): Promise<Findings | null> => {
   const startTime = Date.now();
   const fileSize = file.content.length;
 
@@ -401,7 +396,7 @@ const analyzeFile = async (
 
     // Parse and validate findings
     const aiFindings: AIResponse = JSON.parse(match[1]) as AIResponse;
-    const findings: AnalysisResults = processAIResponse(aiFindings);
+    const findings: Findings = processAIResponse(aiFindings);
 
     logger.info("Before filtering", {
       path: file.path,
