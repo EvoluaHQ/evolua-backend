@@ -23,7 +23,7 @@ import {
 const logger = new Logger()
 
 // Configuration for rate limiting
-const API_RATE_LIMIT = {
+const GITHUB_API_RATE_LIMIT = {
   maxConcurrent: 5, // Maximum concurrent API calls
   waitTime: 1000, // Time to wait between batches in ms
 }
@@ -298,11 +298,11 @@ export async function fetchPRFiles(
     let hasNextPage = true
 
     // Create semaphores for different API operations
-    const processSemaphore = new Sema(API_RATE_LIMIT.maxConcurrent, {
+    const processSemaphore = new Sema(GITHUB_API_RATE_LIMIT.maxConcurrent, {
       capacity: 100, // Allow queuing of requests
     })
 
-    const contentSemaphore = new Sema(API_RATE_LIMIT.maxConcurrent, {
+    const contentSemaphore = new Sema(GITHUB_API_RATE_LIMIT.maxConcurrent, {
       capacity: 100,
     })
 
@@ -406,7 +406,7 @@ export async function fetchPRFiles(
       // Optional: Add a small delay between pages to be extra careful with rate limits
       if (hasNextPage) {
         await new Promise((resolve) =>
-          setTimeout(resolve, API_RATE_LIMIT.waitTime)
+          setTimeout(resolve, GITHUB_API_RATE_LIMIT.waitTime)
         )
       }
     }
