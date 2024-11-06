@@ -284,7 +284,8 @@ async function fetchPRFileContent(
 }
 
 /**
- * Process files with rate limiting
+ * Fetch all PR files with changes.
+ * Process files with rate limiting.
  */
 export async function fetchPRFiles(
   owner: string,
@@ -403,7 +404,7 @@ export async function fetchPRFiles(
         filesWithChanges: filesWithContent.filter(hasChanges).length,
       })
 
-      // Optional: Add a small delay between pages to be extra careful with rate limits
+      // Add a small delay between pages to be extra careful with rate limits
       if (hasNextPage) {
         await new Promise((resolve) =>
           setTimeout(resolve, GITHUB_API_RATE_LIMIT.waitTime)
