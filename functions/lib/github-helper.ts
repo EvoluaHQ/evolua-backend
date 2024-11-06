@@ -1,6 +1,10 @@
 import { Logger } from "@aws-lambda-powertools/logger"
 import { createAppAuth } from "@octokit/auth-app"
 import { Octokit } from "@octokit/core"
+/**
+ * Fetch all PR files with changes
+ */
+import { Sema } from "async-sema"
 import {
   AddCommentResponse,
   AddPRReviewResponse,
@@ -17,6 +21,12 @@ import {
 } from "../types/github"
 
 const logger = new Logger()
+
+// Configuration for rate limiting
+const API_RATE_LIMIT = {
+  maxConcurrent: 5, // Maximum concurrent API calls
+  waitTime: 1000, // Time to wait between batches in ms
+}
 
 let octokit: Octokit
 
@@ -274,7 +284,7 @@ async function fetchPRFileContent(
 }
 
 /**
- * Fetch all PR files with changes
+ * Process files with rate limiting
  */
 export async function fetchPRFiles(
   owner: string,
@@ -286,6 +296,15 @@ export async function fetchPRFiles(
     const perPage = 100
     const files: PRFileChanges[] = []
     let hasNextPage = true
+
+    // Create semaphores for different API operations
+    const processSemaphore = new Sema(API_RATE_LIMIT.maxConcurrent, {
+      capacity: 100, // Allow queuing of requests
+    })
+
+    const contentSemaphore = new Sema(API_RATE_LIMIT.maxConcurrent, {
+      capacity: 100,
+    })
 
     // Get the PR commit SHA first
     const shaResponse = await octokit.graphql<{
@@ -337,27 +356,71 @@ export async function fetchPRFiles(
         }
       )
 
-      // Process files in parallel
+      // Process files with rate limiting
+      const processWithRateLimit = async (file: GitHubFileResponse) => {
+        await processSemaphore.acquire()
+        try {
+          return await processPRFile(file, sha)
+        } finally {
+          processSemaphore.release()
+        }
+      }
+
       const processedFiles = await Promise.all(
-        filesPage.map((file) => processPRFile(file, sha))
+        filesPage.map((file) => processWithRateLimit(file))
       )
 
-      // Get file contents only for files with changes
-      await Promise.all(
+      // Get file contents with rate limiting
+      const fetchContentWithRateLimit = async (file: PRFileChanges) => {
+        await contentSemaphore.acquire()
+        try {
+          file.content = await fetchPRFileContent(owner, repo, file.path, sha)
+          return file
+        } finally {
+          contentSemaphore.release()
+        }
+      }
+
+      // Only fetch content for files with changes
+      const filesWithContent = await Promise.all(
         processedFiles
-          .filter(hasChanges) // Using helper function
-          .map(async (file) => {
-            file.content = await fetchPRFileContent(owner, repo, file.path, sha)
-          })
+          .filter(hasChanges)
+          .map((file) => fetchContentWithRateLimit(file))
       )
 
-      files.push(...processedFiles)
+      files.push(...filesWithContent)
 
       // Check for next page
       const links = headers.link
       hasNextPage = !!(links && links.includes('rel="next"'))
       if (hasNextPage) page++
+
+      // Log progress
+      logger.info("Processed PR files page", {
+        page,
+        filesInPage: filesWithContent.length,
+        totalFiles: files.length,
+        filesWithChanges: filesWithContent.filter(hasChanges).length,
+      })
+
+      // Optional: Add a small delay between pages to be extra careful with rate limits
+      if (hasNextPage) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, API_RATE_LIMIT.waitTime)
+        )
+      }
     }
+
+    // Log summary of processed files
+    const filesWithChanges = files.filter(hasChanges)
+    logger.info("Completed processing PR files", {
+      totalFiles: files.length,
+      filesWithChanges: filesWithChanges.length,
+      totalChunks: files.reduce(
+        (sum, file) => sum + file.changes.chunks.length,
+        0
+      ),
+    })
 
     return files
   } catch (error) {
