@@ -1,116 +1,116 @@
-import * as cdk from "aws-cdk-lib"
-import * as dynamodb from "aws-cdk-lib/aws-dynamodb"
-import * as events from "aws-cdk-lib/aws-events"
-import * as eventTargets from "aws-cdk-lib/aws-events-targets"
-import * as iam from "aws-cdk-lib/aws-iam"
-import * as lambda from "aws-cdk-lib/aws-lambda-nodejs"
-import * as ssm from "aws-cdk-lib/aws-ssm"
-import { Construct } from "constructs"
-import { EvoluaStackProps } from "./evolua-stack-props"
+import * as cdk from "aws-cdk-lib";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as events from "aws-cdk-lib/aws-events";
+import * as eventTargets from "aws-cdk-lib/aws-events-targets";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda-nodejs";
+import * as ssm from "aws-cdk-lib/aws-ssm";
+import { Construct } from "constructs";
+import { EvoluaStackProps } from "./evolua-stack-props";
 
 export class DataStack extends cdk.Stack {
-  props: EvoluaStackProps
-  usersTable: dynamodb.Table
-  eventsTable: dynamodb.Table
-  reposTable: dynamodb.Table
-  tenantReposTable: dynamodb.Table
-  scansTable: dynamodb.Table
-  scanResultsTable: dynamodb.Table
-  eventBus: events.EventBus
-  dataRemovalPolicy: cdk.RemovalPolicy
+  props: EvoluaStackProps;
+  usersTable: dynamodb.Table;
+  eventsTable: dynamodb.Table;
+  reposTable: dynamodb.Table;
+  tenantReposTable: dynamodb.Table;
+  scansTable: dynamodb.Table;
+  scanResultsTable: dynamodb.Table;
+  eventBus: events.EventBus;
+  dataRemovalPolicy: cdk.RemovalPolicy;
 
   constructor(scope: Construct, id: string, props: EvoluaStackProps) {
-    super(scope, id)
+    super(scope, id);
 
-    this.props = props
+    this.props = props;
 
     this.dataRemovalPolicy =
       this.props.stageName === "prod"
         ? cdk.RemovalPolicy.RETAIN
-        : cdk.RemovalPolicy.DESTROY
+        : cdk.RemovalPolicy.DESTROY;
 
-    this.usersTable = this.createUsersTable()
-    this.createTableParameters("UsersTable", this.usersTable, "users-table")
+    this.usersTable = this.createUsersTable();
+    this.createTableParameters("UsersTable", this.usersTable, "users-table");
 
-    this.eventsTable = this.createEventsTable()
-    this.createTableParameters("EventsTable", this.eventsTable, "events-table")
+    this.eventsTable = this.createEventsTable();
+    this.createTableParameters("EventsTable", this.eventsTable, "events-table");
 
-    this.reposTable = this.createReposTable()
-    this.createTableParameters("ReposTable", this.reposTable, "repos-table")
+    this.reposTable = this.createReposTable();
+    this.createTableParameters("ReposTable", this.reposTable, "repos-table");
 
-    this.tenantReposTable = this.createTenantReposTable()
+    this.tenantReposTable = this.createTenantReposTable();
     this.createTableParameters(
       "TenantReposTable",
       this.tenantReposTable,
       "tenant-repos-table"
-    )
+    );
 
-    this.scansTable = this.createScansTable()
-    this.createTableParameters("ScansTable", this.scansTable, "scans-table")
+    this.scansTable = this.createScansTable();
+    this.createTableParameters("ScansTable", this.scansTable, "scans-table");
 
-    this.scanResultsTable = this.createScanResultsTable()
+    this.scanResultsTable = this.createScanResultsTable();
     this.createTableParameters(
       "ScanResultsTable",
       this.scanResultsTable,
       "scan-results-table"
-    )
+    );
 
-    this.eventBus = this.createEventBus()
+    this.eventBus = this.createEventBus();
     new ssm.StringParameter(this, "EventBusName", {
       parameterName: `/evolua/${props.stageName}/event-bus/name`,
       stringValue: this.eventBus.eventBusName,
-    })
+    });
     new ssm.StringParameter(this, "EventBusArn", {
       parameterName: `/evolua/${props.stageName}/event-bus/arn`,
       stringValue: this.eventBus.eventBusArn,
-    })
+    });
 
-    this.createGitHubPrOpenedEventHandlerFunction()
-    this.createGitHubInstallationAddedEventHandlerFunction()
-    this.createGitHubInstallationRemovedEventHandlerFunction()
+    this.createGitHubPrOpenedEventHandlerFunction();
+    this.createGitHubInstallationAddedEventHandlerFunction();
+    this.createGitHubInstallationRemovedEventHandlerFunction();
 
-    this.createClerkUserUpsertedEventHandlerFunction()
-    this.createClerkUserDeletedEventHandlerFunction()
+    this.createClerkUserUpsertedEventHandlerFunction();
+    this.createClerkUserDeletedEventHandlerFunction();
 
     new cdk.CfnOutput(this, "SSM_STAGE_NAME", {
       key: "SsmStageName",
       value: this.props.ssmStageName,
-    })
+    });
 
     new cdk.CfnOutput(this, "AWS_REGION", {
       key: "AwsRegion",
       value: cdk.Aws.REGION,
-    })
+    });
 
     new cdk.CfnOutput(this, "USERS_TABLE_NAME", {
       key: "UsersTableName",
       value: this.usersTable.tableName,
-    })
+    });
 
     new cdk.CfnOutput(this, "REPOS_TABLE_NAME", {
       key: "ReposTableName",
       value: this.reposTable.tableName,
-    })
+    });
 
     new cdk.CfnOutput(this, "TENANT_REPOS_TABLE_NAME", {
       key: "TenantReposTableName",
       value: this.tenantReposTable.tableName,
-    })
+    });
 
     new cdk.CfnOutput(this, "SCANS_TABLE_NAME", {
       key: "ScansTableName",
       value: this.scansTable.tableName,
-    })
+    });
     new cdk.CfnOutput(this, "SCAN_RESULTS_TABLE_NAME", {
       key: "ScanResultsTableName",
       value: this.scanResultsTable.tableName,
-    })
+    });
   }
 
   private createEventBus(): events.EventBus {
     return new events.EventBus(this, "EventBus", {
       eventBusName: `evolua-events-${this.props.stageName}`,
-    })
+    });
   }
 
   private createUsersTable(): dynamodb.Table {
@@ -122,7 +122,7 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
-    })
+    });
 
     table.addGlobalSecondaryIndex({
       indexName: "emailIndex",
@@ -130,7 +130,7 @@ export class DataStack extends cdk.Stack {
         name: "email",
         type: dynamodb.AttributeType.STRING,
       },
-    })
+    });
 
     table.addGlobalSecondaryIndex({
       indexName: "clerkUserIdIndex",
@@ -138,7 +138,7 @@ export class DataStack extends cdk.Stack {
         name: "clerkUserId",
         type: dynamodb.AttributeType.STRING,
       },
-    })
+    });
 
     table.addGlobalSecondaryIndex({
       indexName: "githubHandleIndex",
@@ -146,9 +146,9 @@ export class DataStack extends cdk.Stack {
         name: "githubHandle",
         type: dynamodb.AttributeType.STRING,
       },
-    })
+    });
 
-    return table
+    return table;
   }
 
   private createEventsTable(): dynamodb.Table {
@@ -164,7 +164,7 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
-    })
+    });
   }
 
   private createReposTable(): dynamodb.Table {
@@ -176,9 +176,9 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
-    })
+    });
 
-    return table
+    return table;
   }
 
   private createTenantReposTable(): dynamodb.Table {
@@ -194,9 +194,9 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
-    })
+    });
 
-    return table
+    return table;
   }
 
   private createScansTable(): dynamodb.Table {
@@ -212,7 +212,7 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
-    })
+    });
   }
 
   private createScanResultsTable(): dynamodb.Table {
@@ -228,7 +228,7 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
-    })
+    });
   }
 
   private createTableParameters(
@@ -239,15 +239,15 @@ export class DataStack extends cdk.Stack {
     new ssm.StringParameter(this, `${id}Name`, {
       parameterName: `/evolua/${this.props.stageName}/dynamodb/${ssmPath}/name`,
       stringValue: table.tableName,
-    })
+    });
     new ssm.StringParameter(this, `${id}Arn`, {
       parameterName: `/evolua/${this.props.stageName}/dynamodb/${ssmPath}/arn`,
       stringValue: table.tableArn,
-    })
+    });
     new ssm.StringParameter(this, `${id}StreamArn`, {
       parameterName: `/evolua/${this.props.stageName}/dynamodb/${ssmPath}/stream-arn`,
       stringValue: table.tableStreamArn || "",
-    })
+    });
   }
 
   private createGitHubPrOpenedEventHandlerFunction() {
@@ -276,7 +276,7 @@ export class DataStack extends cdk.Stack {
           SSM_STAGE_NAME: this.props.ssmStageName,
         },
       }
-    )
+    );
 
     const ghWebhookRule = new events.Rule(this, "GithubPrRule", {
       eventBus: this.eventBus,
@@ -288,8 +288,8 @@ export class DataStack extends cdk.Stack {
           },
         },
       },
-    })
-    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler))
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
     handler.addToRolePolicy(
       new iam.PolicyStatement({
@@ -299,17 +299,17 @@ export class DataStack extends cdk.Stack {
           `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/github/private-key`,
         ],
       })
-    )
+    );
 
     handler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel"],
         resources: ["*"],
       })
-    )
+    );
 
-    this.scansTable.grantWriteData(handler)
-    this.scanResultsTable.grantWriteData(handler)
+    this.scansTable.grantWriteData(handler);
+    this.scanResultsTable.grantWriteData(handler);
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {
@@ -328,7 +328,7 @@ export class DataStack extends cdk.Stack {
           USERS_TABLE_NAME: this.usersTable.tableName,
         },
       }
-    )
+    );
 
     const ghWebhookRule = new events.Rule(this, "GithubInstallAddedRule", {
       eventBus: this.eventBus,
@@ -340,12 +340,12 @@ export class DataStack extends cdk.Stack {
           },
         },
       },
-    })
-    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler))
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
-    this.reposTable.grantWriteData(handler)
-    this.tenantReposTable.grantWriteData(handler)
-    this.usersTable.grantReadData(handler)
+    this.reposTable.grantWriteData(handler);
+    this.tenantReposTable.grantWriteData(handler);
+    this.usersTable.grantReadData(handler);
   }
 
   private createGitHubInstallationRemovedEventHandlerFunction() {
@@ -362,7 +362,7 @@ export class DataStack extends cdk.Stack {
           REPOS_TABLE_NAME: this.reposTable.tableName,
         },
       }
-    )
+    );
 
     const ghWebhookRule = new events.Rule(this, "GithubInstallRemovedRule", {
       eventBus: this.eventBus,
@@ -374,10 +374,10 @@ export class DataStack extends cdk.Stack {
           },
         },
       },
-    })
-    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler))
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
-    this.reposTable.grantWriteData(handler)
+    this.reposTable.grantWriteData(handler);
   }
 
   private createClerkUserUpsertedEventHandlerFunction() {
@@ -394,7 +394,7 @@ export class DataStack extends cdk.Stack {
           USERS_TABLE_NAME: this.usersTable.tableName,
         },
       }
-    )
+    );
 
     const clerkWebhookRule = new events.Rule(this, "ClerkUserUpserted", {
       eventBus: this.eventBus,
@@ -406,10 +406,10 @@ export class DataStack extends cdk.Stack {
           },
         },
       },
-    })
-    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler))
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
-    this.usersTable.grantReadWriteData(handler)
+    this.usersTable.grantReadWriteData(handler);
   }
 
   private createClerkUserDeletedEventHandlerFunction() {
@@ -426,7 +426,7 @@ export class DataStack extends cdk.Stack {
           USERS_TABLE_NAME: this.usersTable.tableName,
         },
       }
-    )
+    );
 
     const clerkWebhookRule = new events.Rule(this, "ClerkUserDeleted", {
       eventBus: this.eventBus,
@@ -438,9 +438,9 @@ export class DataStack extends cdk.Stack {
           },
         },
       },
-    })
-    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler))
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
-    this.usersTable.grantReadWriteData(handler)
+    this.usersTable.grantReadWriteData(handler);
   }
 }

@@ -6,16 +6,16 @@ export type FileChangeType =
   | "RENAMED"
   | "COPIED"
   | "CHANGED"
-  | "UNCHANGED"
+  | "UNCHANGED";
 
 // Interface for the processed file data
 export interface PRFile {
-  path: string
-  additions: number
-  deletions: number
-  changeType: FileChangeType
-  sha: string
-  content: string | null
+  path: string;
+  additions: number;
+  deletions: number;
+  changeType: FileChangeType;
+  sha: string;
+  content: string | null;
 }
 
 export interface FetchPRFilesResponse {
@@ -23,109 +23,109 @@ export interface FetchPRFilesResponse {
     pullRequest: {
       headRef: {
         target: {
-          oid: string
-        }
-      }
+          oid: string;
+        };
+      };
       files: {
         pageInfo: {
-          hasNextPage: boolean
-          endCursor: string | null
-        }
+          hasNextPage: boolean;
+          endCursor: string | null;
+        };
         nodes: Array<{
-          path: string
-          additions: number
-          deletions: number
-          changeType: FileChangeType
-          commitResourcePath: string
-          patch?: string // Git diff patch
-        }>
-      }
-    }
-  }
+          path: string;
+          additions: number;
+          deletions: number;
+          changeType: FileChangeType;
+          commitResourcePath: string;
+          patch?: string; // Git diff patch
+        }>;
+      };
+    };
+  };
 }
 
 export interface FetchPRFileContentResponse {
   repository: {
     object: {
-      text: string | null
-      isTruncated: boolean
-      byteSize: number
-    }
-  }
+      text: string | null;
+      isTruncated: boolean;
+      byteSize: number;
+    };
+  };
 }
 
 // Response type interfaces for GraphQL queries and mutations
 export interface AddPRReviewResponse {
   addPullRequestReview: {
     pullRequestReview: {
-      id: string
+      id: string;
       comments: {
         nodes: Array<{
-          id: string
-          body: string
-          path: string
-          line?: number
-        }>
-      }
-    }
-  }
+          id: string;
+          body: string;
+          path: string;
+          line?: number;
+        }>;
+      };
+    };
+  };
 }
 
 export interface GetPRIDResponse {
   repository: {
     pullRequest: {
-      id: string // GitHub's GraphQL node ID
-    }
-  }
+      id: string; // GitHub's GraphQL node ID
+    };
+  };
 }
 
 export interface AddCommentResponse {
   addComment: {
     commentEdge: {
       node: {
-        id: string
-        body: string
-      }
-    }
-  }
+        id: string;
+        body: string;
+      };
+    };
+  };
 }
 
 export interface PullRequestReviewComment {
-  path: string //Path to the file being commented on.
-  position: number //Position in the file to leave a comment on.
-  body: string //Body of the comment to leave.
+  path: string; //Path to the file being commented on.
+  position: number; //Position in the file to leave a comment on.
+  body: string; //Body of the comment to leave.
 }
 
 /**
  * Interface for changed lines information
  */
 export interface FileChanges {
-  lineNumbers: number[]
+  lineNumbers: number[];
   chunks: Array<{
-    start: number // Starting line number
-    end: number // Ending line number
-    content: string // Changed content
-    header: string // Chunk header from git diff
-    changedLines: number[] // Add this to track changed lines per chunk
-  }>
+    start: number; // Starting line number
+    end: number; // Ending line number
+    content: string; // Changed content
+    header: string; // Chunk header from git diff
+    changedLines: number[]; // Add this to track changed lines per chunk
+  }>;
   // Store diff positions at the file level instead of per chunk
-  lineToDiffPosition: Map<number, number>
+  lineToDiffPosition: Map<number, number>;
 }
 
 /**
  * Extended PR file interface with change tracking
  */
 export interface PRFileChanges extends PRFile {
-  content: string | null
-  changes: FileChanges
+  content: string | null;
+  changes: FileChanges;
 }
 
 export interface GitHubFileResponse {
-  filename: string
-  status: string
-  additions: number
-  deletions: number
-  changes: number
-  patch?: string
-  previous_filename?: string
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
 }

@@ -1,2 +1,2 @@
-export * from "./scans"
-export * from "./github"
+export * from "./scans";
+export * from "./github";
