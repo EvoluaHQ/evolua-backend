@@ -26,7 +26,12 @@ import {
 import { Sema } from "async-sema"
 import { shouldSkipFile } from "./lib/file-ignore"
 import { fetchPRFiles, init, submitPRReview } from "./lib/github-helper"
-import { AnalysisResult, AnalysisResults, PRFile } from "./types/github"
+import {
+  AnalysisResult,
+  AnalysisResults,
+  PRFile,
+  PRFileChanges,
+} from "./types/github"
 
 /**
  * Initialize observability tools with consistent service naming
@@ -79,16 +84,26 @@ const {
 const ANALYSIS_CONFIG = {
   // File size thresholds in characters
   fileSize: {
-    small: 10_000, // 10KB - Process as is
-    medium: 30_000, // 30KB - Process with higher token limit
-    large: 50_000, // 50KB - Split into chunks
-    max: 500_000, // 500KB - Maximum total file size to process
+    small: {
+      maxSize: 10_000, // 10KB
+      tokens: 2_048,
+    },
+    medium: {
+      maxSize: 30_000, // 30KB
+      tokens: 4_096,
+    },
+    large: {
+      maxSize: 100_000, // 100KB
+      tokens: 8_192,
+    },
+    max: 500_000, // 500KB
   },
   // Token allocation based on file size
-  maxTokens: {
-    small: 1_024, // For files < 10KB
-    medium: 2_048, // For files < 30KB
-    large: 4_096, // For larger files/chunks
+  tokens: {
+    maxContextTokens: 200_000, // Claude's max context window
+    maxOutputTokens: 8_192, // Maximum response size
+    reservedTokens: 1_000, // Reserved for prompts and overhead
+    charsPerToken: 3.5, // Average characters per token for code
   },
   // AI model configuration
   model: {
@@ -126,9 +141,14 @@ Keep responses concise and structured. Only report concrete, evidence-based issu
  * Analysis prompt template defining the expected response format
  * Uses a structured JSON schema for consistent and parseable results
  */
-const ANALYSIS_PROMPT = `Analyze the provided code for security vulnerabilities, code quality issues, and best practice violations.
-Return findings in <findings> tags using this JSON schema:
+const ANALYSIS_PROMPT = `Analyze the following source code for security vulnerabilities, code quality issues, and best practice violations.
+The code contains changes in specific lines that need review. Each line is prefixed with its line number (e.g., "309|").
 
+IMPORTANT: You must use the exact line numbers shown in the prefix when reporting issues in the location field.
+
+Return findings in <findings> tags using this JSON format:
+
+<JSON format>
 {
   "summary": {
     "total_issues": number,
@@ -141,14 +161,20 @@ Return findings in <findings> tags using this JSON schema:
   },
   "issues": [
     {
-      "id": string,                // e.g., "VULN-001", "QUAL-002"
+      "id": string,             // e.g., "VULN-001", "QUAL-002"
       "type": "vulnerability|code_quality|best_practice",
       "risk_level": "critical|high|medium|low",
       "title": string,
-      "location": { "line_start": number, "line_end": number },
+      "location": { 
+        "line_start": number,   // Use the exact line number from the prefix (e.g., 309)
+        "line_end": number      // Use the exact line number from the prefix
+      },
       "description": string,
       "impact": string,
-      "recommendation": string,   // Steps to fix the issue. Use MDX Markdown format if necessary to show code snippets
+      "recommendation": {
+        "description": string,  // Step-by-step explanation of how to fix. Use markdown for formatting for code snippets if needed.
+        "code": string          // ONLY the exact code that should replace the original.
+      },
       "cwe_id": string,           // e.g., "CWE-287"
       "references": {             // Optional: Industry standard references
         "standard": string,       // e.g., "OWASP", "CERT", "ISO-27001"
@@ -156,22 +182,35 @@ Return findings in <findings> tags using this JSON schema:
       }
     }
   ]
-}`
+}
+  </JSON format>`
 
 /**
- * Determines appropriate token limit based on content size
- * This helps optimize costs while ensuring adequate context for analysis
+ * Prepares code content with line numbers and change indicators for AI analysis
+ * Adds line numbers as prefixes and marks changed lines with arrows
  *
- * @param content - The code content to analyze
- * @returns The appropriate token limit for the content size
+ * @param content - The source code content
+ * @param changedLines - Array of line numbers that were changed
+ * @returns Formatted code string with line numbers and change indicators
+ *
+ * Example output:
+ * 307|   }
+ * 308| }
+ * 309|→ while(true) {
+ * 310|→   return 'hello'
  */
-const getMaxTokens = (content: string): number => {
-  const size = content.length
-  if (size < ANALYSIS_CONFIG.fileSize.small)
-    return ANALYSIS_CONFIG.maxTokens.small
-  if (size < ANALYSIS_CONFIG.fileSize.medium)
-    return ANALYSIS_CONFIG.maxTokens.medium
-  return ANALYSIS_CONFIG.maxTokens.large
+function prepareCodeWithLineNumbers(
+  content: string,
+  changedLines: number[]
+): string {
+  const lines = content.split("\n")
+  return lines
+    .map((line, index) => {
+      const lineNumber = index + 1
+      const prefix = changedLines.includes(lineNumber) ? "→ " : "  "
+      return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`
+    })
+    .join("\n")
 }
 
 /**
@@ -182,19 +221,45 @@ const getMaxTokens = (content: string): number => {
  * @returns Promise containing the AI service response
  */
 const sendMessage = async (
-  content: string
+  file: PRFileChanges & { content: string }
 ): Promise<ConverseCommandOutput | Message> => {
-  const maxTokens = getMaxTokens(content)
-  const message = `${ANALYSIS_PROMPT}\n\n<source code>\n${content}\n</source code>`
+  // Get optimal token limit
+  const tokenLimit = getTokenLimit(file.content)
+  const codeWithLines = prepareCodeWithLineNumbers(
+    file.content.trim(),
+    file.changes.lineNumbers
+  )
+
+  const message = `${ANALYSIS_PROMPT}
+
+The following code has changes in lines: ${file.changes.lineNumbers.join(", ")}.
+Review these lines carefully for security issues, code quality problems, and best practice violations.
+
+<source code>
+${codeWithLines}
+</source code>`
+
+  logger.info("Sending analysis request", {
+    path: file.path,
+    changedLines: file.changes.lineNumbers,
+    messageSample: message,
+  })
 
   if (byPassBedrock) {
-    return await anthropic.messages.create({
+    const response = await anthropic.messages.create({
       model: ANALYSIS_CONFIG.model.id,
-      max_tokens: maxTokens,
+      max_tokens: tokenLimit,
       temperature: ANALYSIS_CONFIG.model.temperature,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: message }],
     })
+
+    logger.info("Anthropic response received", {
+      hasContent: !!response.content,
+      contentLength: response.content?.length,
+    })
+
+    return response
   } else {
     return await bedrockClient.send(
       new ConverseCommand({
@@ -216,11 +281,45 @@ const sendMessage = async (
         ],
         inferenceConfig: {
           temperature: ANALYSIS_CONFIG.model.temperature,
-          maxTokens,
+          maxTokens: tokenLimit,
         },
       })
     )
   }
+}
+
+/**
+ * Determines appropriate token limit based on content size
+ * This helps optimize costs while ensuring adequate context for analysis
+ *
+ * @param content - The code content to analyze
+ * @returns The appropriate token limit for the content size
+ */
+const getTokenLimit = (content: string): number => {
+  const size = content.length
+
+  // Quick return for small files using predefined tiers
+  if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
+    return ANALYSIS_CONFIG.fileSize.small.tokens
+  }
+  if (size <= ANALYSIS_CONFIG.fileSize.medium.maxSize) {
+    return ANALYSIS_CONFIG.fileSize.medium.tokens
+  }
+  if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
+    return ANALYSIS_CONFIG.fileSize.large.tokens
+  }
+
+  // For larger files, calculate exact token need
+  const estimatedTokens = Math.ceil(size / ANALYSIS_CONFIG.tokens.charsPerToken)
+  const availableTokens =
+    ANALYSIS_CONFIG.tokens.maxContextTokens -
+    ANALYSIS_CONFIG.tokens.reservedTokens
+
+  return Math.min(
+    estimatedTokens,
+    availableTokens,
+    ANALYSIS_CONFIG.tokens.maxOutputTokens
+  )
 }
 
 /**
@@ -232,12 +331,19 @@ const sendMessage = async (
  * @returns Promise containing analysis results or null if no issues found
  */
 const analyzeFile = async (
-  file: PRFile & { content: string }
+  file: PRFileChanges & { content: string }
 ): Promise<AnalysisResults | null> => {
   const startTime = Date.now()
   const fileSize = file.content.length
 
   try {
+    logger.info("Starting file analysis", {
+      path: file.path,
+      size: fileSize,
+      changedLines: file.changes.lineNumbers,
+      chunksCount: file.changes.chunks.length,
+    })
+
     // Skip extremely large files
     if (fileSize > ANALYSIS_CONFIG.fileSize.max) {
       logger.warn(`File too large to process`, {
@@ -249,20 +355,16 @@ const analyzeFile = async (
       return null
     }
 
-    // Handle large files by splitting them into manageable chunks
-    if (fileSize > ANALYSIS_CONFIG.fileSize.large) {
-      logger.info(`Processing large file in chunks`, {
-        filePath: file.path,
-        size: fileSize,
-      })
-
-      return await analyzeLargeFile(file)
-    }
-
-    // Process normal sized file
-    const normalizedContent = file.content.trim()
-    const resp = (await sendMessage(normalizedContent)) as any // TODO: Add type for response
+    const resp = (await sendMessage(file)) as any
     const content = resp?.output?.message?.content || resp?.content
+
+    // Log raw AI response
+    logger.info("AI service response", {
+      path: file.path,
+      hasContent: !!content,
+      contentLength: content?.length,
+      rawResponse: JSON.stringify(resp).substring(0, 500), // First 500 chars for debugging
+    })
 
     // Parse and combine AI response content blocks
     const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n")
@@ -271,18 +373,78 @@ const analyzeFile = async (
       throw new Error("No output received from AI service")
     }
 
-    // Extract content between <findings> tags. match[0] contains full match with tags,
-    // match[1] contains only the JSON content. [\s\S] matches any char including newlines
+    logger.info("Processing AI output", {
+      path: file.path,
+      outputLength: output.length,
+      outputPreview: output.substring(0, 200),
+    })
+
+    // Extract content between <findings> tags
     const findingsRegex = /<findings>([\s\S]*?)<\/findings>/
     const match = output.match(findingsRegex)
 
     if (!match?.[1]) {
-      logger.info("No findings in the response.", { filePath: file.path })
+      logger.info("No findings in the response.", {
+        filePath: file.path,
+        outputLength: output.length,
+        hasFindings: false,
+      })
       return null
     }
 
     // Parse and validate findings
     const findings = JSON.parse(match[1]) as AnalysisResults
+
+    logger.info("Before filtering", {
+      path: file.path,
+      changedLines: file.changes.lineNumbers,
+      allIssues: findings.issues.map((issue) => ({
+        id: issue.id,
+        line: issue.location.line_start,
+        title: issue.title,
+        isInChangedLines: file.changes.lineNumbers.includes(
+          issue.location.line_start
+        ),
+      })),
+    })
+
+    // Filter findings to only include changed lines with detailed logging
+    const filteredIssues = findings.issues.filter((issue) => {
+      const isIncluded = file.changes.lineNumbers.includes(
+        issue.location.line_start
+      )
+      logger.info("Filtering issue", {
+        issueLine: issue.location.line_start,
+        changedLines: file.changes.lineNumbers,
+        included: isIncluded,
+        issueTitle: issue.title,
+      })
+      return isIncluded
+    })
+
+    logger.info("After filtering", {
+      path: file.path,
+      originalIssuesCount: findings.issues.length,
+      filteredIssuesCount: filteredIssues.length,
+      filteredIssues: filteredIssues.map((issue) => ({
+        id: issue.id,
+        line: issue.location.line_start,
+        title: issue.title,
+      })),
+    })
+
+    // Update findings with filtered issues
+    findings.issues = filteredIssues
+
+    // Update summary counts
+    findings.summary.total_issues = findings.issues.length
+    findings.summary.risk_levels = findings.issues.reduce(
+      (acc, issue) => {
+        acc[issue.risk_level.toLowerCase() as keyof typeof acc]++
+        return acc
+      },
+      { critical: 0, high: 0, medium: 0, low: 0 }
+    )
 
     // Record metrics
     metrics.addMetric(
@@ -292,7 +454,7 @@ const analyzeFile = async (
     )
     metrics.addMetric("ProcessedFileSize", MetricUnit.Bytes, fileSize)
 
-    return findings
+    return findings.issues.length > 0 ? findings : null
   } catch (error) {
     logger.error("Analysis failed", {
       filePath: file.path,
@@ -307,95 +469,25 @@ const analyzeFile = async (
 }
 
 /**
- * Handles analysis of large files by splitting them into manageable chunks
- * Aggregates results from multiple chunks while avoiding duplicates
- *
- * @param file - The large file to analyze
- * @returns Promise containing combined analysis results
- */
-const analyzeLargeFile = async (
-  file: PRFile & { content: string }
-): Promise<AnalysisResults | null> => {
-  const chunkSize = ANALYSIS_CONFIG.fileSize.medium
-  /**
-   * Splits a large file content into chunks of maximum 100,000 characters
-   * Uses Regular Expression to divide the content:
-   * /.{1,100000}/g breakdown:
-   * - . matches any character
-   * - {1,100000} matches between 1 and 100000 characters
-   * - /g global flag to match all occurrences
-   * - || [] provides empty array fallback if no matches found
-   *
-   * @example
-   * Input: "This is a very long string..."
-   * Output: ["First 100000 chars", "Next 100000 chars", ...]
-   */
-  const regexForLargeFiles = new RegExp(`.{1,${chunkSize}}`, "g")
-  const chunks = file.content.match(regexForLargeFiles) || []
-
-  logger.info(`Splitting large file for analysis`, {
-    filePath: file.path,
-    totalSize: file.content.length,
-    chunks: chunks.length,
-    chunkSize,
-  })
-
-  const results = await Promise.all(
-    chunks.map(async (chunk, index) => {
-      return await analyzeFile({
-        ...file,
-        content: chunk,
-        path: `${file.path} (part ${index + 1}/${chunks.length})`,
-      })
-    })
-  )
-
-  return aggregateResults(results.filter(Boolean) as AnalysisResults[])
-}
-
-/**
- * Combines multiple analysis results into a single result
- * Handles deduplication of issues and summation of metrics
- *
- * @param results - Array of analysis results to combine
- * @returns Combined and deduplicated analysis results
- */
-const aggregateResults = (
-  results: AnalysisResults[]
-): AnalysisResults | null => {
-  if (results.length === 0) return null
-  if (results.length === 1) return results[0]
-
-  return {
-    summary: {
-      total_issues: results.reduce((sum, r) => sum + r.summary.total_issues, 0),
-      risk_levels: results.reduce(
-        (acc, r) => ({
-          critical: acc.critical + r.summary.risk_levels.critical,
-          high: acc.high + r.summary.risk_levels.high,
-          medium: acc.medium + r.summary.risk_levels.medium,
-          low: acc.low + r.summary.risk_levels.low,
-        }),
-        { critical: 0, high: 0, medium: 0, low: 0 }
-      ),
-    },
-    issues: results
-      .flatMap((r) => r.issues)
-      .filter(
-        (issue, index, self) =>
-          index === self.findIndex((i) => i.id === issue.id)
-      ),
-  }
-}
-
-/**
  * Processes multiple files concurrently with rate limiting
  * Uses async-sema for concurrency control
  *
  * @param files - Array of files to analyze
  * @returns Promise containing array of analysis results
  */
-const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
+const processFiles = async (
+  files: PRFileChanges[]
+): Promise<AnalysisResult[]> => {
+  logger.info("Starting processFiles", {
+    totalFiles: files.length,
+    filesDetails: files.map((f) => ({
+      path: f.path,
+      hasContent: !!f.content,
+      changesCount: f.changes.lineNumbers.length,
+      shouldSkip: shouldSkipFile(f.path),
+    })),
+  })
+
   // Initialize semaphore for concurrency control
   const sema = new Sema(ANALYSIS_CONFIG.concurrency.limit, {
     capacity: files.length,
@@ -405,7 +497,7 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
 
   // Filter out files with null content
   const validFiles = files.filter(
-    (file): file is PRFile & { content: string } => {
+    (file): file is PRFileChanges & { content: string } => {
       // Check if file content is null
       if (!file.content) {
         logger.warn(`Skipping file ${file.path}: null content`)
@@ -420,17 +512,45 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
         return false
       }
 
+      // Check if file has any changes
+      if (file.changes.lineNumbers.length === 0) {
+        logger.info(`Skipping file with no changes: ${file.path}`)
+        return false
+      }
+
       return true
     }
   )
+
+  logger.info("Files after filtering", {
+    originalCount: files.length,
+    validCount: validFiles.length,
+    validFiles: validFiles.map((f) => ({
+      path: f.path,
+      changesCount: f.changes.lineNumbers.length,
+    })),
+  })
+
+  logger.info("Before analysisPromises", {
+    validFiles,
+  })
 
   // Process each file with semaphore control
   const analysisPromises = validFiles.map(async (file) => {
     await sema.acquire()
     try {
       const findings = await analyzeFile(file)
+
+      logger.info("File analysis result", {
+        path: file.path,
+        hasFindings: !!findings,
+        issuesCount: findings?.issues?.length ?? 0,
+      })
+
       if (findings && findings?.issues.length > 0) {
-        logger.info(`Found ${findings.issues.length} issues in ${file.path}`)
+        logger.info(
+          `Found ${findings.issues.length} issues in changed lines of ${file.path}`
+        )
         return { file, findings }
       }
       return null
@@ -443,7 +563,18 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
   })
 
   const analysisResults = await Promise.all(analysisPromises)
-  return analysisResults.filter(Boolean) as AnalysisResult[]
+  const filteredResults = analysisResults.filter(Boolean) as AnalysisResult[]
+
+  logger.info("Analysis results summary", {
+    totalProcessed: validFiles.length,
+    resultsFound: filteredResults.length,
+    resultDetails: filteredResults.map((r) => ({
+      path: r.file.path,
+      issuesCount: r.findings.issues.length,
+    })),
+  })
+
+  return filteredResults
 }
 
 /**
@@ -473,12 +604,13 @@ const _handler = async (event: any, context: any) => {
     const owner = detail.data.repository.owner.login
     const repo = detail.data.repository.name
     const pullNumber = detail.data.pull_request.number
-    const pullRequestId = detail.data.pull_request.id
     const commitId = detail.data.pull_request.head.sha
 
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber)
     const results = await processFiles(prFileContent)
+
+    console.log("RESULTS", results)
 
     // Submit review with all comments
     if (results.length > 0) {
