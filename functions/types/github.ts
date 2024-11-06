@@ -37,6 +37,7 @@ export interface FetchPRFilesResponse {
           deletions: number
           changeType: FileChangeType
           commitResourcePath: string
+          patch?: string // Git diff patch
         }>
       }
     }
@@ -109,7 +110,7 @@ export interface AnalysisResults {
 }
 
 export interface AnalysisResult {
-  file: PRFile
+  file: PRFileChanges // Update to include changes
   findings: AnalysisResults
 }
 
@@ -123,7 +124,7 @@ export interface AddPRReviewResponse {
           id: string
           body: string
           path: string
-          line: number
+          line?: number
         }>
       }
     }
@@ -133,7 +134,7 @@ export interface AddPRReviewResponse {
 export interface GetPRIDResponse {
   repository: {
     pullRequest: {
-      id: string
+      id: string // GitHub's GraphQL node ID
     }
   }
 }
@@ -153,4 +154,38 @@ export interface PullRequestReviewComment {
   path: string //Path to the file being commented on.
   position: number //Position in the file to leave a comment on.
   body: string //Body of the comment to leave.
+}
+
+/**
+ * Interface for changed lines information
+ */
+export interface FileChanges {
+  lineNumbers: number[]
+  chunks: Array<{
+    start: number // Starting line number
+    end: number // Ending line number
+    content: string // Changed content
+    header: string // Chunk header from git diff
+    changedLines: number[] // Add this to track changed lines per chunk
+  }>
+  // Store diff positions at the file level instead of per chunk
+  lineToDiffPosition: Map<number, number>
+}
+
+/**
+ * Extended PR file interface with change tracking
+ */
+export interface PRFileChanges extends PRFile {
+  content: string | null
+  changes: FileChanges
+}
+
+export interface GitHubFileResponse {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  changes: number
+  patch?: string
+  previous_filename?: string
 }

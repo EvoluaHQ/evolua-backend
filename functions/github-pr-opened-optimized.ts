@@ -26,7 +26,12 @@ import {
 import { Sema } from "async-sema"
 import { shouldSkipFile } from "./lib/file-ignore"
 import { fetchPRFiles, init, submitPRReview } from "./lib/github-helper"
-import { AnalysisResult, AnalysisResults, PRFile } from "./types/github"
+import {
+  AnalysisResult,
+  AnalysisResults,
+  PRFile,
+  PRFileChanges,
+} from "./types/github"
 
 /**
  * Initialize observability tools with consistent service naming
@@ -136,8 +141,12 @@ Keep responses concise and structured. Only report concrete, evidence-based issu
  * Analysis prompt template defining the expected response format
  * Uses a structured JSON schema for consistent and parseable results
  */
-const ANALYSIS_PROMPT = `Analyze the provided code for security vulnerabilities, code quality issues, and best practice violations.
-Return findings in <findings> tags using the following JSON schema:
+const ANALYSIS_PROMPT = `Analyze the following source code for security vulnerabilities, code quality issues, and best practice violations.
+The code contains changes in specific lines that need review. Each line is prefixed with its line number (e.g., "309|").
+
+IMPORTANT: You must use the exact line numbers shown in the prefix when reporting issues in the location field.
+
+Return findings in <findings> tags using this JSON format:
 
 <JSON format>
 {
@@ -157,8 +166,8 @@ Return findings in <findings> tags using the following JSON schema:
       "risk_level": "critical|high|medium|low",
       "title": string,
       "location": { 
-        "line_start": number,   // Absolute line number in the file (1-based)
-        "line_end": number      // Absolute line number in the file (1-based)
+        "line_start": number,   // Use the exact line number from the prefix (e.g., 309)
+        "line_end": number      // Use the exact line number from the prefix
       },
       "description": string,
       "impact": string,
@@ -174,6 +183,34 @@ Return findings in <findings> tags using the following JSON schema:
   </JSON format>`
 
 /**
+ * Prepares code content with line numbers and change indicators for AI analysis
+ * Adds line numbers as prefixes and marks changed lines with arrows
+ *
+ * @param content - The source code content
+ * @param changedLines - Array of line numbers that were changed
+ * @returns Formatted code string with line numbers and change indicators
+ *
+ * Example output:
+ * 307|   }
+ * 308| }
+ * 309|→ while(true) {
+ * 310|→   return 'hello'
+ */
+function prepareCodeWithLineNumbers(
+  content: string,
+  changedLines: number[]
+): string {
+  const lines = content.split("\n")
+  return lines
+    .map((line, index) => {
+      const lineNumber = index + 1
+      const prefix = changedLines.includes(lineNumber) ? "→ " : "  "
+      return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`
+    })
+    .join("\n")
+}
+
+/**
  * Sends code analysis request to the configured AI service
  * Handles different API formats for Anthropic direct vs AWS Bedrock
  *
@@ -181,21 +218,45 @@ Return findings in <findings> tags using the following JSON schema:
  * @returns Promise containing the AI service response
  */
 const sendMessage = async (
-  content: string
+  file: PRFileChanges & { content: string }
 ): Promise<ConverseCommandOutput | Message> => {
   // Get optimal token limit
-  const tokenLimit = getTokenLimit(content)
+  const tokenLimit = getTokenLimit(file.content)
+  const codeWithLines = prepareCodeWithLineNumbers(
+    file.content.trim(),
+    file.changes.lineNumbers
+  )
 
-  const message = `${ANALYSIS_PROMPT}\n\n<source code>\n${content}\n</source code>`
+  const message = `${ANALYSIS_PROMPT}
+
+The following code has changes in lines: ${file.changes.lineNumbers.join(", ")}.
+Review these lines carefully for security issues, code quality problems, and best practice violations.
+
+<source code>
+${codeWithLines}
+</source code>`
+
+  logger.info("Sending analysis request", {
+    path: file.path,
+    changedLines: file.changes.lineNumbers,
+    messageSample: message,
+  })
 
   if (byPassBedrock) {
-    return await anthropic.messages.create({
+    const response = await anthropic.messages.create({
       model: ANALYSIS_CONFIG.model.id,
       max_tokens: tokenLimit,
       temperature: ANALYSIS_CONFIG.model.temperature,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: message }],
     })
+
+    logger.info("Anthropic response received", {
+      hasContent: !!response.content,
+      contentLength: response.content?.length,
+    })
+
+    return response
   } else {
     return await bedrockClient.send(
       new ConverseCommand({
@@ -267,12 +328,19 @@ const getTokenLimit = (content: string): number => {
  * @returns Promise containing analysis results or null if no issues found
  */
 const analyzeFile = async (
-  file: PRFile & { content: string }
+  file: PRFileChanges & { content: string }
 ): Promise<AnalysisResults | null> => {
   const startTime = Date.now()
   const fileSize = file.content.length
 
   try {
+    logger.info("Starting file analysis", {
+      path: file.path,
+      size: fileSize,
+      changedLines: file.changes.lineNumbers,
+      chunksCount: file.changes.chunks.length,
+    })
+
     // Skip extremely large files
     if (fileSize > ANALYSIS_CONFIG.fileSize.max) {
       logger.warn(`File too large to process`, {
@@ -284,32 +352,96 @@ const analyzeFile = async (
       return null
     }
 
-    // Process normal sized file
-    // const normalizedContent = file.content.trim()
-    const resp = (await sendMessage(file.content.trim())) as any // TODO: Add type for response
+    const resp = (await sendMessage(file)) as any
     const content = resp?.output?.message?.content || resp?.content
+
+    // Log raw AI response
+    logger.info("AI service response", {
+      path: file.path,
+      hasContent: !!content,
+      contentLength: content?.length,
+      rawResponse: JSON.stringify(resp).substring(0, 500), // First 500 chars for debugging
+    })
 
     // Parse and combine AI response content blocks
     const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n")
-
-    console.log(JSON.stringify(content, null, 2))
 
     if (!output) {
       throw new Error("No output received from AI service")
     }
 
-    // Extract content between <findings> tags. match[0] contains full match with tags,
-    // match[1] contains only the JSON content. [\s\S] matches any char including newlines
+    logger.info("Processing AI output", {
+      path: file.path,
+      outputLength: output.length,
+      outputPreview: output.substring(0, 200),
+    })
+
+    // Extract content between <findings> tags
     const findingsRegex = /<findings>([\s\S]*?)<\/findings>/
     const match = output.match(findingsRegex)
 
     if (!match?.[1]) {
-      logger.info("No findings in the response.", { filePath: file.path })
+      logger.info("No findings in the response.", {
+        filePath: file.path,
+        outputLength: output.length,
+        hasFindings: false,
+      })
       return null
     }
 
     // Parse and validate findings
     const findings = JSON.parse(match[1]) as AnalysisResults
+
+    logger.info("Before filtering", {
+      path: file.path,
+      changedLines: file.changes.lineNumbers,
+      allIssues: findings.issues.map((issue) => ({
+        id: issue.id,
+        line: issue.location.line_start,
+        title: issue.title,
+        isInChangedLines: file.changes.lineNumbers.includes(
+          issue.location.line_start
+        ),
+      })),
+    })
+
+    // Filter findings to only include changed lines with detailed logging
+    const filteredIssues = findings.issues.filter((issue) => {
+      const isIncluded = file.changes.lineNumbers.includes(
+        issue.location.line_start
+      )
+      logger.info("Filtering issue", {
+        issueLine: issue.location.line_start,
+        changedLines: file.changes.lineNumbers,
+        included: isIncluded,
+        issueTitle: issue.title,
+      })
+      return isIncluded
+    })
+
+    logger.info("After filtering", {
+      path: file.path,
+      originalIssuesCount: findings.issues.length,
+      filteredIssuesCount: filteredIssues.length,
+      filteredIssues: filteredIssues.map((issue) => ({
+        id: issue.id,
+        line: issue.location.line_start,
+        title: issue.title,
+      })),
+    })
+
+    // Update findings with filtered issues
+    findings.issues = filteredIssues
+
+    // Update summary counts
+    findings.summary.total_issues = findings.issues.length
+    findings.summary.risk_levels = findings.issues.reduce(
+      (acc, issue) => {
+        acc[issue.risk_level.toLowerCase() as keyof typeof acc]++
+        return acc
+      },
+      { critical: 0, high: 0, medium: 0, low: 0 }
+    )
 
     // Record metrics
     metrics.addMetric(
@@ -319,7 +451,7 @@ const analyzeFile = async (
     )
     metrics.addMetric("ProcessedFileSize", MetricUnit.Bytes, fileSize)
 
-    return findings
+    return findings.issues.length > 0 ? findings : null
   } catch (error) {
     logger.error("Analysis failed", {
       filePath: file.path,
@@ -340,7 +472,19 @@ const analyzeFile = async (
  * @param files - Array of files to analyze
  * @returns Promise containing array of analysis results
  */
-const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
+const processFiles = async (
+  files: PRFileChanges[]
+): Promise<AnalysisResult[]> => {
+  logger.info("Starting processFiles", {
+    totalFiles: files.length,
+    filesDetails: files.map((f) => ({
+      path: f.path,
+      hasContent: !!f.content,
+      changesCount: f.changes.lineNumbers.length,
+      shouldSkip: shouldSkipFile(f.path),
+    })),
+  })
+
   // Initialize semaphore for concurrency control
   const sema = new Sema(ANALYSIS_CONFIG.concurrency.limit, {
     capacity: files.length,
@@ -350,7 +494,7 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
 
   // Filter out files with null content
   const validFiles = files.filter(
-    (file): file is PRFile & { content: string } => {
+    (file): file is PRFileChanges & { content: string } => {
       // Check if file content is null
       if (!file.content) {
         logger.warn(`Skipping file ${file.path}: null content`)
@@ -365,17 +509,45 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
         return false
       }
 
+      // Check if file has any changes
+      if (file.changes.lineNumbers.length === 0) {
+        logger.info(`Skipping file with no changes: ${file.path}`)
+        return false
+      }
+
       return true
     }
   )
+
+  logger.info("Files after filtering", {
+    originalCount: files.length,
+    validCount: validFiles.length,
+    validFiles: validFiles.map((f) => ({
+      path: f.path,
+      changesCount: f.changes.lineNumbers.length,
+    })),
+  })
+
+  logger.info("Before analysisPromises", {
+    validFiles,
+  })
 
   // Process each file with semaphore control
   const analysisPromises = validFiles.map(async (file) => {
     await sema.acquire()
     try {
       const findings = await analyzeFile(file)
+
+      logger.info("File analysis result", {
+        path: file.path,
+        hasFindings: !!findings,
+        issuesCount: findings?.issues?.length ?? 0,
+      })
+
       if (findings && findings?.issues.length > 0) {
-        logger.info(`Found ${findings.issues.length} issues in ${file.path}`)
+        logger.info(
+          `Found ${findings.issues.length} issues in changed lines of ${file.path}`
+        )
         return { file, findings }
       }
       return null
@@ -388,7 +560,18 @@ const processFiles = async (files: PRFile[]): Promise<AnalysisResult[]> => {
   })
 
   const analysisResults = await Promise.all(analysisPromises)
-  return analysisResults.filter(Boolean) as AnalysisResult[]
+  const filteredResults = analysisResults.filter(Boolean) as AnalysisResult[]
+
+  logger.info("Analysis results summary", {
+    totalProcessed: validFiles.length,
+    resultsFound: filteredResults.length,
+    resultDetails: filteredResults.map((r) => ({
+      path: r.file.path,
+      issuesCount: r.findings.issues.length,
+    })),
+  })
+
+  return filteredResults
 }
 
 /**
@@ -423,6 +606,8 @@ const _handler = async (event: any, context: any) => {
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber)
     const results = await processFiles(prFileContent)
+
+    console.log("RESULTS", results)
 
     // Submit review with all comments
     if (results.length > 0) {

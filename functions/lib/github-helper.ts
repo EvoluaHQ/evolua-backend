@@ -7,8 +7,12 @@ import {
   CodeIssue,
   FetchPRFileContentResponse,
   FetchPRFilesResponse,
+  FileChanges,
+  FileChangeType,
   GetPRIDResponse,
+  GitHubFileResponse,
   PRFile,
+  PRFileChanges,
   PullRequestReviewComment,
 } from "../types/github"
 
@@ -32,7 +36,167 @@ export async function init(
     auth: installationAuth.token,
   })
 
-  logger.debug("GitHub Octokit initialized")
+  logger.info("GitHub Octokit initialized")
+}
+
+/**
+ * Parse patch information to get exact line changes and their diff positions
+ * Example patch format:
+ * @@ -1,4 +1,4 @@ (means: original starts line 1, 4 lines; new starts line 1, 4 lines)
+ *  unchanged line
+ * -removed line
+ * +added line
+ *  unchanged line
+ */
+function parseFileChanges(patch?: string): FileChanges {
+  const changes = {
+    lineNumbers: [] as number[],
+    chunks: [] as Array<{
+      start: number
+      end: number
+      content: string
+      header: string
+      changedLines: number[]
+    }>,
+    lineToDiffPosition: new Map<number, number>(),
+  }
+
+  if (!patch) return changes
+
+  logger.info("Processing patch", { patch })
+
+  const lines = patch.split("\n")
+  let currentNewLine = 0
+  let chunkStart = 0
+  let chunkLines: string[] = []
+  let chunkHeader = ""
+  let chunkChangedLines: number[] = []
+  let currentDiffPosition = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    // Parse chunk header
+    if (line.startsWith("@@")) {
+      // Save previous chunk if exists
+      if (chunkLines.length > 0) {
+        changes.chunks.push({
+          start: chunkStart,
+          end: currentNewLine,
+          content: chunkLines.join("\n"),
+          header: chunkHeader,
+          changedLines: [...chunkChangedLines],
+        })
+        chunkLines = []
+        chunkChangedLines = []
+      }
+
+      const match = line.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/)
+      if (match) {
+        currentNewLine = parseInt(match[2], 10)
+        chunkStart = currentNewLine
+        chunkHeader = line
+        currentDiffPosition = 1 // Reset diff position for new chunk
+      }
+      continue
+    }
+
+    if (line.startsWith("+")) {
+      // Added or modified line
+      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition)
+      chunkChangedLines.push(currentNewLine)
+      if (!changes.lineNumbers.includes(currentNewLine)) {
+        changes.lineNumbers.push(currentNewLine)
+      }
+      chunkLines.push(line.slice(1))
+      currentNewLine++
+      currentDiffPosition++
+    } else if (line.startsWith("-")) {
+      // Removed line - only increment diff position
+      chunkLines.push(line.slice(1))
+      currentDiffPosition++
+    } else if (line.startsWith(" ")) {
+      // Context line
+      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition)
+      chunkLines.push(line.slice(1))
+      currentNewLine++
+      currentDiffPosition++
+    }
+  }
+
+  // Add the last chunk
+  if (chunkLines.length > 0) {
+    changes.chunks.push({
+      start: chunkStart,
+      end: currentNewLine,
+      content: chunkLines.join("\n"),
+      header: chunkHeader,
+      changedLines: [...chunkChangedLines],
+    })
+  }
+
+  changes.lineNumbers.sort((a, b) => a - b)
+
+  logger.info("Parsed file changes", {
+    totalChangedLines: changes.lineNumbers.length,
+    changedLines: changes.lineNumbers,
+    diffPositions: Array.from(changes.lineToDiffPosition.entries()),
+    chunks: changes.chunks.map((chunk) => ({
+      header: chunk.header,
+      start: chunk.start,
+      end: chunk.end,
+      changedLines: chunk.changedLines,
+    })),
+  })
+
+  return changes
+}
+
+function mapChangeType(status: string): FileChangeType {
+  const statusMap: Record<string, FileChangeType> = {
+    added: "ADDED",
+    removed: "DELETED",
+    modified: "MODIFIED",
+    renamed: "RENAMED",
+    copied: "COPIED",
+    changed: "CHANGED",
+    unchanged: "UNCHANGED",
+  }
+
+  return statusMap[status] || "MODIFIED"
+}
+
+/**
+ * Process a single file's patch
+ */
+export async function processPRFile(
+  file: GitHubFileResponse,
+  sha: string
+): Promise<PRFileChanges> {
+  const changes = parseFileChanges(file.patch)
+
+  logger.info("File changes processed", {
+    file: file.filename,
+    changedLines: changes.lineNumbers,
+    chunksCount: changes.chunks.length,
+    chunks: changes.chunks.map((chunk) => ({
+      header: chunk.header,
+      start: chunk.start,
+      end: chunk.end,
+      changedLines: chunk.changedLines,
+      linesCount: chunk.content.split("\n").length,
+    })),
+  })
+
+  return {
+    path: file.filename,
+    additions: file.additions,
+    deletions: file.deletions,
+    changeType: mapChangeType(file.status),
+    sha,
+    content: null, // Will be filled later if needed
+    changes,
+  }
 }
 
 export async function commentOnPR(pullRequestId: string, comment: string) {
@@ -109,78 +273,116 @@ async function fetchPRFileContent(
   }
 }
 
+/**
+ * Fetch all PR files with changes
+ */
 export async function fetchPRFiles(
   owner: string,
   repo: string,
   prNumber: number
-): Promise<PRFile[]> {
-  const query = `
-    query getPRFiles($owner: String!, $repo: String!, $prNumber: Int!, $cursor: String) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $prNumber) {
-          headRef {
-            target {
-              oid
-            }
-          }
-          files(first: 100, after: $cursor) {
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-            nodes {
-              path
-              additions
-              deletions
-              changeType
+): Promise<PRFileChanges[]> {
+  try {
+    let page = 1
+    const perPage = 100
+    const files: PRFileChanges[] = []
+    let hasNextPage = true
+
+    // Get the PR commit SHA first
+    const shaResponse = await octokit.graphql<{
+      repository: {
+        pullRequest: {
+          headRef: {
+            target: {
+              oid: string
             }
           }
         }
       }
-    }
-  `
+    }>(
+      `
+      query($owner: String!, $repo: String!, $prNumber: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $prNumber) {
+            headRef {
+              target {
+                oid
+              }
+            }
+          }
+        }
+      }
+    `,
+      {
+        owner,
+        repo,
+        prNumber,
+      }
+    )
 
-  try {
-    const files: PRFile[] = []
-    let hasNextPage = true
-    let cursor: string | null = null
-    let sha: string
+    const sha = shaResponse.repository.pullRequest.headRef.target.oid
 
     while (hasNextPage) {
-      const response: FetchPRFilesResponse =
-        await octokit.graphql<FetchPRFilesResponse>(query, {
+      // Fetch files for current page
+      const { data: filesPage, headers } = await octokit.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
+        {
           owner,
           repo,
-          prNumber,
-          cursor,
-        })
-
-      sha = response.repository.pullRequest.headRef.target.oid
-      const prFiles = response.repository.pullRequest.files
-
-      // Add files from current page to our collection
-      const fetchContentPromises = prFiles.nodes.map(async (file) => {
-        const content = await fetchPRFileContent(owner, repo, file.path, sha)
-        return {
-          ...file,
-          content,
-          sha,
+          pull_number: prNumber,
+          per_page: perPage,
+          page,
+          headers: {
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
         }
-      })
+      )
 
-      const newFiles = await Promise.all(fetchContentPromises)
-      files.push(...newFiles)
+      // Process files in parallel
+      const processedFiles = await Promise.all(
+        filesPage.map((file) => processPRFile(file, sha))
+      )
 
-      // Update pagination info
-      hasNextPage = prFiles.pageInfo.hasNextPage
-      cursor = prFiles.pageInfo.endCursor
+      // Get file contents only for files with changes
+      await Promise.all(
+        processedFiles
+          .filter(hasChanges) // Using helper function
+          .map(async (file) => {
+            file.content = await fetchPRFileContent(owner, repo, file.path, sha)
+          })
+      )
+
+      files.push(...processedFiles)
+
+      // Check for next page
+      const links = headers.link
+      hasNextPage = !!(links && links.includes('rel="next"'))
+      if (hasNextPage) page++
     }
 
     return files
   } catch (error) {
-    logger.error("Failed to fetch PR files", error as Error)
+    logger.error("Failed to fetch PR files", {
+      error: error as Error,
+      owner,
+      repo,
+      prNumber,
+    })
     return []
   }
+}
+
+/**
+ * Helper function to check if file has changes
+ */
+function hasChanges(file: PRFileChanges): boolean {
+  return file.changes.lineNumbers.length > 0
+}
+
+/**
+ * Helper function to get total changed lines
+ */
+function getChangedLinesCount(file: PRFileChanges): number {
+  return file.changes.lineNumbers.length
 }
 
 /**
@@ -211,19 +413,8 @@ export async function createPRReview(
     }
   `
 
-  console.log(
-    JSON.stringify(
-      {
-        pullRequestId: prId,
-        commitOID: commitId,
-        body: "Code Review Findings",
-        comments,
-        event: "COMMENT",
-      },
-      null,
-      2
-    )
-  )
+  console.log("Comments before Review")
+  console.log(JSON.stringify(comments, null, 2))
 
   try {
     const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
@@ -355,32 +546,65 @@ export async function submitPRReview(
   prNumber: number,
   commitId: string,
   results: Array<{
-    file: { path: string }
+    file: PRFileChanges
     findings: {
       issues: CodeIssue[]
     }
   }>
 ) {
   try {
-    // Prepare all comments
-    const comments: PullRequestReviewComment[] = results.flatMap(
-      ({ file, findings }) =>
-        findings.issues.map((issue) => ({
-          path: file.path,
-          position: issue.location.line_start,
-          body: formatIssueComment(issue),
-        }))
-    )
+    // Use flatMap to transform and flatten in one operation
+    const comments: PullRequestReviewComment[] = results
+      .filter(({ file }) => hasChanges(file))
+      .flatMap(({ file, findings }) =>
+        findings.issues
+          .filter((issue) =>
+            file.changes.lineNumbers.includes(issue.location.line_start)
+          )
+          .map((issue) => {
+            const diffPosition = file.changes.lineToDiffPosition.get(
+              issue.location.line_start
+            )
 
-    // Get PR ID
+            if (diffPosition === undefined) {
+              logger.warn("Missing diff position for line", {
+                file: file.path,
+                line: issue.location.line_start,
+              })
+              return null
+            }
+
+            return {
+              path: file.path,
+              position: diffPosition,
+              body: formatIssueComment(issue),
+            }
+          })
+          .filter(
+            (comment): comment is PullRequestReviewComment => comment !== null
+          )
+      )
+
+    if (comments.length === 0) {
+      logger.info("No valid issues found in changed lines")
+      return
+    }
+
+    logger.info("Prepared PR review comments", {
+      totalComments: comments.length,
+      commentsByFile: comments.reduce(
+        (acc, comment) => {
+          acc[comment.path] = (acc[comment.path] || 0) + 1
+          return acc
+        },
+        {} as Record<string, number>
+      ),
+    })
+
     const prId = await getPullRequestId(owner, repo, prNumber)
-    console.log("PR IdddddIdddddIdddddIdddddIdddddIdddddIddddd", prId)
-
-    // Create review with all comments
     await createPRReview(owner, repo, prId, commitId, comments)
 
     logger.info("Successfully submitted PR review", {
-      filesWithIssues: results.length,
       totalComments: comments.length,
     })
   } catch (error) {
