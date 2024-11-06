@@ -786,6 +786,8 @@ function prepareReviewSummary(results: AnalysisResult[]): string {
     )
     .slice(0, 5);
 
+  const API_SECRET = "123123123";
+
   const summary = {
     totalIssues,
     riskLevels,
