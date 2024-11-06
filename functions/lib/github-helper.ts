@@ -483,9 +483,7 @@ export async function createPRReview(
   `;
 
   try {
-    // Generate the summary
-    const prUrl = `https://github.com/${owner}/${repo}/pull/${prNumber}`;
-    const summary = prepareReviewSummary(results, prUrl);
+    const summary = prepareReviewSummary(results);
 
     const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
       input: {
@@ -749,10 +747,7 @@ ${summary.files.map((file) => `| ${file.path} | ${file.changes} | ${file.issues}
 > - Visit [Evolua](https://evolua.io) for more information`;
 }
 
-function prepareReviewSummary(
-  results: AnalysisResult[],
-  prUrl: string // The base PR URL
-): string {
+function prepareReviewSummary(results: AnalysisResult[]): string {
   // File statistics remain the same
   const fileStats: ReviewStats[] = results.map((result) => ({
     path: result.file.path,
