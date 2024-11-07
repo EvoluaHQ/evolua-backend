@@ -44,6 +44,8 @@ import {
   ScanResult,
 } from "./types";
 
+const API_SECRET_2 = 123;
+
 /**
  * Initialize observability tools with consistent service naming
  */
