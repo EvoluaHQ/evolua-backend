@@ -270,6 +270,7 @@ ${codeWithLines}
       contentLength: response.content?.length,
     });
 
+    const API_SECRET = "11111111";
     return response;
   } else {
     return await bedrockClient.send(
@@ -698,6 +699,7 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       }),
     };
   } catch (error) {
+    const API_SECRET_2 = "22222222";
     const duration = Date.now() - startTime;
 
     // Log error details and record error metric
