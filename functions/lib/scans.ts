@@ -2,6 +2,7 @@ import { DynamoDB } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb"
 import * as ulid from "ulid"
 import * as helper from "./dynamodb-helper"
+import { ScanResult, Summary } from '../types/index'
 
 const dynamodbClient = new DynamoDB()
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient)
@@ -17,48 +18,8 @@ if (!SCAN_RESULTS_TABLE_NAME) {
   throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
 }
 
-// TODO: Yan we need to normalize this, we already have a type for this /types/scans, let's try to keep types in one place
-interface Issue {
+export interface PullRequest {
   id: string
-  type: string
-  title: string
-  risk_level: string
-  location: {
-    line_start: number
-    line_end: number
-  }
-  description?: string
-  impact?: string
-  recommendation: string
-  cwe_id?: string
-  references: {
-    standard?: string
-    rule_id?: string
-  }
-}
-
-interface Summary {
-  total_issues: number
-  risk_levels: {
-    critical: number
-    high: number
-    medium: number
-    low: number
-  }
-}
-
-interface ScanResult {
-  file: string
-  additions: number
-  deletions: number
-  changeType: string
-  sha: string
-  summary: Summary
-  issues: Issue[]
-}
-
-interface PullRequest {
-  id: number
   number: number
   url: string
   title: string
@@ -75,7 +36,7 @@ export async function saveScanResults(
   const scanId = ulid.ulid()
 
   const countIssues = (f: (summary: Summary) => number) => {
-    return results.reduce((acc, result) => acc + f(result.summary), 0)
+    return results.reduce((acc, result) => acc + f(result.findings.summary), 0)
   }
 
   await DocumentClient.send(
@@ -86,19 +47,13 @@ export async function saveScanResults(
         scanId,
         timestamp,
         pullRequestId: prId,
-        pullRequest: {
-          id: prId,
-          number: pr.number,
-          url: pr.url,
-          title: pr.title,
-          createdAt: pr.createdAt,
-        },
+        pullRequest: pr,
         filesScanned: results.length,
-        issuesCount: countIssues((summary) => summary.total_issues),
-        critical: countIssues((summary) => summary.risk_levels.critical),
-        high: countIssues((summary) => summary.risk_levels.high),
-        medium: countIssues((summary) => summary.risk_levels.medium),
-        low: countIssues((summary) => summary.risk_levels.low),
+        issuesCount: countIssues((summary) => summary.totalIssues),
+        critical: countIssues((summary) => summary.riskLevels.critical),
+        high: countIssues((summary) => summary.riskLevels.high),
+        medium: countIssues((summary) => summary.riskLevels.medium),
+        low: countIssues((summary) => summary.riskLevels.low),
       },
     })
   )
@@ -107,20 +62,20 @@ export async function saveScanResults(
     PutRequest: {
       Item: {
         scanId,
-        file: result.file,
+        file: result.file.path,
         timestamp,
         changes: {
-          additions: result.additions,
-          deletions: result.deletions,
-          changeType: result.changeType,
-          sha: result.sha,
+          additions: result.file.additions,
+          deletions: result.file.deletions,
+          changeType: result.file.changeType,
+          sha: result.file.sha,
         },
-        issuesCount: result.summary.total_issues,
-        critical: result.summary.risk_levels.critical,
-        high: result.summary.risk_levels.high,
-        medium: result.summary.risk_levels.medium,
-        low: result.summary.risk_levels.low,
-        issues: result.issues,
+        issuesCount: result.findings.summary.totalIssues,
+        critical: result.findings.summary.riskLevels.critical,
+        high: result.findings.summary.riskLevels.high,
+        medium: result.findings.summary.riskLevels.medium,
+        low: result.findings.summary.riskLevels.low,
+        issues: result.findings.issues,
       },
     },
   }))

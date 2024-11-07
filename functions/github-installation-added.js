@@ -1,6 +1,6 @@
 const Users = require('./lib/users');
 const Repos = require('./lib/repos');
-const { GitHubInstallationEventDetail } = require('./github-webhook.event');
+const { GitHubInstallationEventDetail } = require('./types/eventbridge');
 const { Logger } = require('@aws-lambda-powertools/logger');
 const logger = new Logger();
 

@@ -95,7 +95,7 @@ export interface Findings {
   issues: CodeIssue[];
 }
 
-export interface AnalysisResult {
+export interface ScanResult {
   file: PRFileChanges;
   findings: Findings;
 }

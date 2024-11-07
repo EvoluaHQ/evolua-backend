@@ -60,7 +60,7 @@ type ScanResult {
   medium: Int!
   low: Int!
   changes: Change!
-  issues: [Issue!]
+  issues: [CodeIssue!]
 }
 
 type Change {
@@ -70,27 +70,32 @@ type Change {
   sha: String!
 }
 
-type Issue {
+type CodeIssue {
   id: String!
   type: String!
   title: String!
-  risk_level: String!
+  riskLevel: String!
   description: String
   impact: String
-  recommendation: String!
-  cwe_id: String
+  recommendation: Recommendation
+  cweId: String
   references: IssueReference
   location: IssueLocation!
 }
 
+type Recommendation {
+  description: String!
+  code: String
+}
+
 type IssueLocation {
-  line_start: Int!
-  line_end: Int!
+  lineStart: Int!
+  lineEnd: Int!
 }
 
 type IssueReference {
   standard: String
-  rule_id: String
+  ruleId: String
 }
 
 type PullRequest {

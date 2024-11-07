@@ -1,4 +1,4 @@
-const { ClerkUserDeletedEventDetail } = require('./clerk-webook.event');
+const { ClerkUserDeletedEventDetail } = require('./types/eventbridge');
 const Users = require('./lib/users');
 
 /**

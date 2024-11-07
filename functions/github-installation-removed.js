@@ -1,5 +1,5 @@
 const Repos = require('./lib/repos');
-const { GitHubInstallationEventDetail } = require('./github-webhook.event');
+const { GitHubInstallationEventDetail } = require('./types/eventbridge');
 
 /**
  * @param {import('aws-lambda').EventBridgeEvent<'installation.removed', GitHubInstallationEventDetail>} event

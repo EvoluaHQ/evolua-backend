@@ -9,7 +9,7 @@ import {
   AddCommentResponse,
   AddPRReviewResponse,
   AIResponse,
-  AnalysisResult,
+  ScanResult,
   CodeIssue,
   FetchPRFileContentResponse,
   FileChanges,
@@ -462,7 +462,7 @@ export async function createPRReview(
   prId: string,
   commitId: string,
   comments: PullRequestReviewComment[],
-  results: AnalysisResult[]
+  results: ScanResult[]
 ) {
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
@@ -614,7 +614,7 @@ export async function submitPRReview(
   repo: string,
   prNumber: number,
   commitId: string,
-  results: AnalysisResult[]
+  results: ScanResult[]
 ) {
   try {
     // Use flatMap to transform and flatten in one operation
@@ -747,7 +747,7 @@ ${summary.files.map((file) => `| ${file.path} | ${file.changes} | ${file.issues}
 > - Visit [Evolua](https://evolua.io) for more information`;
 }
 
-function prepareReviewSummary(results: AnalysisResult[]): string {
+function prepareReviewSummary(results: ScanResult[]): string {
   // File statistics remain the same
   const fileStats: ReviewStats[] = results.map((result) => ({
     path: result.file.path,

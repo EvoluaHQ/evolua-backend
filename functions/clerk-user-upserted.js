@@ -1,4 +1,4 @@
-const { ClerkUserUpsertedEventDetail } = require('./clerk-webook.event');
+const { ClerkUserUpsertedEventDetail } = require('./types/eventbridge');
 const ulid = require('ulid');
 const Users = require('./lib/users');
 

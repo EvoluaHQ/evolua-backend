@@ -31,7 +31,15 @@ import {
   processAIResponse,
   submitPRReview,
 } from "./lib/github-helper";
-import { AIResponse, AnalysisResult, Findings, PRFileChanges } from "./types";
+import { EventBridgeEvent } from 'aws-lambda';
+import { 
+  GitHubPROpenedEventDetail, 
+  AIResponse, 
+  ScanResult, 
+  Findings, 
+  PRFileChanges
+} from "./types";
+import * as Scans from './lib/scans';
 
 /**
  * Initialize observability tools with consistent service naming
@@ -480,7 +488,7 @@ const analyzeFile = async (
  */
 const processFiles = async (
   files: PRFileChanges[]
-): Promise<AnalysisResult[]> => {
+): Promise<ScanResult[]> => {
   logger.info("Starting processFiles", {
     totalFiles: files.length,
     filesDetails: files.map((f) => ({
@@ -566,7 +574,7 @@ const processFiles = async (
   });
 
   const analysisResults = await Promise.all(analysisPromises);
-  const filteredResults = analysisResults.filter(Boolean) as AnalysisResult[];
+  const filteredResults = analysisResults.filter(Boolean) as ScanResult[];
 
   logger.info("Analysis results summary", {
     totalProcessed: validFiles.length,
@@ -580,6 +588,8 @@ const processFiles = async (
   return filteredResults;
 };
 
+type Event = EventBridgeEvent<'pull_request.opened', GitHubPROpenedEventDetail>
+
 /**
  * Main Lambda handler function
  * Orchestrates the entire code review process
@@ -588,7 +598,7 @@ const processFiles = async (
  * @param context - Lambda context
  * @returns Promise containing execution results
  */
-const _handler = async (event: any, context: any) => {
+const _handler = async (event: Event, context: any) => {
   const startTime = Date.now();
   try {
     const detail = event.detail;
@@ -637,6 +647,16 @@ const _handler = async (event: any, context: any) => {
       issuesFound: totalIssues,
       duration,
     });
+
+    const repoId = `github#${detail.data.repository.id}`
+    const pr: Scans.PullRequest = {
+      id: detail.data.pull_request.id.toString(),
+      number: detail.data.pull_request.number,
+      url: detail.data.pull_request.url,
+      title: detail.data.pull_request.title,
+      createdAt: detail.data.pull_request.created_at,
+    }
+    await Scans.saveScanResults(repoId, pr, results)
 
     // Return success response with metrics
     return {
