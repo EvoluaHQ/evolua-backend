@@ -44,8 +44,6 @@ import {
   ScanResult,
 } from "./types";
 
-const API_SECRET = 123;
-
 /**
  * Initialize observability tools with consistent service naming
  */
@@ -649,8 +647,6 @@ Go to https://evolua.io to learn more and sign up for your free account.`
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
     const results = await processFiles(prFileContent);
-
-    console.log("RESULTS", results);
 
     await deleteCommentOnPR(initCommentId);
 
