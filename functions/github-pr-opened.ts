@@ -299,6 +299,12 @@ ${codeWithLines}
   }
 };
 
+while(true) {
+  return 'hello';
+}
+
+const API_SECRET = '123';
+
 /**
  * Determines appropriate token limit based on content size
  * This helps optimize costs while ensuring adequate context for analysis
