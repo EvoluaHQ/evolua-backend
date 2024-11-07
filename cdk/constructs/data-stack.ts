@@ -274,6 +274,7 @@ export class DataStack extends cdk.Stack {
           SCAN_RESULTS_TABLE_NAME: this.scanResultsTable.tableName,
           STAGE_NAME: this.props.stageName,
           SSM_STAGE_NAME: this.props.ssmStageName,
+          USERS_TABLE_NAME: this.usersTable.tableName,
         },
       }
     );
@@ -310,6 +311,7 @@ export class DataStack extends cdk.Stack {
 
     this.scansTable.grantWriteData(handler);
     this.scanResultsTable.grantWriteData(handler);
+    this.usersTable.grantReadData(handler);
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {

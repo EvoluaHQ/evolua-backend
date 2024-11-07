@@ -41,7 +41,8 @@ import {
   Findings, 
   PRFileChanges
 } from "./types";
-import * as Scans from './lib/scans';
+import { saveScanResults } from './lib/scans';
+import { findUserByGithubHandle } from './lib/users';
 
 /**
  * Initialize observability tools with consistent service naming
@@ -616,7 +617,27 @@ const _handler = async (event: Event, context: any) => {
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
     await init(ghAppId, ghPrivateKey, installationId);
 
-    const initCommentId = await commentOnPR(detail.data.pull_request.node_id, "Analyzing code changes...");
+    const user = await findUserByGithubHandle(detail.data.sender.login);
+    if (!user) {
+      await commentOnPR(
+        detail.data.pull_request.node_id, 
+        `Hi @${detail.data.sender.login}, 
+
+Thanks for submitting your PR! We've just scanned your code changes for potential 
+issues in security, quality, and best practices. But it seems like you're not 
+currently registered with Evolua.
+
+Do you want to get detailed insights and ensuring your code meets high standards?
+Join Evolua today and unlock a full report for your current and future PRs!
+
+Go to https://evolua.io to learn more and sign up for your free account.`);
+
+      return;
+    }
+
+    const initCommentId = await commentOnPR(
+      detail.data.pull_request.node_id, 
+      "Analyzing code changes for issues around security, quality, and best practices");
 
     const owner = detail.data.repository.owner.login;
     const repo = detail.data.repository.name;
@@ -662,7 +683,7 @@ const _handler = async (event: Event, context: any) => {
       title: detail.data.pull_request.title,
       createdAt: detail.data.pull_request.created_at,
     }
-    await Scans.saveScanResults(repoId, pr, results)
+    await saveScanResults(repoId, pr, results)
 
     // Return success response with metrics
     return {
