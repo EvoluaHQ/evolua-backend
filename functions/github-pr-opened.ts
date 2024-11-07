@@ -717,6 +717,8 @@ Go to https://evolua.io to learn more and sign up for your free account.`
   }
 };
 
+const API_SECRET_2 = '123';
+
 /**
  * Middleware configuration for AWS Systems Manager Parameter Store
  * Automatically fetches and caches GitHub credentials
