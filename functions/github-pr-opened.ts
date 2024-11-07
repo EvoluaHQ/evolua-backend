@@ -30,6 +30,8 @@ import {
   init,
   processAIResponse,
   submitPRReview,
+  commentOnPR,
+  deleteCommentOnPR,
 } from "./lib/github-helper";
 import { EventBridgeEvent } from 'aws-lambda';
 import { 
@@ -614,6 +616,8 @@ const _handler = async (event: Event, context: any) => {
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
     await init(ghAppId, ghPrivateKey, installationId);
 
+    const initCommentId = await commentOnPR(detail.data.pull_request.node_id, "Analyzing code changes...");
+
     const owner = detail.data.repository.owner.login;
     const repo = detail.data.repository.name;
     const pullNumber = detail.data.pull_request.number;
@@ -624,6 +628,8 @@ const _handler = async (event: Event, context: any) => {
     const results = await processFiles(prFileContent);
 
     console.log("RESULTS", results);
+
+    await deleteCommentOnPR(initCommentId);
 
     // Submit review with all comments
     if (results.length > 0) {

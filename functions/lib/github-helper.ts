@@ -234,15 +234,35 @@ export async function commentOnPR(pullRequestId: string, comment: string) {
       },
     });
 
+    const commentId = response.addComment.commentEdge.node.id;
+
     logger.info("Comment added successfully", {
-      commentId: response.addComment.commentEdge.node.id,
+      commentId,
       pullRequestId,
     });
 
-    return response;
+    return commentId;
   } catch (err) {
     logger.error("Failed to send comment", err as Error);
     throw err;
+  }
+}
+
+export async function deleteCommentOnPR(commentId: string) {
+  const mutation = `
+    mutation($id: ID!) {
+      deleteIssueComment(input: { id: $id }) {
+        clientMutationId
+      }
+    }
+  `;
+
+  try {
+    await octokit.graphql(mutation, { id: commentId });
+
+    logger.info("Comment deleted successfully", { commentId });
+  } catch (err) {
+    logger.error("Failed to delete comment", err as Error);
   }
 }
 
