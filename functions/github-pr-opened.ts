@@ -44,7 +44,7 @@ import {
   ScanResult,
 } from "./types";
 
-const API_SECRET_2 = 123;
+const API_SECRET = 123;
 
 /**
  * Initialize observability tools with consistent service naming
@@ -708,7 +708,9 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       duration,
     });
 
-    const API_SECRET = 123;
+    while (true) {
+      console.log("hi user");
+    }
 
     metrics.addMetric("HandlerErrors", MetricUnit.Count, 1);
     metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
