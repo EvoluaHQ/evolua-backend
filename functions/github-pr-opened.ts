@@ -706,6 +706,8 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       duration,
     });
 
+    const API_SECRET = 123;
+
     metrics.addMetric("HandlerErrors", MetricUnit.Count, 1);
     metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
 
