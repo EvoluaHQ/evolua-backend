@@ -24,25 +24,25 @@ import {
   ConverseCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { Sema } from "async-sema";
+import { EventBridgeEvent } from "aws-lambda";
 import { shouldSkipFile } from "./lib/file-ignore";
 import {
+  commentOnPR,
+  deleteCommentOnPR,
   fetchPRFiles,
   init,
   processAIResponse,
   submitPRReview,
-  commentOnPR,
-  deleteCommentOnPR,
 } from "./lib/github-helper";
-import { EventBridgeEvent } from 'aws-lambda';
-import { 
-  GitHubPROpenedEventDetail, 
-  AIResponse, 
-  ScanResult, 
-  Findings, 
-  PRFileChanges
+import { PullRequest, saveScanResults } from "./lib/scans";
+import { findUserByGithubHandle } from "./lib/users";
+import {
+  AIResponse,
+  Findings,
+  GitHubPROpenedEventDetail,
+  PRFileChanges,
+  ScanResult,
 } from "./types";
-import { saveScanResults } from './lib/scans';
-import { findUserByGithubHandle } from './lib/users';
 
 /**
  * Initialize observability tools with consistent service naming
@@ -489,9 +489,7 @@ const analyzeFile = async (
  * @param files - Array of files to analyze
  * @returns Promise containing array of analysis results
  */
-const processFiles = async (
-  files: PRFileChanges[]
-): Promise<ScanResult[]> => {
+const processFiles = async (files: PRFileChanges[]): Promise<ScanResult[]> => {
   logger.info("Starting processFiles", {
     totalFiles: files.length,
     filesDetails: files.map((f) => ({
@@ -591,7 +589,7 @@ const processFiles = async (
   return filteredResults;
 };
 
-type Event = EventBridgeEvent<'pull_request.opened', GitHubPROpenedEventDetail>
+type Event = EventBridgeEvent<"pull_request.opened", GitHubPROpenedEventDetail>;
 
 /**
  * Main Lambda handler function
@@ -620,7 +618,7 @@ const _handler = async (event: Event, context: any) => {
     const user = await findUserByGithubHandle(detail.data.sender.login);
     if (!user) {
       await commentOnPR(
-        detail.data.pull_request.node_id, 
+        detail.data.pull_request.node_id,
         `Hi @${detail.data.sender.login}, 
 
 Thanks for submitting your PR! We've just scanned your code changes for potential 
@@ -630,14 +628,16 @@ currently registered with Evolua.
 Do you want to get detailed insights and ensuring your code meets high standards?
 Join Evolua today and unlock a full report for your current and future PRs!
 
-Go to https://evolua.io to learn more and sign up for your free account.`);
+Go to https://evolua.io to learn more and sign up for your free account.`
+      );
 
       return;
     }
 
     const initCommentId = await commentOnPR(
-      detail.data.pull_request.node_id, 
-      "Analyzing code changes for issues around security, quality, and best practices");
+      detail.data.pull_request.node_id,
+      "Analyzing code changes for issues around security, quality, and best practices"
+    );
 
     const owner = detail.data.repository.owner.login;
     const repo = detail.data.repository.name;
@@ -675,15 +675,15 @@ Go to https://evolua.io to learn more and sign up for your free account.`);
       duration,
     });
 
-    const repoId = `github#${detail.data.repository.id}`
-    const pr: Scans.PullRequest = {
+    const repoId = `github#${detail.data.repository.id}`;
+    const pr: PullRequest = {
       id: detail.data.pull_request.id.toString(),
       number: detail.data.pull_request.number,
       url: detail.data.pull_request.url,
       title: detail.data.pull_request.title,
       createdAt: detail.data.pull_request.created_at,
-    }
-    await saveScanResults(repoId, pr, results)
+    };
+    await saveScanResults(repoId, pr, results);
 
     // Return success response with metrics
     return {
