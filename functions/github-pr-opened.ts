@@ -150,7 +150,7 @@ Analysis Areas:
 3. Best Practices: Assess adherence to design patterns and coding standards
 
 Guidelines:
-- Focus ONLY on changed lines (marked with →)
+- Use the full file content for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Provide actionable recommendations with code examples
 - Reference relevant standards (CWE, OWASP)
@@ -241,7 +241,7 @@ const sendMessage = async (
     file.changes.lineNumbers
   );
 
-  const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations. Use the full file content for context but ONLY report issues found in the changed lines marked with arrows (→).
+  const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
 
 Changed lines: ${file.changes.lineNumbers.join(", ")}
 
