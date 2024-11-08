@@ -50,7 +50,7 @@ import { MaxScansExceededError } from "./types/errors";
 /**
  * Initialize observability tools with consistent service naming
  */
-const SERVICE_NAME = "github-pr-opened";
+const SERVICE_NAME = "PullRequest Service";
 
 /**
  * Initialize AWS Lambda Powertools for enhanced observability
@@ -342,6 +342,8 @@ const _handler = async (event: Event, context: any) => {
     try {
       await incrementScanCount(user.id, subscriptionLimits.maxScans);
     } catch (error) {
+      logger.error("Scan increment error", { error, username });
+
       if (error instanceof MaxScansExceededError) {
         // User reached their scan limit
         await commentOnPR(
@@ -395,7 +397,7 @@ const _handler = async (event: Event, context: any) => {
       }
     );
 
-    logger.debug(
+    logger.info(
       "Filtered out invalid files (e.g. null content, excluded file types, etc.)",
       {
         filesCount: validFiles.length,

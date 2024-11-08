@@ -9,12 +9,12 @@ import {
   ConverseCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { PRFileChanges } from "../types";
-import { ANTHROPIC_API_KEY, SITE_URL } from "./config";
+import { ANTHROPIC_API_KEY, SITE_URL } from "./constants";
 
 /**
  * Initialize observability tools with consistent service naming
  */
-const SERVICE_NAME = "lib/ai";
+const SERVICE_NAME = "AI Service";
 
 /**
  * Initialize AWS Lambda Powertools for enhanced observability
@@ -166,52 +166,51 @@ export const sendMessage = async (
   ${codeWithLines}
   </source code>`;
 
-  logger.info("Sending analysis request", {
-    path: file.path,
-    changedLines: file.changes.lineNumbers,
-    messageSample: USER_PROMPT,
-  });
+  try {
+    if (byPassBedrock) {
+      const response = await anthropic.messages.create({
+        model: AI_ANALYSIS_CONFIG.model.id,
+        max_tokens: tokenLimit,
+        temperature: AI_ANALYSIS_CONFIG.model.temperature,
+        system: SCAN_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: USER_PROMPT }],
+      });
 
-  if (byPassBedrock) {
-    const response = await anthropic.messages.create({
-      model: AI_ANALYSIS_CONFIG.model.id,
-      max_tokens: tokenLimit,
-      temperature: AI_ANALYSIS_CONFIG.model.temperature,
-      system: SCAN_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: USER_PROMPT }],
-    });
+      logger.info("Anthropic response received", {
+        hasContent: !!response.content,
+        contentLength: response.content?.length,
+      });
 
-    logger.info("Anthropic response received", {
-      hasContent: !!response.content,
-      contentLength: response.content?.length,
-    });
-
-    return response;
-  } else {
-    return await bedrockClient.send(
-      new ConverseCommand({
-        modelId: AI_ANALYSIS_CONFIG.model.id,
-        system: [
-          {
-            text: SCAN_SYSTEM_PROMPT,
+      return response;
+    } else {
+      return await bedrockClient.send(
+        new ConverseCommand({
+          modelId: AI_ANALYSIS_CONFIG.model.id,
+          system: [
+            {
+              text: SCAN_SYSTEM_PROMPT,
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  text: USER_PROMPT,
+                },
+              ],
+            },
+          ],
+          inferenceConfig: {
+            temperature: AI_ANALYSIS_CONFIG.model.temperature,
+            maxTokens: tokenLimit,
           },
-        ],
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                text: USER_PROMPT,
-              },
-            ],
-          },
-        ],
-        inferenceConfig: {
-          temperature: AI_ANALYSIS_CONFIG.model.temperature,
-          maxTokens: tokenLimit,
-        },
-      })
-    );
+        })
+      );
+    }
+  } catch (error) {
+    logger.error("AI API call failed", { error, file: file.path });
+    throw error;
   }
 };
 
@@ -226,7 +225,7 @@ const getTokenLimit = (content: string): number => {
   const size = content.length;
 
   // Quick return for small files using predefined tiers
-  if (size <= AI_ANALYSIS_CONFIG.fileSize.large.maxSize) {
+  if (size <= AI_ANALYSIS_CONFIG.fileSize.small.maxSize) {
     return AI_ANALYSIS_CONFIG.fileSize.small.tokens;
   }
   if (size <= AI_ANALYSIS_CONFIG.fileSize.medium.maxSize) {
