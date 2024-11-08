@@ -137,6 +137,11 @@ export type DiffSide = "LEFT" | "RIGHT";
  */
 export interface DraftPullRequestReviewThread {
   /**
+   * Content of the comment (required)
+   */
+  body: string;
+
+  /**
    * Path to the file being commented on (required)
    */
   path: string;
@@ -164,9 +169,4 @@ export interface DraftPullRequestReviewThread {
    * Only needed for multi-line comments
    */
   startSide?: DiffSide;
-
-  /**
-   * Content of the comment (required)
-   */
-  body: string;
 }

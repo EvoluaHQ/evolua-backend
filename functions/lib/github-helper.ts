@@ -618,7 +618,7 @@ async function getPullRequestInfo(
 
     return {
       id: response.repository.pullRequest.id,
-      sha: response.repository.pullRequest.headRef.target.oid,
+      sha: response.repository.pullRequest.headRef?.target?.oid,
     };
   } catch (error) {
     logger.error("Failed to fetch PR ID", error as Error);
@@ -653,7 +653,10 @@ export async function submitPRReview(
           })
           .filter(
             (comment): comment is DraftPullRequestReviewThread =>
-              comment !== null
+              comment !== null &&
+              !!comment.path &&
+              !!comment.line &&
+              !!comment.body
           )
       );
 
@@ -677,7 +680,10 @@ export async function submitPRReview(
       owner,
       repo,
       prNumber
-    );
+    ).catch((error) => {
+      logger.error("Failed to get PR info", { error, owner, repo, prNumber });
+      throw new Error("Failed to get pull request information");
+    });
 
     await createPRReview(
       owner,
