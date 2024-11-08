@@ -71,6 +71,8 @@ export class DataStack extends cdk.Stack {
 
     this.createClerkUserUpsertedEventHandlerFunction();
     this.createClerkUserDeletedEventHandlerFunction();
+    
+    this.createResetScanCountsFunction();
 
     new cdk.CfnOutput(this, "SSM_STAGE_NAME", {
       key: "SsmStageName",
@@ -311,7 +313,7 @@ export class DataStack extends cdk.Stack {
 
     this.scansTable.grantWriteData(handler);
     this.scanResultsTable.grantWriteData(handler);
-    this.usersTable.grantReadData(handler);
+    this.usersTable.grantReadWriteData(handler);
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {
@@ -388,7 +390,7 @@ export class DataStack extends cdk.Stack {
       "ClerkUserUpsertedHandlerFunction",
       {
         runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-        entry: "functions/clerk-user-upserted.js",
+        entry: "functions/clerk-user-upserted.ts",
         handler: "handler",
         memorySize: 1024,
         timeout: cdk.Duration.seconds(6),
@@ -414,13 +416,13 @@ export class DataStack extends cdk.Stack {
     this.usersTable.grantReadWriteData(handler);
   }
 
-  private createClerkUserDeletedEventHandlerFunction() {
+  private createClerkUserDeletedEventHandlerFunction() {    
     const handler = new lambda.NodejsFunction(
       this,
       "ClerkUserDeletedHandlerFunction",
       {
         runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-        entry: "functions/clerk-user-deleted.js",
+        entry: "functions/clerk-user-deleted.ts",
         handler: "handler",
         memorySize: 1024,
         timeout: cdk.Duration.seconds(6),
@@ -442,6 +444,36 @@ export class DataStack extends cdk.Stack {
       },
     });
     clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+  }
+
+  private createResetScanCountsFunction() {
+    // this cron function fetches all users and resets their scan count if their billing cycle is up
+    // TODO: refactor this once we have a decent number of users (say, 1000+)
+    const handler = new lambda.NodejsFunction(
+      this,
+      "ResetScanCountsFunction",
+      {
+        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+        entry: "functions/reset-scan-counts.ts",
+        handler: "handler",
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(15),
+        environment: {
+          USERS_TABLE_NAME: this.usersTable.tableName,
+        },
+      }
+    );
+
+    // Create a rule to run the function every day at 00:03 UTC
+    new events.Rule(this, "ResetScanCountRule", {
+      schedule: events.Schedule.cron({
+        minute: "3",
+        hour: "0",
+      }),
+      targets: [new eventTargets.LambdaFunction(handler)],
+    });
 
     this.usersTable.grantReadWriteData(handler);
   }

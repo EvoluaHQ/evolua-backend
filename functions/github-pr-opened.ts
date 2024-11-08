@@ -35,7 +35,7 @@ import {
   submitPRReview,
 } from "./lib/github-helper";
 import { PullRequest, saveScanResults } from "./lib/scans";
-import { findUserByGithubHandle } from "./lib/users";
+import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
 import {
   AIResponse,
   Findings,
@@ -43,6 +43,8 @@ import {
   PRFileChanges,
   ScanResult,
 } from "./types";
+import { MaxScansExceededError } from "./types/errors";
+import { SUBSCRIPTION_TIERS } from './lib/constants';
 
 /**
  * Initialize observability tools with consistent service naming
@@ -489,7 +491,7 @@ const analyzeFile = async (
  * @param files - Array of files to analyze
  * @returns Promise containing array of analysis results
  */
-const processFiles = async (files: PRFileChanges[]): Promise<ScanResult[]> => {
+const processFiles = async (files: (PRFileChanges & { content: string })[]): Promise<ScanResult[]> => {
   logger.info("Starting processFiles", {
     totalFiles: files.length,
     filesDetails: files.map((f) => ({
@@ -507,48 +509,8 @@ const processFiles = async (files: PRFileChanges[]): Promise<ScanResult[]> => {
     resumeFn: () => logger.info("Resuming analysis..."),
   });
 
-  // Filter out files with null content
-  const validFiles = files.filter(
-    (file): file is PRFileChanges & { content: string } => {
-      // Check if file content is null
-      if (!file.content) {
-        logger.warn(`Skipping file ${file.path}: null content`);
-        metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
-        return false;
-      }
-
-      // Check if file should be skipped based on filters
-      if (shouldSkipFile(file.path)) {
-        logger.info(`Skipping excluded file: ${file.path}`);
-        metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1);
-        return false;
-      }
-
-      // Check if file has any changes
-      if (file.changes.lineNumbers.length === 0) {
-        logger.info(`Skipping file with no changes: ${file.path}`);
-        return false;
-      }
-
-      return true;
-    }
-  );
-
-  logger.info("Files after filtering", {
-    originalCount: files.length,
-    validCount: validFiles.length,
-    validFiles: validFiles.map((f) => ({
-      path: f.path,
-      changesCount: f.changes.lineNumbers.length,
-    })),
-  });
-
-  logger.info("Before analysisPromises", {
-    validFiles,
-  });
-
   // Process each file with semaphore control
-  const analysisPromises = validFiles.map(async (file) => {
+  const analysisPromises = files.map(async (file) => {
     await sema.acquire();
     try {
       const findings = await analyzeFile(file);
@@ -578,7 +540,7 @@ const processFiles = async (files: PRFileChanges[]): Promise<ScanResult[]> => {
   const filteredResults = analysisResults.filter(Boolean) as ScanResult[];
 
   logger.info("Analysis results summary", {
-    totalProcessed: validFiles.length,
+    totalProcessed: files.length,
     resultsFound: filteredResults.length,
     resultDetails: filteredResults.map((r) => ({
       path: r.file.path,
@@ -634,6 +596,32 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       return;
     }
 
+    const subscriptionLimits = user.tier === 'FREE'
+      ? SUBSCRIPTION_TIERS.FREE
+      : SUBSCRIPTION_TIERS.PRO;
+
+    try {
+      await incrementScanCount(user.id, subscriptionLimits.maxScans);
+    } catch (error) {
+      if (error instanceof MaxScansExceededError) {
+        await commentOnPR(
+          detail.data.pull_request.node_id,
+          `Hi @${detail.data.sender.login},
+
+Thanks for submitting your PR! We've just scanned your code changes for potential
+issues in security, quality, and best practices. But it seems like you've
+reached your monthly scan limit.
+
+We hope you've enjoyed our service so far! If you'd like to continue getting detailed
+insights about your code, then drop us an email at support@evolua.io and upgrade your
+account.`);
+
+        return;
+      } else {
+        throw error;
+      }
+    }    
+
     const initCommentId = await commentOnPR(
       detail.data.pull_request.node_id,
       `Hey @${detail.data.sender.login}, I got this, I'll review it now, give me a sec. 🚀`
@@ -645,7 +633,60 @@ Go to https://evolua.io to learn more and sign up for your free account.`
 
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
-    const results = await processFiles(prFileContent);
+
+    logger.debug("Fetched PR files", {
+      filesCount: prFileContent.length
+    });
+
+    // Filter out files with null content
+    const validFiles = prFileContent.filter(
+      (file): file is PRFileChanges & { content: string } => {
+        // Check if file content is null
+        if (!file.content) {
+          logger.warn(`Skipping file ${file.path}: null content`);
+          metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
+          return false;
+        }
+
+        // Check if file should be skipped based on filters
+        if (shouldSkipFile(file.path)) {
+          logger.info(`Skipping excluded file: ${file.path}`);
+          metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1);
+          return false;
+        }
+
+        // Check if file has any changes
+        if (file.changes.lineNumbers.length === 0) {
+          logger.info(`Skipping file with no changes: ${file.path}`);
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+    logger.debug("Filtered out invalid files (e.g. null content, excluded file types, etc.)", {
+      filesCount: validFiles.length
+    });
+    
+    const maxFilesPerScan = subscriptionLimits.filesPerScan;
+    // only process the first maxFilesPerScan files
+    const filesToAnalyze = validFiles.slice(0, maxFilesPerScan);
+
+    if (filesToAnalyze.length > validFiles.length) {
+      await commentOnPR(
+        detail.data.pull_request.node_id,
+        `Hi @${detail.data.sender.login},
+
+Thanks for submitting your PR! We've only scanned the first ${maxFilesPerScan} 
+files (after filtering out empty files, or excluded files such as package-lock.json) 
+because that's the limit for your current subscription tier. If you'd like to scan
+more files with each PR, consider upgrading your account.
+
+Email us at support@evolua.io and we'll help you out!`);
+    }
+
+    const results = await processFiles(filesToAnalyze);
 
     console.log("RESULTS", results);
 
@@ -665,11 +706,11 @@ Go to https://evolua.io to learn more and sign up for your free account.`
 
     // Record execution metrics
     metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
-    metrics.addMetric("FilesAnalyzed", MetricUnit.Count, prFileContent.length);
+    metrics.addMetric("FilesAnalyzed", MetricUnit.Count, filesToAnalyze.length);
     metrics.addMetric("IssuesFound", MetricUnit.Count, totalIssues);
 
     logger.info("Analysis completed successfully", {
-      filesAnalyzed: prFileContent.length,
+      filesAnalyzed: filesToAnalyze.length,
       issuesFound: totalIssues,
       duration,
     });
@@ -690,7 +731,7 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       body: JSON.stringify({
         message: "PR review completed",
         metrics: {
-          filesAnalyzed: prFileContent.length,
+          filesAnalyzed: filesToAnalyze.length,
           issuesFound: totalIssues,
           processingTimeMs: duration,
         },
