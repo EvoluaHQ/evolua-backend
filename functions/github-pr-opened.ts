@@ -578,7 +578,7 @@ const _handler = async (event: Event, context: any) => {
     await init(ghAppId, ghPrivateKey, installationId);
 
     const user = await findUserByGithubHandle(detail.data.sender.login);
-    if (!user && detail.data.sender.login !== "samuelcastro") {
+    if (!user) {
       await commentOnPR(
         detail.data.pull_request.node_id,
         `Hi @${detail.data.sender.login}, 
