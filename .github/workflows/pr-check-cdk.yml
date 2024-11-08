@@ -1,0 +1,36 @@
+name: PR Check CDK synth
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  synth:
+    # this prevents concurrent builds
+    concurrency: dev-environment
+
+    runs-on: ubuntu-latest
+
+    # this is required for authenticating to AWS via the OIDC Provider we set up
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-region: us-east-1
+        role-to-assume: arn:aws:iam::221082206118:role/GitHubActionsRole
+        role-session-name: GithubActionsSession
+
+    - name: npm ci
+      run: npm ci
+
+    - name: CDK synth
+      run: npx cdk synth
