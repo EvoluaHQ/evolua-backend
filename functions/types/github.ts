@@ -75,6 +75,11 @@ export interface GetPRIDResponse {
   repository: {
     pullRequest: {
       id: string; // GitHub's GraphQL node ID
+      headRef: {
+        target: {
+          oid: string; // This is the HEAD SHA
+        };
+      };
     };
   };
 }
@@ -90,12 +95,6 @@ export interface AddCommentResponse {
   };
 }
 
-export interface PullRequestReviewComment {
-  path: string; //Path to the file being commented on.
-  position: number; //Position in the file to leave a comment on.
-  body: string; //Body of the comment to leave.
-}
-
 /**
  * Interface for changed lines information
  */
@@ -108,8 +107,6 @@ export interface FileChanges {
     header: string; // Chunk header from git diff
     changedLines: number[]; // Add this to track changed lines per chunk
   }>;
-  // Store diff positions at the file level instead of per chunk
-  lineToDiffPosition: Map<number, number>;
 }
 
 /**
@@ -128,4 +125,48 @@ export interface GitHubFileResponse {
   changes: number;
   patch?: string;
   previous_filename?: string;
+}
+
+/**
+ * The side of the diff where the comment appears
+ */
+export type DiffSide = "LEFT" | "RIGHT";
+
+/**
+ * Draft Pull Request Review Thread type for GitHub's GraphQL API
+ */
+export interface DraftPullRequestReviewThread {
+  /**
+   * Content of the comment (required)
+   */
+  body: string;
+
+  /**
+   * Path to the file being commented on (required)
+   */
+  path: string;
+
+  /**
+   * The line number in the file to comment on (required)
+   * For multi-line comments, this is the ending line
+   */
+  line: number;
+
+  /**
+   * The side of the diff where the line resides (defaults to RIGHT)
+   * For multi-line comments, this is the side for the end line
+   */
+  side?: DiffSide;
+
+  /**
+   * The starting line for multi-line comments (optional)
+   * Only needed when commenting on multiple lines
+   */
+  startLine?: number;
+
+  /**
+   * The side of the diff where the start line resides (defaults to RIGHT)
+   * Only needed for multi-line comments
+   */
+  startSide?: DiffSide;
 }

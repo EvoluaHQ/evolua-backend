@@ -9,8 +9,8 @@ import {
   AddCommentResponse,
   AddPRReviewResponse,
   AIResponse,
-  ScanResult,
   CodeIssue,
+  DraftPullRequestReviewThread,
   FetchPRFileContentResponse,
   FileChanges,
   FileChangeType,
@@ -18,9 +18,9 @@ import {
   GetPRIDResponse,
   GitHubFileResponse,
   PRFileChanges,
-  PullRequestReviewComment,
   ReviewStats,
   ReviewSummary,
+  ScanResult,
 } from "../types";
 
 const logger = new Logger();
@@ -53,7 +53,7 @@ export async function init(
 }
 
 /**
- * Parse patch information to get exact line changes and their diff positions
+ * Parse patch information to get exact line changes
  * Example patch format:
  * @@ -1,4 +1,4 @@ (means: original starts line 1, 4 lines; new starts line 1, 4 lines)
  *  unchanged line
@@ -71,7 +71,6 @@ function parseFileChanges(patch?: string): FileChanges {
       header: string;
       changedLines: number[];
     }>,
-    lineToDiffPosition: new Map<number, number>(),
   };
 
   if (!patch) return changes;
@@ -84,7 +83,6 @@ function parseFileChanges(patch?: string): FileChanges {
   let chunkLines: string[] = [];
   let chunkHeader = "";
   let chunkChangedLines: number[] = [];
-  let currentDiffPosition = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -109,31 +107,25 @@ function parseFileChanges(patch?: string): FileChanges {
         currentNewLine = parseInt(match[2], 10);
         chunkStart = currentNewLine;
         chunkHeader = line;
-        currentDiffPosition = 1; // Reset diff position for new chunk
       }
       continue;
     }
 
     if (line.startsWith("+")) {
       // Added or modified line
-      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition);
       chunkChangedLines.push(currentNewLine);
       if (!changes.lineNumbers.includes(currentNewLine)) {
         changes.lineNumbers.push(currentNewLine);
       }
       chunkLines.push(line.slice(1));
       currentNewLine++;
-      currentDiffPosition++;
     } else if (line.startsWith("-")) {
-      // Removed line - only increment diff position
+      // Removed line
       chunkLines.push(line.slice(1));
-      currentDiffPosition++;
     } else if (line.startsWith(" ")) {
       // Context line
-      changes.lineToDiffPosition.set(currentNewLine, currentDiffPosition);
       chunkLines.push(line.slice(1));
       currentNewLine++;
-      currentDiffPosition++;
     }
   }
 
@@ -153,7 +145,6 @@ function parseFileChanges(patch?: string): FileChanges {
   logger.info("Parsed file changes", {
     totalChangedLines: changes.lineNumbers.length,
     changedLines: changes.lineNumbers,
-    diffPositions: Array.from(changes.lineToDiffPosition.entries()),
     chunks: changes.chunks.map((chunk) => ({
       header: chunk.header,
       start: chunk.start,
@@ -481,7 +472,7 @@ export async function createPRReview(
   prNumber: number,
   prId: string,
   commitId: string,
-  comments: PullRequestReviewComment[],
+  comments: DraftPullRequestReviewThread[],
   results: ScanResult[]
 ) {
   const mutation = `
@@ -510,7 +501,7 @@ export async function createPRReview(
         pullRequestId: prId,
         commitOID: commitId,
         body: summary,
-        comments,
+        threads: comments,
         event: "COMMENT",
       },
     });
@@ -597,16 +588,22 @@ ${issue?.recommendation?.code?.trim()}
 /**
  * Queries pull request ID needed for review creation
  */
-async function getPullRequestId(
+async function getPullRequestInfo(
   owner: string,
   repo: string,
   prNumber: number
-): Promise<string> {
+): Promise<{ id: string; sha: string }> {
   const query = `
     query($owner: String!, $repo: String!, $number: Int!) {
       repository(owner: $owner, name: $repo) {
         pullRequest(number: $number) {
           id
+          headRef {
+          target {
+            ... on Commit {
+              oid
+            }
+          }
         }
       }
     }
@@ -619,7 +616,10 @@ async function getPullRequestId(
       number: prNumber,
     });
 
-    return response.repository.pullRequest.id;
+    return {
+      id: response.repository.pullRequest.id,
+      sha: response.repository.pullRequest.headRef?.target?.oid,
+    };
   } catch (error) {
     logger.error("Failed to fetch PR ID", error as Error);
     throw error;
@@ -633,12 +633,11 @@ export async function submitPRReview(
   owner: string,
   repo: string,
   prNumber: number,
-  commitId: string,
   results: ScanResult[]
 ) {
   try {
     // Use flatMap to transform and flatten in one operation
-    const comments: PullRequestReviewComment[] = results
+    const comments: DraftPullRequestReviewThread[] = results
       .filter(({ file }) => hasChanges(file))
       .flatMap(({ file, findings }) =>
         findings.issues
@@ -646,26 +645,18 @@ export async function submitPRReview(
             file.changes.lineNumbers.includes(issue.location.lineStart)
           )
           .map((issue) => {
-            const diffPosition = file.changes.lineToDiffPosition.get(
-              issue.location.lineStart
-            );
-
-            if (diffPosition === undefined) {
-              logger.warn("Missing diff position for line", {
-                file: file.path,
-                line: issue.location.lineStart,
-              });
-              return null;
-            }
-
             return {
               path: file.path,
-              position: diffPosition,
+              line: issue.location.lineStart,
               body: formatIssueComment(issue),
             };
           })
           .filter(
-            (comment): comment is PullRequestReviewComment => comment !== null
+            (comment): comment is DraftPullRequestReviewThread =>
+              comment !== null &&
+              !!comment.path &&
+              !!comment.line &&
+              !!comment.body
           )
       );
 
@@ -685,7 +676,14 @@ export async function submitPRReview(
       ),
     });
 
-    const prId = await getPullRequestId(owner, repo, prNumber);
+    const { id: prId, sha: commitId } = await getPullRequestInfo(
+      owner,
+      repo,
+      prNumber
+    ).catch((error) => {
+      logger.error("Failed to get PR info", { error, owner, repo, prNumber });
+      throw new Error("Failed to get pull request information");
+    });
 
     await createPRReview(
       owner,
