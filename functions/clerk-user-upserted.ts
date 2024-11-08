@@ -1,29 +1,32 @@
-import { EventBridgeEvent } from 'aws-lambda';
-import { ClerkUserUpsertedEventDetail } from './types/eventbridge';
-import * as ulid from 'ulid';
-import * as Users from './lib/users';
+import { EventBridgeEvent } from "aws-lambda";
+import * as ulid from "ulid";
+import { findUser, Tier, upsertUser } from "./lib/users";
+import { ClerkUserUpsertedEventDetail } from "./types/eventbridge";
 
-type Event = EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>;
+type Event = EventBridgeEvent<
+  "user.created" | "user.updated",
+  ClerkUserUpsertedEventDetail
+>;
 
 export const handler = async (event: Event) => {
   const email = event.detail.data.data.email_addresses?.[0]?.email_address;
   const clerkUserId = event.detail.data.data.id;
-  const githubAccount = event.detail.data.data.external_accounts.find(x => 
-    x.provider === 'oauth_github'
+  const githubAccount = event.detail.data.data.external_accounts.find(
+    (x) => x.provider === "oauth_github"
   );
   const githubHandle = githubAccount?.username;
 
-  const user = await Users.findUser(clerkUserId, email, githubHandle);
+  const user = await findUser(clerkUserId, email, githubHandle);
   const id = user?.id || ulid.ulid();
   const now = new Date().toJSON();
-  
-  const tier = user?.tier || 'FREE';
-  
+
+  const tier: Tier = user?.tier || Tier.FREE;
+
   // billing start date should be in 'YYYY-MM-DD' format
   // and every day, we'll reset users who's billing cycle is up
   const billingStartDate = user?.billingStartDate || now.slice(0, 10);
-  
-  await Users.upsertUser({
+
+  await upsertUser({
     id,
     email,
     username: event.detail.data.data.username,
@@ -37,10 +40,10 @@ export const handler = async (event: Event) => {
     deleted: false,
     tier,
     billingStartDate,
-    scanCount: user?.scanCount || 0
+    scanCount: user?.scanCount || 0,
   });
 
   return {
-    statusCode: 200
+    statusCode: 200,
   };
-}
+};
