@@ -2,19 +2,7 @@ import { EventBridgeEvent } from 'aws-lambda';
 import { ClerkUserUpsertedEventDetail } from './types/eventbridge';
 import * as ulid from 'ulid';
 import * as Users from './lib/users';
-
-const SUBSCRIPTION_TIERS = {
-  'FREE': {
-    maxScans: 5,
-    filesPerScan: 10,
-    maxFileSize: 500_000, // 500 KB
-  },
-  'PRO': {
-    maxScans: 100,
-    filesPerScan: 100,
-    maxFileSize: 1_000_000, // 1MB
-  }
-}
+import { SUBSCRIPTION_TIERS } from './lib/constants';
 
 type Event = EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>;
 
@@ -25,10 +13,6 @@ export const handler = async (event: Event) => {
     x.provider === 'oauth_github'
   );
   const githubHandle = githubAccount?.username;
-
-  if (!githubHandle) {
-  
-  }
 
   const user = await Users.findUser(clerkUserId, email, githubHandle);
   const id = user?.id || ulid.ulid();
