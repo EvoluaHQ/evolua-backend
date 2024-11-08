@@ -45,7 +45,7 @@ export class EvoluaWebhookStack extends cdk.Stack {
   private createClerkWebhook() {
     const webhookFunction = new lambda.NodejsFunction(this, 'ClerkWebhookFunction', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-      entry: 'functions/clerk-webhook.js',
+      entry: 'functions/clerk-webhook.ts',
       handler: 'handler',
       memorySize: 1024,
       environment: {
