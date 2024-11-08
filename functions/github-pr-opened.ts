@@ -636,7 +636,7 @@ Go to https://evolua.io to learn more and sign up for your free account.`
 
     const initCommentId = await commentOnPR(
       detail.data.pull_request.node_id,
-      "Analyzing code changes for issues around security, quality, and best practices"
+      `Hey @${detail.data.sender.login}, I got this, I'll review it now, give me a sec. 🚀`
     );
 
     const owner = detail.data.repository.owner.login;
