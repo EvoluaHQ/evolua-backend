@@ -1,18 +1,18 @@
 {
   "action": "opened",
-  "number": 12,
+  "number": 49,
   "pull_request": {
-    "url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/12",
-    "id": 2163763989,
-    "node_id": "PR_kwDOM8Zo2M6A-GsV",
-    "html_url": "https://github.com/EvoluaHQ/evolua-backend/pull/12",
-    "diff_url": "https://github.com/EvoluaHQ/evolua-backend/pull/12.diff",
-    "patch_url": "https://github.com/EvoluaHQ/evolua-backend/pull/12.patch",
-    "issue_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/12",
-    "number": 12,
+    "url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/49",
+    "id": 2170327119,
+    "node_id": "PR_kwDOM8Zo2M6BXJBP",
+    "html_url": "https://github.com/EvoluaHQ/evolua-backend/pull/49",
+    "diff_url": "https://github.com/EvoluaHQ/evolua-backend/pull/49.diff",
+    "patch_url": "https://github.com/EvoluaHQ/evolua-backend/pull/49.patch",
+    "issue_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/49",
+    "number": 49,
     "state": "open",
     "locked": false,
-    "title": "Added bad change",
+    "title": "Change 2",
     "user": {
       "login": "samuelcastro",
       "id": 5281701,
@@ -35,8 +35,8 @@
       "site_admin": false
     },
     "body": null,
-    "created_at": "2024-11-05T19:24:17Z",
-    "updated_at": "2024-11-05T19:24:17Z",
+    "created_at": "2024-11-08T19:14:40Z",
+    "updated_at": "2024-11-08T19:14:40Z",
     "closed_at": null,
     "merged_at": null,
     "merge_commit_sha": null,
@@ -47,15 +47,15 @@
     "labels": [],
     "milestone": null,
     "draft": false,
-    "commits_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/12/commits",
-    "review_comments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/12/comments",
+    "commits_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/49/commits",
+    "review_comments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/49/comments",
     "review_comment_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/comments{/number}",
-    "comments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/12/comments",
-    "statuses_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/statuses/1d67547c3dbec67571e0fce39aaa884e1621d646",
+    "comments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/49/comments",
+    "statuses_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/statuses/08277815d7e2ac9befdb9ae45f8726b3d9aedbbe",
     "head": {
-      "label": "EvoluaHQ:new-bad-changes",
-      "ref": "new-bad-changes",
-      "sha": "1d67547c3dbec67571e0fce39aaa884e1621d646",
+      "label": "EvoluaHQ:change-2",
+      "ref": "change-2",
+      "sha": "08277815d7e2ac9befdb9ae45f8726b3d9aedbbe",
       "user": {
         "login": "EvoluaHQ",
         "id": 184421884,
@@ -145,14 +145,14 @@
         "releases_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/releases{/id}",
         "deployments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/deployments",
         "created_at": "2024-10-06T22:23:18Z",
-        "updated_at": "2024-11-05T11:21:30Z",
-        "pushed_at": "2024-11-05T19:24:10Z",
+        "updated_at": "2024-11-08T19:13:45Z",
+        "pushed_at": "2024-11-08T19:14:34Z",
         "git_url": "git://github.com/EvoluaHQ/evolua-backend.git",
         "ssh_url": "git@github.com:EvoluaHQ/evolua-backend.git",
         "clone_url": "https://github.com/EvoluaHQ/evolua-backend.git",
         "svn_url": "https://github.com/EvoluaHQ/evolua-backend",
         "homepage": null,
-        "size": 765,
+        "size": 920,
         "stargazers_count": 0,
         "watchers_count": 0,
         "language": "TypeScript",
@@ -166,7 +166,7 @@
         "mirror_url": null,
         "archived": false,
         "disabled": false,
-        "open_issues_count": 3,
+        "open_issues_count": 1,
         "license": null,
         "allow_forking": false,
         "is_template": false,
@@ -174,7 +174,7 @@
         "topics": [],
         "visibility": "private",
         "forks": 0,
-        "open_issues": 3,
+        "open_issues": 1,
         "watchers": 0,
         "default_branch": "main",
         "allow_squash_merge": true,
@@ -193,7 +193,7 @@
     "base": {
       "label": "EvoluaHQ:main",
       "ref": "main",
-      "sha": "cd96226bbeb6974894b1bca8c57efd86253a5cd9",
+      "sha": "dd6188a79439ff098274cbb9042113ba181916f8",
       "user": {
         "login": "EvoluaHQ",
         "id": 184421884,
@@ -283,14 +283,14 @@
         "releases_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/releases{/id}",
         "deployments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/deployments",
         "created_at": "2024-10-06T22:23:18Z",
-        "updated_at": "2024-11-05T11:21:30Z",
-        "pushed_at": "2024-11-05T19:24:10Z",
+        "updated_at": "2024-11-08T19:13:45Z",
+        "pushed_at": "2024-11-08T19:14:34Z",
         "git_url": "git://github.com/EvoluaHQ/evolua-backend.git",
         "ssh_url": "git@github.com:EvoluaHQ/evolua-backend.git",
         "clone_url": "https://github.com/EvoluaHQ/evolua-backend.git",
         "svn_url": "https://github.com/EvoluaHQ/evolua-backend",
         "homepage": null,
-        "size": 765,
+        "size": 920,
         "stargazers_count": 0,
         "watchers_count": 0,
         "language": "TypeScript",
@@ -304,7 +304,7 @@
         "mirror_url": null,
         "archived": false,
         "disabled": false,
-        "open_issues_count": 3,
+        "open_issues_count": 1,
         "license": null,
         "allow_forking": false,
         "is_template": false,
@@ -312,7 +312,7 @@
         "topics": [],
         "visibility": "private",
         "forks": 0,
-        "open_issues": 3,
+        "open_issues": 1,
         "watchers": 0,
         "default_branch": "main",
         "allow_squash_merge": true,
@@ -330,28 +330,28 @@
     },
     "_links": {
       "self": {
-        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/12"
+        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/49"
       },
       "html": {
-        "href": "https://github.com/EvoluaHQ/evolua-backend/pull/12"
+        "href": "https://github.com/EvoluaHQ/evolua-backend/pull/49"
       },
       "issue": {
-        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/12"
+        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/49"
       },
       "comments": {
-        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/12/comments"
+        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/issues/49/comments"
       },
       "review_comments": {
-        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/12/comments"
+        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/49/comments"
       },
       "review_comment": {
         "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/comments{/number}"
       },
       "commits": {
-        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/12/commits"
+        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/pulls/49/commits"
       },
       "statuses": {
-        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/statuses/1d67547c3dbec67571e0fce39aaa884e1621d646"
+        "href": "https://api.github.com/repos/EvoluaHQ/evolua-backend/statuses/08277815d7e2ac9befdb9ae45f8726b3d9aedbbe"
       }
     },
     "author_association": "CONTRIBUTOR",
@@ -365,9 +365,9 @@
     "comments": 0,
     "review_comments": 0,
     "maintainer_can_modify": false,
-    "commits": 1,
+    "commits": 6,
     "additions": 6,
-    "deletions": 0,
+    "deletions": 2,
     "changed_files": 1
   },
   "repository": {
@@ -438,14 +438,14 @@
     "releases_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/releases{/id}",
     "deployments_url": "https://api.github.com/repos/EvoluaHQ/evolua-backend/deployments",
     "created_at": "2024-10-06T22:23:18Z",
-    "updated_at": "2024-11-05T11:21:30Z",
-    "pushed_at": "2024-11-05T19:24:10Z",
+    "updated_at": "2024-11-08T19:13:45Z",
+    "pushed_at": "2024-11-08T19:14:34Z",
     "git_url": "git://github.com/EvoluaHQ/evolua-backend.git",
     "ssh_url": "git@github.com:EvoluaHQ/evolua-backend.git",
     "clone_url": "https://github.com/EvoluaHQ/evolua-backend.git",
     "svn_url": "https://github.com/EvoluaHQ/evolua-backend",
     "homepage": null,
-    "size": 765,
+    "size": 920,
     "stargazers_count": 0,
     "watchers_count": 0,
     "language": "TypeScript",
@@ -459,7 +459,7 @@
     "mirror_url": null,
     "archived": false,
     "disabled": false,
-    "open_issues_count": 3,
+    "open_issues_count": 1,
     "license": null,
     "allow_forking": false,
     "is_template": false,
@@ -467,7 +467,7 @@
     "topics": [],
     "visibility": "private",
     "forks": 0,
-    "open_issues": 3,
+    "open_issues": 1,
     "watchers": 0,
     "default_branch": "main",
     "custom_properties": {}
