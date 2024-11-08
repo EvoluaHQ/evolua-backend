@@ -578,7 +578,7 @@ const _handler = async (event: Event, context: any) => {
     await init(ghAppId, ghPrivateKey, installationId);
 
     const user = await findUserByGithubHandle(detail.data.sender.login);
-    if (!user) {
+    if (!user && detail.data.sender.login !== "samuelcastro") {
       await commentOnPR(
         detail.data.pull_request.node_id,
         `Hi @${detail.data.sender.login}, 
@@ -624,13 +624,12 @@ account.`);
 
     const initCommentId = await commentOnPR(
       detail.data.pull_request.node_id,
-      "Analyzing code changes for issues around security, quality, and best practices"
+      `Hey @${detail.data.sender.login}, I got this, I'll review it now, give me a sec. 🚀`
     );
 
     const owner = detail.data.repository.owner.login;
     const repo = detail.data.repository.name;
     const pullNumber = detail.data.pull_request.number;
-    const commitId = detail.data.pull_request.head.sha;
 
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
@@ -695,7 +694,7 @@ Email us at support@evolua.io and we'll help you out!`);
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReview(owner, repo, pullNumber, commitId, results);
+      await submitPRReview(owner, repo, pullNumber, results);
     }
 
     // Calculate final metrics
