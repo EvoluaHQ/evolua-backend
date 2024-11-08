@@ -4,6 +4,7 @@ import {
   PutCommand,
   QueryCommand,
   UpdateCommand,
+  ScanCommand,
 } from "@aws-sdk/lib-dynamodb"
 import { ServiceException } from "@smithy/smithy-client"
 import { MaxScansExceededError } from '../types/errors'
@@ -28,9 +29,13 @@ export interface User {
   createdAt: string
   lastUpdatedAt: string
   deleted: boolean
+  tier: string
+  billingStartDate: string
+  scanCount: number
+  maxScans: number
 }
 
-export async function findUserByClerkUserId(clerkUserId: string): Promise<User | null> {
+export async function findUserByClerkUserId(clerkUserId?: string): Promise<User | null> {
   if (!clerkUserId) {
     return null
   }
@@ -49,7 +54,11 @@ export async function findUserByClerkUserId(clerkUserId: string): Promise<User |
   return (Items?.[0] as User) || null
 }
 
-export async function findUserByEmail(email: string): Promise<User | null> {
+export async function findUserByEmail(email?: string): Promise<User | null> {
+  if (!email) {
+    return null
+  }
+
   const { Items } = await DocumentClient.send(
     new QueryCommand({
       TableName: USERS_TABLE_NAME,
@@ -64,7 +73,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return (Items?.[0] as User) || null
 }
 
-export async function findUserByGithubHandle(githubHandle: string): Promise<User | null> {
+export async function findUserByGithubHandle(githubHandle?: string): Promise<User | null> {
   if (!githubHandle) {
     return null
   }
@@ -84,9 +93,9 @@ export async function findUserByGithubHandle(githubHandle: string): Promise<User
 }
 
 export async function findUser(
-  clerkUserId: string,
-  email: string,
-  githubHandle: string
+  clerkUserId?: string,
+  email?: string,
+  githubHandle?: string
 ) {
   const [byClerkId, byEmail, byGhHandle] = await Promise.all([
     findUserByClerkUserId(clerkUserId),
@@ -148,4 +157,42 @@ export async function incrementScanCount(id: string) {
       throw err
     }
   }
+}
+
+export async function resetScanCount(id: string) {
+  await DocumentClient.send(
+    new UpdateCommand({
+      TableName: USERS_TABLE_NAME,
+      Key: {
+        id,
+      },
+      UpdateExpression: "SET scanCount = :zero",
+      ExpressionAttributeValues: {
+        ":zero": 0,
+      },
+      ConditionExpression: "attribute_exists(id)",
+    })
+  )
+}
+
+export async function getAllUsers(): Promise<User[]> {
+  let lastEvaluatedKey: any = undefined
+  const users: User[] = []
+
+  do {
+    const { Items, LastEvaluatedKey } = await DocumentClient.send(
+      new ScanCommand({
+        TableName: USERS_TABLE_NAME,
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    )
+
+    if (Items) {
+      users.push(...(Items as User[]))
+    }
+
+    lastEvaluatedKey = LastEvaluatedKey
+  } while (lastEvaluatedKey)
+
+  return users
 }

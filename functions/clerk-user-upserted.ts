@@ -1,24 +1,43 @@
-const { ClerkUserUpsertedEventDetail } = require('./types/eventbridge');
-const ulid = require('ulid');
-const Users = require('./lib/users');
-const { SUBSCRIPTION_TIERS } = require('./lib/constants');
+import { EventBridgeEvent } from 'aws-lambda';
+import { ClerkUserUpsertedEventDetail } from './types/eventbridge';
+import * as ulid from 'ulid';
+import * as Users from './lib/users';
 
-/**
- * @param {import('aws-lambda').EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>} event
- */
-module.exports.handler = async (event) => {
+const SUBSCRIPTION_TIERS = {
+  'FREE': {
+    maxScans: 5,
+    filesPerScan: 10,
+    maxFileSize: 500_000, // 500 KB
+  },
+  'PRO': {
+    maxScans: 100,
+    filesPerScan: 100,
+    maxFileSize: 1_000_000, // 1MB
+  }
+}
+
+type Event = EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>;
+
+export const handler = async (event: Event) => {
   const email = event.detail.data.data.email_addresses?.[0]?.email_address;
   const clerkUserId = event.detail.data.data.id;
   const githubAccount = event.detail.data.data.external_accounts.find(x => 
     x.provider === 'oauth_github'
   );
-  const githubHandle = githubAccount?.username;  
+  const githubHandle = githubAccount?.username;
+
+  if (!githubHandle) {
+  
+  }
 
   const user = await Users.findUser(clerkUserId, email, githubHandle);
   const id = user?.id || ulid.ulid();
   const now = new Date().toJSON();
   
   const tier = user?.tier || 'FREE';
+  const subscriptionTier = tier === 'FREE'
+    ? SUBSCRIPTION_TIERS.FREE
+    : SUBSCRIPTION_TIERS.PRO;
   
   // billing start date should be in 'YYYY-MM-DD' format
   // and every day, we'll reset users who's billing cycle is up
@@ -35,10 +54,11 @@ module.exports.handler = async (event) => {
     githubHandle,
     createdAt: user?.createdAt || now,
     lastUpdatedAt: now,
+    deleted: false,
     tier,
     billingStartDate,
     scanCount: user?.scanCount || 0,
-    maxScans: user?.maxScans || SUBSCRIPTION_TIERS[tier].maxScans,
+    maxScans: user?.maxScans || subscriptionTier.maxScans,
   });
 
   return {
