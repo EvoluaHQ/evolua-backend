@@ -299,6 +299,13 @@ ${codeWithLines}
   }
 };
 
+while(true) {
+  return 'hello';
+}
+
+const API_SECRET = '123';
+
+
 /**
  * Determines appropriate token limit based on content size
  * This helps optimize costs while ensuring adequate context for analysis
@@ -711,6 +718,8 @@ Go to https://evolua.io to learn more and sign up for your free account.`
     throw error;
   }
 };
+
+const API_SECRET_2 = '123';
 
 /**
  * Middleware configuration for AWS Systems Manager Parameter Store
