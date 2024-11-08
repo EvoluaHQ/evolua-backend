@@ -31,15 +31,19 @@ export function request(ctx) {
 * @param {import('@aws-appsync/utils').Context} ctx 
 */
 export function response(ctx) {
-  const tier = ctx.result.item.tier || 'FREE'
+  if (!ctx.result) {
+    return null
+  }
+
+  const tier = ctx.result.tier || 'FREE'
   const subscriptionTier = SUBSCRIPTION_TIERS[tier]
   
   return {
     tier,
-    scans: ctx.result.item.scanCount,
+    scans: ctx.result.scanCount,
     limit: {
       tier,
-      maxScans: subscriptionTier.maxScans,
+      scans: subscriptionTier.maxScans,
       filesPerScan: subscriptionTier.filesPerScan,
       maxFileSize: subscriptionTier.maxFileSize
     }
