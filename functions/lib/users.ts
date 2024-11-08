@@ -1,42 +1,49 @@
-import { DynamoDB } from "@aws-sdk/client-dynamodb"
+import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
-  UpdateCommand,
   ScanCommand,
-} from "@aws-sdk/lib-dynamodb"
-import { ServiceException } from "@smithy/smithy-client"
-import { MaxScansExceededError } from '../types/errors'
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { ServiceException } from "@smithy/smithy-client";
+import { MaxScansExceededError } from "../types/errors";
 
-const dynamodbClient = new DynamoDB()
-const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient)
+const dynamodbClient = new DynamoDB();
+const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
-const USERS_TABLE_NAME = process.env.USERS_TABLE_NAME || ""
+const USERS_TABLE_NAME = process.env.USERS_TABLE_NAME || "";
 if (!USERS_TABLE_NAME) {
-  throw new Error("USERS_TABLE_NAME env var is missing")
+  throw new Error("USERS_TABLE_NAME env var is missing");
+}
+
+export enum Tier {
+  FREE = "FREE",
+  PRO = "PRO",
 }
 
 export interface User {
-  id: string
-  email: string
-  username: string
-  imageUrl: string
-  clerkUserId: string
-  firstName: string
-  lastName: string
-  githubHandle?: string
-  createdAt: string
-  lastUpdatedAt: string
-  deleted: boolean
-  tier: string
-  billingStartDate: string
-  scanCount: number
+  id: string;
+  email: string;
+  username: string;
+  imageUrl: string;
+  clerkUserId: string;
+  firstName: string;
+  lastName: string;
+  githubHandle?: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  deleted: boolean;
+  tier: Tier;
+  billingStartDate: string;
+  scanCount: number;
 }
 
-export async function findUserByClerkUserId(clerkUserId?: string): Promise<User | null> {
+export async function findUserByClerkUserId(
+  clerkUserId?: string
+): Promise<User | null> {
   if (!clerkUserId) {
-    return null
+    return null;
   }
 
   const { Items } = await DocumentClient.send(
@@ -48,14 +55,14 @@ export async function findUserByClerkUserId(clerkUserId?: string): Promise<User 
         ":clerkUserId": clerkUserId,
       },
     })
-  )
+  );
 
-  return (Items?.[0] as User) || null
+  return (Items?.[0] as User) || null;
 }
 
 export async function findUserByEmail(email?: string): Promise<User | null> {
   if (!email) {
-    return null
+    return null;
   }
 
   const { Items } = await DocumentClient.send(
@@ -67,14 +74,16 @@ export async function findUserByEmail(email?: string): Promise<User | null> {
         ":email": email,
       },
     })
-  )
+  );
 
-  return (Items?.[0] as User) || null
+  return (Items?.[0] as User) || null;
 }
 
-export async function findUserByGithubHandle(githubHandle?: string): Promise<User | null> {
+export async function findUserByGithubHandle(
+  githubHandle?: string
+): Promise<User | null> {
   if (!githubHandle) {
-    return null
+    return null;
   }
 
   const { Items } = await DocumentClient.send(
@@ -86,9 +95,9 @@ export async function findUserByGithubHandle(githubHandle?: string): Promise<Use
         ":githubHandle": githubHandle,
       },
     })
-  )
+  );
 
-  return (Items?.[0] as User) || null
+  return (Items?.[0] as User) || null;
 }
 
 export async function findUser(
@@ -100,9 +109,9 @@ export async function findUser(
     findUserByClerkUserId(clerkUserId),
     findUserByEmail(email),
     findUserByGithubHandle(githubHandle),
-  ])
+  ]);
 
-  return byClerkId || byEmail || byGhHandle
+  return byClerkId || byEmail || byGhHandle;
 }
 
 export async function upsertUser(user: User) {
@@ -114,7 +123,7 @@ export async function upsertUser(user: User) {
         deleted: false,
       },
     })
-  )
+  );
 }
 
 export async function deleteUser(id: string) {
@@ -131,7 +140,7 @@ export async function deleteUser(id: string) {
         lastUpdatedAt: new Date().toISOString(),
       },
     })
-  )
+  );
 }
 
 export async function incrementScanCount(id: string, maxScans: number) {
@@ -149,12 +158,15 @@ export async function incrementScanCount(id: string, maxScans: number) {
         },
         ConditionExpression: "attribute_exists(id) AND scanCount < :maxScans",
       })
-    )
+    );
   } catch (err) {
-    if (err instanceof ServiceException && err.name === "ConditionalCheckFailedException") {
-      throw new MaxScansExceededError("Scan limit exceeded")
+    if (
+      err instanceof ServiceException &&
+      err.name === "ConditionalCheckFailedException"
+    ) {
+      throw new MaxScansExceededError("Scan limit exceeded");
     } else {
-      throw err
+      throw err;
     }
   }
 }
@@ -172,12 +184,12 @@ export async function resetScanCount(id: string) {
       },
       ConditionExpression: "attribute_exists(id)",
     })
-  )
+  );
 }
 
 export async function getAllUsers(): Promise<User[]> {
-  let lastEvaluatedKey: any = undefined
-  const users: User[] = []
+  let lastEvaluatedKey: any = undefined;
+  const users: User[] = [];
 
   do {
     const { Items, LastEvaluatedKey } = await DocumentClient.send(
@@ -185,14 +197,14 @@ export async function getAllUsers(): Promise<User[]> {
         TableName: USERS_TABLE_NAME,
         ExclusiveStartKey: lastEvaluatedKey,
       })
-    )
+    );
 
     if (Items) {
-      users.push(...(Items as User[]))
+      users.push(...(Items as User[]));
     }
 
-    lastEvaluatedKey = LastEvaluatedKey
-  } while (lastEvaluatedKey)
+    lastEvaluatedKey = LastEvaluatedKey;
+  } while (lastEvaluatedKey);
 
-  return users
+  return users;
 }

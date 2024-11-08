@@ -23,7 +23,10 @@ import {
   ScanResult,
 } from "../types";
 
-const logger = new Logger();
+const logger = new Logger({
+  serviceName: "lib/github-helper",
+  logLevel: "INFO",
+});
 
 // Configuration for rate limiting
 const GITHUB_API_RATE_LIMIT = {
