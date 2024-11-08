@@ -140,33 +140,34 @@ const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
 const byPassBedrock = true; //BY_PASS_BEDROCK === "true"
 
 /**
- * System prompt that guides the AI's behavior
- * Focuses on specific areas of code review and sets clear expectations
- */
-const SYSTEM_PROMPT = `You are a code review assistant focused on security, quality, and best practices. Analyze code for issues matching these criteria:
-1. Security: vulnerabilities and weaknesses
-2. Quality: maintainability and performance
-3. Best Practices: standard patterns and guidelines
-
-Keep responses concise and structured. Only report concrete, evidence-based issues.`;
-
-/**
  * Analysis prompt template defining the expected response format
  * Uses a structured JSON schema for consistent and parseable results
+ * Focuses on specific areas of code review and sets clear expectations
  */
-const ANALYSIS_PROMPT = `Analyze the following source code for security vulnerabilities, code quality issues, and best practice violations.
-The code contains changes in specific lines that need review. Each line is prefixed with its line number (e.g., "309|").
+const SYSTEM_PROMPT = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices. 
 
-IMPORTANT: You must use the exact line numbers shown in the prefix when reporting issues in the location field.
+Analysis Areas:
+1. Security: Identify vulnerabilities, data exposure, and unsafe operations
+2. Code Quality: Evaluate performance, maintainability, and error handling
+3. Best Practices: Assess adherence to design patterns and coding standards
 
-Return findings in <findings> tags using this JSON format:
+Guidelines:
+- Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
+- Use exact line numbers from the prefix
+- Provide actionable recommendations with code examples
+- Reference relevant standards (CWE, OWASP)
+- Assign risk levels based on severity:
+  * Critical: Direct security risks (RCE, credentials exposure, etc)
+  * High: Significant vulnerabilities (XSS, unsafe operations, etc)
+  * Medium: Important quality issues (performance, validation, error handling, etc)
+  * Low: Minor improvements (style, documentation, optimizations)
 
-<JSON format>
+Always return findings in this exact JSON format within <findings> tags:
 {
   "summary": {
-    "total_issues": number,
+    "total_issues": number,   // Count of all identified issues
     "risk_levels": {
-      "critical": number,
+      "critical": number,     // Count per severity
       "high": number,
       "medium": number,
       "low": number
@@ -174,29 +175,28 @@ Return findings in <findings> tags using this JSON format:
   },
   "issues": [
     {
-      "id": string,             // e.g., "VULN-001", "QUAL-002"
-      "type": "vulnerability|code_quality|best_practice",
-      "risk_level": "critical|high|medium|low",
-      "title": string,
+      "id": string,             // e.g., "VULN-001", "SEC-001", "QUAL-002"
+      "type": "vulnerability" | "code_quality" | "best_practice",
+      "risk_level": "critical" | "high" | "medium" | "low",
+      "title": string,          // Clear, specific issue title
       "location": { 
-        "line_start": number,   // Use the exact line number from the prefix (e.g., 309)
-        "line_end": number      // Use the exact line number from the prefix
+        "line_start": number,   // Must use the exact line number from the prefix (e.g., 309)
+        "line_end": number      // Must use the exact line number from the prefix
       },
-      "description": string,
+      "description": string,    // Clear explanation of the issue
       "impact": string,
       "recommendation": {
-        "description": string,  // Step-by-step explanation of how to fix. Use MDX markdown for formatting for code snippets if needed.
-        "code": string          // ONLY the exact code that should replace the original.
+        "description": string, // Use MDX markdown for code snippets if needed.
+        "code": string         // Complete replacement code only
       },
-      "cwe_id": string,           // e.g., "CWE-287"
-      "references": {             // Optional: Industry standard references
-        "standard": string,       // e.g., "OWASP", "CERT", "ISO-27001"
-        "rule_id": string         // e.g., "A1:2021", "MSC21-C"
+      "cwe_id": string,        // e.g., "CWE-287"
+      "references": {
+        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001"
+        "rule_id": string      // e.g., "A1:2021", "MSC21-C"
       }
     }
   ]
-}
-  </JSON format>`;
+}`;
 
 /**
  * Prepares code content with line numbers and change indicators for AI analysis
@@ -243,10 +243,9 @@ const sendMessage = async (
     file.changes.lineNumbers
   );
 
-  const message = `${ANALYSIS_PROMPT}
+  const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
 
-The following code has changes in lines: ${file.changes.lineNumbers.join(", ")}.
-Review these lines carefully for security issues, code quality problems, and best practice violations.
+Changed lines: ${file.changes.lineNumbers.join(", ")}
 
 <source code>
 ${codeWithLines}
@@ -255,7 +254,7 @@ ${codeWithLines}
   logger.info("Sending analysis request", {
     path: file.path,
     changedLines: file.changes.lineNumbers,
-    messageSample: message,
+    messageSample: USER_PROMPT,
   });
 
   if (byPassBedrock) {
@@ -264,7 +263,7 @@ ${codeWithLines}
       max_tokens: tokenLimit,
       temperature: ANALYSIS_CONFIG.model.temperature,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: "user", content: USER_PROMPT }],
     });
 
     logger.info("Anthropic response received", {
@@ -287,7 +286,7 @@ ${codeWithLines}
             role: "user",
             content: [
               {
-                text: message,
+                text: USER_PROMPT,
               },
             ],
           },
