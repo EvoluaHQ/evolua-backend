@@ -12,19 +12,21 @@
  * - Support for multiple AI providers
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import { Message } from "@anthropic-ai/sdk/resources";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
-import {
-  BedrockRuntimeClient,
-  ContentBlock,
-  ConverseCommand,
-  ConverseCommandOutput,
-} from "@aws-sdk/client-bedrock-runtime";
+import { ContentBlock } from "@aws-sdk/client-bedrock-runtime";
 import { Sema } from "async-sema";
 import { EventBridgeEvent } from "aws-lambda";
+import {
+  AI_ANALYSIS_CONFIG,
+  getScanLimitMessage,
+  getStartReviewMessage,
+  getSubscriptionLimitMessage,
+  getUnregisteredUserMessage,
+  sendMessage,
+} from "./lib/ai";
+import { SUBSCRIPTION_TIERS } from "./lib/constants";
 import { shouldSkipFile } from "./lib/file-ignore";
 import {
   commentOnPR,
@@ -35,7 +37,7 @@ import {
   submitPRReview,
 } from "./lib/github-helper";
 import { PullRequest, saveScanResults } from "./lib/scans";
-import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
+import { findUserByGithubHandle, incrementScanCount, Tier } from "./lib/users";
 import {
   AIResponse,
   Findings,
@@ -44,14 +46,11 @@ import {
   ScanResult,
 } from "./types";
 import { MaxScansExceededError } from "./types/errors";
-import { SUBSCRIPTION_TIERS } from './lib/constants';
 
 /**
  * Initialize observability tools with consistent service naming
  */
-const SERVICE_NAME = "code-review-service";
-const ANTHROPIC_API_KEY =
-  "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";
+const SERVICE_NAME = "github-pr-opened";
 
 /**
  * Initialize AWS Lambda Powertools for enhanced observability
@@ -80,261 +79,7 @@ const ssm = require("@middy/ssm");
  * SSM_STAGE_NAME: Deployment stage (dev/staging/prod)
  * BY_PASS_BEDROCK: Flag to use Anthropic directly instead of AWS Bedrock
  */
-const {
-  SSM_STAGE_NAME,
-  BY_PASS_BEDROCK,
-  ENVIRONMENT = "development",
-} = process.env;
-
-/**
- * Configuration constants for file processing and analysis
- * Size thresholds are based on:
- * - AI model token limits
- * - Processing efficiency
- * - Response quality considerations
- * - Cost optimization
- */
-const ANALYSIS_CONFIG = {
-  // File size thresholds in characters
-  fileSize: {
-    small: {
-      maxSize: 10_000, // 10KB
-      tokens: 2_048,
-    },
-    medium: {
-      maxSize: 30_000, // 30KB
-      tokens: 4_096,
-    },
-    large: {
-      maxSize: 100_000, // 100KB
-      tokens: 8_192,
-    },
-    max: 500_000, // 500KB
-  },
-  // Token allocation based on file size
-  tokens: {
-    maxContextTokens: 200_000, // Claude's max context window
-    maxOutputTokens: 8_192, // Maximum response size
-    reservedTokens: 1_000, // Reserved for prompts and overhead
-    charsPerToken: 3.5, // Average characters per token for code
-  },
-  // AI model configuration
-  model: {
-    id: "claude-3-5-sonnet-20241022",
-    temperature: 0.1, // Lower temperature for more consistent results
-  },
-  // Concurrency and processing
-  concurrency: {
-    limit: 5, // Maximum parallel processes
-    retryLimit: 3, // Maximum retry attempts
-    retryDelay: 1000, // Base delay between retries (ms)
-  },
-} as const;
-
-// Initialize AI clients
-const anthropic = new Anthropic({
-  apiKey: ANTHROPIC_API_KEY,
-});
-
-const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
-const byPassBedrock = true; //BY_PASS_BEDROCK === "true"
-
-/**
- * Analysis prompt template defining the expected response format
- * Uses a structured JSON schema for consistent and parseable results
- * Focuses on specific areas of code review and sets clear expectations
- */
-const SYSTEM_PROMPT = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices. 
-
-Analysis Areas:
-1. Security: Identify vulnerabilities, data exposure, and unsafe operations
-2. Code Quality: Evaluate performance, maintainability, and error handling
-3. Best Practices: Assess adherence to design patterns and coding standards
-
-Guidelines:
-- Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
-- Use exact line numbers from the prefix
-- Provide actionable recommendations with code examples
-- Reference relevant standards (CWE, OWASP)
-- Assign risk levels based on severity:
-  * Critical: Direct security risks (RCE, credentials exposure, etc)
-  * High: Significant vulnerabilities (XSS, unsafe operations, etc)
-  * Medium: Important quality issues (performance, validation, error handling, etc)
-  * Low: Minor improvements (style, documentation, optimizations)
-
-Always return findings in this exact JSON format within <findings> tags:
-{
-  "summary": {
-    "total_issues": number,   // Count of all identified issues
-    "risk_levels": {
-      "critical": number,     // Count per severity
-      "high": number,
-      "medium": number,
-      "low": number
-    }
-  },
-  "issues": [
-    {
-      "id": string,             // e.g., "VULN-001", "SEC-001", "QUAL-002"
-      "type": "vulnerability" | "code_quality" | "best_practice",
-      "risk_level": "critical" | "high" | "medium" | "low",
-      "title": string,          // Clear, specific issue title
-      "location": { 
-        "line_start": number,   // Must use the exact line number from the prefix (e.g., 309)
-        "line_end": number      // Must use the exact line number from the prefix
-      },
-      "description": string,    // Clear explanation of the issue
-      "impact": string,
-      "recommendation": {
-        "description": string, // Use MDX markdown for code snippets if needed.
-        "code": string         // Complete replacement code only
-      },
-      "cwe_id": string,        // e.g., "CWE-287"
-      "references": {
-        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001"
-        "rule_id": string      // e.g., "A1:2021", "MSC21-C"
-      }
-    }
-  ]
-}`;
-
-/**
- * Prepares code content with line numbers and change indicators for AI analysis
- * Adds line numbers as prefixes and marks changed lines with arrows
- *
- * @param content - The source code content
- * @param changedLines - Array of line numbers that were changed
- * @returns Formatted code string with line numbers and change indicators
- *
- * Example output:
- * 307|   }
- * 308| }
- * 309|→ while(true) {
- * 310|→   return 'hello'
- */
-function prepareCodeWithLineNumbers(
-  content: string,
-  changedLines: number[]
-): string {
-  const lines = content.split("\n");
-  return lines
-    .map((line, index) => {
-      const lineNumber = index + 1;
-      const prefix = changedLines.includes(lineNumber) ? "→ " : "  ";
-      return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`;
-    })
-    .join("\n");
-}
-
-/**
- * Sends code analysis request to the configured AI service
- * Handles different API formats for Anthropic direct vs AWS Bedrock
- *
- * @param content - The code content to analyze
- * @returns Promise containing the AI service response
- */
-const sendMessage = async (
-  file: PRFileChanges & { content: string }
-): Promise<ConverseCommandOutput | Message> => {
-  // Get optimal token limit
-  const tokenLimit = getTokenLimit(file.content);
-  const codeWithLines = prepareCodeWithLineNumbers(
-    file.content.trim(),
-    file.changes.lineNumbers
-  );
-
-  const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
-
-Changed lines: ${file.changes.lineNumbers.join(", ")}
-
-<source code>
-${codeWithLines}
-</source code>`;
-
-  logger.info("Sending analysis request", {
-    path: file.path,
-    changedLines: file.changes.lineNumbers,
-    messageSample: USER_PROMPT,
-  });
-
-  if (byPassBedrock) {
-    const response = await anthropic.messages.create({
-      model: ANALYSIS_CONFIG.model.id,
-      max_tokens: tokenLimit,
-      temperature: ANALYSIS_CONFIG.model.temperature,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: USER_PROMPT }],
-    });
-
-    logger.info("Anthropic response received", {
-      hasContent: !!response.content,
-      contentLength: response.content?.length,
-    });
-
-    return response;
-  } else {
-    return await bedrockClient.send(
-      new ConverseCommand({
-        modelId: ANALYSIS_CONFIG.model.id,
-        system: [
-          {
-            text: SYSTEM_PROMPT,
-          },
-        ],
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                text: USER_PROMPT,
-              },
-            ],
-          },
-        ],
-        inferenceConfig: {
-          temperature: ANALYSIS_CONFIG.model.temperature,
-          maxTokens: tokenLimit,
-        },
-      })
-    );
-  }
-};
-
-/**
- * Determines appropriate token limit based on content size
- * This helps optimize costs while ensuring adequate context for analysis
- *
- * @param content - The code content to analyze
- * @returns The appropriate token limit for the content size
- */
-const getTokenLimit = (content: string): number => {
-  const size = content.length;
-
-  // Quick return for small files using predefined tiers
-  if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
-    return ANALYSIS_CONFIG.fileSize.small.tokens;
-  }
-  if (size <= ANALYSIS_CONFIG.fileSize.medium.maxSize) {
-    return ANALYSIS_CONFIG.fileSize.medium.tokens;
-  }
-  if (size <= ANALYSIS_CONFIG.fileSize.large.maxSize) {
-    return ANALYSIS_CONFIG.fileSize.large.tokens;
-  }
-
-  // For larger files, calculate exact token need
-  const estimatedTokens = Math.ceil(
-    size / ANALYSIS_CONFIG.tokens.charsPerToken
-  );
-  const availableTokens =
-    ANALYSIS_CONFIG.tokens.maxContextTokens -
-    ANALYSIS_CONFIG.tokens.reservedTokens;
-
-  return Math.min(
-    estimatedTokens,
-    availableTokens,
-    ANALYSIS_CONFIG.tokens.maxOutputTokens
-  );
-};
+const { SSM_STAGE_NAME, ENVIRONMENT = "development" } = process.env;
 
 /**
  * Analyzes a single file for code issues
@@ -359,11 +104,11 @@ const analyzeFile = async (
     });
 
     // Skip extremely large files
-    if (fileSize > ANALYSIS_CONFIG.fileSize.max) {
+    if (fileSize > AI_ANALYSIS_CONFIG.fileSize.max) {
       logger.warn(`File too large to process`, {
         filePath: file.path,
         size: fileSize,
-        maxAllowed: ANALYSIS_CONFIG.fileSize.max,
+        maxAllowed: AI_ANALYSIS_CONFIG.fileSize.max,
       });
       metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
       return null;
@@ -490,7 +235,9 @@ const analyzeFile = async (
  * @param files - Array of files to analyze
  * @returns Promise containing array of analysis results
  */
-const processFiles = async (files: (PRFileChanges & { content: string })[]): Promise<ScanResult[]> => {
+const processFiles = async (
+  files: (PRFileChanges & { content: string })[]
+): Promise<ScanResult[]> => {
   logger.info("Starting processFiles", {
     totalFiles: files.length,
     filesDetails: files.map((f) => ({
@@ -502,7 +249,7 @@ const processFiles = async (files: (PRFileChanges & { content: string })[]): Pro
   });
 
   // Initialize semaphore for concurrency control
-  const sema = new Sema(ANALYSIS_CONFIG.concurrency.limit, {
+  const sema = new Sema(AI_ANALYSIS_CONFIG.concurrency.limit, {
     capacity: files.length,
     pauseFn: () => logger.info("Rate limit reached, pausing..."),
     resumeFn: () => logger.info("Resuming analysis..."),
@@ -576,54 +323,42 @@ const _handler = async (event: Event, context: any) => {
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
     await init(ghAppId, ghPrivateKey, installationId);
 
-    const user = await findUserByGithubHandle(detail.data.sender.login);
+    const username = detail.data.sender.login;
+    const user = await findUserByGithubHandle(username);
     if (!user) {
       await commentOnPR(
         detail.data.pull_request.node_id,
-        `Hi @${detail.data.sender.login}, 
-
-Thanks for submitting your PR! We've just scanned your code changes for potential 
-issues in security, quality, and best practices. But it seems like you're not 
-currently registered with Evolua.
-
-Do you want to get detailed insights and ensuring your code meets high standards?
-Join Evolua today and unlock a full report for your current and future PRs!
-
-Go to https://evolua.io to learn more and sign up for your free account.`
+        getUnregisteredUserMessage(username)
       );
 
       return;
     }
 
-    const subscriptionLimits = user.tier === 'FREE'
-      ? SUBSCRIPTION_TIERS.FREE
-      : SUBSCRIPTION_TIERS.PRO;
+    const subscriptionLimits =
+      user.tier === Tier.FREE
+        ? SUBSCRIPTION_TIERS.FREE
+        : SUBSCRIPTION_TIERS.PRO;
 
     try {
       await incrementScanCount(user.id, subscriptionLimits.maxScans);
     } catch (error) {
       if (error instanceof MaxScansExceededError) {
+        // User reached their scan limit
         await commentOnPR(
           detail.data.pull_request.node_id,
-          `Hi @${detail.data.sender.login},
-
-Thanks for submitting your PR! We've just scanned your code changes for potential
-issues in security, quality, and best practices. But it seems like you've
-reached your monthly scan limit.
-
-We hope you've enjoyed our service so far! If you'd like to continue getting detailed
-insights about your code, then drop us an email at support@evolua.io and upgrade your
-account.`);
+          getScanLimitMessage(username)
+        );
 
         return;
       } else {
+        logger.error("Unable to comment on PR", error as Error);
         throw error;
       }
-    }    
+    }
 
     const initCommentId = await commentOnPR(
       detail.data.pull_request.node_id,
-      `Hey @${detail.data.sender.login}, I got this, I'll review it now, give me a sec. 🚀`
+      getStartReviewMessage(username)
     );
 
     const owner = detail.data.repository.owner.login;
@@ -632,10 +367,6 @@ account.`);
 
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
-
-    logger.debug("Fetched PR files", {
-      filesCount: prFileContent.length
-    });
 
     // Filter out files with null content
     const validFiles = prFileContent.filter(
@@ -664,30 +395,28 @@ account.`);
       }
     );
 
-    logger.debug("Filtered out invalid files (e.g. null content, excluded file types, etc.)", {
-      filesCount: validFiles.length
-    });
-    
+    logger.debug(
+      "Filtered out invalid files (e.g. null content, excluded file types, etc.)",
+      {
+        filesCount: validFiles.length,
+      }
+    );
+
     const maxFilesPerScan = subscriptionLimits.filesPerScan;
     // only process the first maxFilesPerScan files
     const filesToAnalyze = validFiles.slice(0, maxFilesPerScan);
 
+    // Notify users if they reach the max file per tier to scan
     if (filesToAnalyze.length > validFiles.length) {
-      await commentOnPR(
-        detail.data.pull_request.node_id,
-        `Hi @${detail.data.sender.login},
+      const maxFilesMessage = getSubscriptionLimitMessage(
+        username,
+        maxFilesPerScan
+      );
 
-Thanks for submitting your PR! We've only scanned the first ${maxFilesPerScan} 
-files (after filtering out empty files, or excluded files such as package-lock.json) 
-because that's the limit for your current subscription tier. If you'd like to scan
-more files with each PR, consider upgrading your account.
-
-Email us at support@evolua.io and we'll help you out!`);
+      await commentOnPR(detail.data.pull_request.node_id, maxFilesMessage);
     }
 
     const results = await processFiles(filesToAnalyze);
-
-    console.log("RESULTS", results);
 
     await deleteCommentOnPR(initCommentId);
 
