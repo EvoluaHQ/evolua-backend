@@ -593,12 +593,11 @@ async function getPullRequestInfo(
   repo: string,
   prNumber: number
 ): Promise<{ id: string; sha: string }> {
-  const query = `
-    query($owner: String!, $repo: String!, $number: Int!) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $number) {
-          id
-          headRef {
+  const query = `query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        id
+        headRef {
           target {
             ... on Commit {
               oid
@@ -607,7 +606,7 @@ async function getPullRequestInfo(
         }
       }
     }
-  `;
+  }`;
 
   try {
     const response = await octokit.graphql<GetPRIDResponse>(query, {
@@ -621,7 +620,7 @@ async function getPullRequestInfo(
       sha: response.repository.pullRequest.headRef?.target?.oid,
     };
   } catch (error) {
-    logger.error("Failed to fetch PR ID", error as Error);
+    logger.error("Failed to fetch PR INFO", error as Error);
     throw error;
   }
 }
