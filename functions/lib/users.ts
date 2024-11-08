@@ -17,11 +17,6 @@ if (!USERS_TABLE_NAME) {
   throw new Error("USERS_TABLE_NAME env var is missing");
 }
 
-export enum Tier {
-  FREE = "FREE",
-  PRO = "PRO",
-}
-
 export interface User {
   id: string;
   email: string;
@@ -34,7 +29,7 @@ export interface User {
   createdAt: string;
   lastUpdatedAt: string;
   deleted: boolean;
-  tier: Tier;
+  tier: "FREE" | "PRO";
   billingStartDate: string;
   scanCount: number;
 }
