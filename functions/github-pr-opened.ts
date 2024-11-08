@@ -173,7 +173,7 @@ Always return findings in this exact JSON format within <findings> tags:
   },
   "issues": [
     {
-      "id": string,             // Format: "VULN-001", "SEC-001", "QUAL-002"
+      "id": string,             // e.g., "VULN-001", "SEC-001", "QUAL-002"
       "type": "vulnerability" | "code_quality" | "best_practice",
       "risk_level": "critical" | "high" | "medium" | "low",
       "title": string,          // Clear, specific issue title
