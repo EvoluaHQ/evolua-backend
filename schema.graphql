@@ -4,6 +4,8 @@ schema {
 }
 
 type Query {
+  getUsage: SubscriptionTierUsage!
+
   listRepos(
     nextToken: String
   ): ReposPage!
@@ -104,4 +106,17 @@ type PullRequest {
   url: String!
   title: String!
   createdAt: String!
+}
+
+type SubscriptionTierUsage {
+  tier: String!
+  scans: Int!
+  limit: SubscriptionTierLimits!
+}
+
+type SubscriptionTierLimits {
+  tier: String!
+  scans: Int!
+  filesPerScan: Int!
+  maxFileSize: Int!
 }

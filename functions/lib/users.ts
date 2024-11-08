@@ -5,6 +5,8 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb"
+import { ServiceException } from "@smithy/smithy-client"
+import { MaxScansExceededError } from '../types/errors'
 
 const dynamodbClient = new DynamoDB()
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient)
@@ -28,9 +30,7 @@ export interface User {
   deleted: boolean
 }
 
-export async function findUserByClerkUserId(
-  clerkUserId: string
-): Promise<User | null> {
+export async function findUserByClerkUserId(clerkUserId: string): Promise<User | null> {
   if (!clerkUserId) {
     return null
   }
@@ -64,9 +64,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return (Items?.[0] as User) || null
 }
 
-export async function findUserByGithubHandle(
-  githubHandle: string
-): Promise<User | null> {
+export async function findUserByGithubHandle(githubHandle: string): Promise<User | null> {
   if (!githubHandle) {
     return null
   }
@@ -126,4 +124,28 @@ export async function deleteUser(id: string) {
       },
     })
   )
+}
+
+export async function incrementScanCount(id: string) {
+  try {
+    await DocumentClient.send(
+      new UpdateCommand({
+        TableName: USERS_TABLE_NAME,
+        Key: {
+          id,
+        },
+        UpdateExpression: "ADD scanCount :one",
+        ExpressionAttributeValues: {
+          ":one": 1
+        },
+        ConditionExpression: "attribute_exists(id) AND scanCount < maxScans",
+      })
+    )
+  } catch (err) {
+    if (err instanceof ServiceException && err.name === "ConditionalCheckFailedException") {
+      throw new MaxScansExceededError("Scan limit exceeded")
+    } else {
+      throw err
+    }
+  }
 }

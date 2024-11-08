@@ -71,6 +71,7 @@ export class EvoluaApiStack extends cdk.Stack {
       }
     });
 
+    const usersTableDataSource = graphQlApi.addDynamoDbDataSource('UsersTableDataSource', usersTable);
     const reposTableDataSource = graphQlApi.addDynamoDbDataSource('ReposTableDataSource', reposTable);
     const tenantReposTableDataSource = graphQlApi.addDynamoDbDataSource('TenantReposTableDataSource', tenantReposTable);
     const scansTableDataSource = graphQlApi.addDynamoDbDataSource('ScansTableDataSource', scansTable);
@@ -119,10 +120,19 @@ export class EvoluaApiStack extends cdk.Stack {
       code: appsync.Code.fromAsset('appsync-resolvers/scan-results.js'),
     });
 
+    graphQlApi.createResolver('GetUsageResolver', {
+      typeName: 'Query',
+      fieldName: 'getUsage',
+      dataSource: usersTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/query-get-usage.js'),
+    });
+
     reposTable.grantReadData(reposTableDataSource);
     tenantReposTable.grantReadData(tenantReposTableDataSource);
     scansTable.grantReadData(scansTableDataSource);
     scanResultsTable.grantReadData(scanResultsTableDataSource);
+    usersTable.grantReadData(usersTableDataSource);
   }
 
   private getIntrospectionConfig(stageName: string): appsync.IntrospectionConfig {

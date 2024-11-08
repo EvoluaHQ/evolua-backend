@@ -311,7 +311,7 @@ export class DataStack extends cdk.Stack {
 
     this.scansTable.grantWriteData(handler);
     this.scanResultsTable.grantWriteData(handler);
-    this.usersTable.grantReadData(handler);
+    this.usersTable.grantReadWriteData(handler);
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {

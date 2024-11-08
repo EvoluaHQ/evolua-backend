@@ -1,6 +1,7 @@
 const { ClerkUserUpsertedEventDetail } = require('./types/eventbridge');
 const ulid = require('ulid');
 const Users = require('./lib/users');
+const { SUBSCRIPTION_TIERS } = require('./lib/constants');
 
 /**
  * @param {import('aws-lambda').EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>} event
@@ -17,6 +18,12 @@ module.exports.handler = async (event) => {
   const id = user?.id || ulid.ulid();
   const now = new Date().toJSON();
   
+  const tier = user?.tier || 'FREE';
+  
+  // billing start date should be in 'YYYY-MM-DD' format
+  // and every day, we'll reset users who's billing cycle is up
+  const billingStartDate = user?.billingStartDate || now.slice(0, 10);
+  
   await Users.upsertUser({
     id,
     email,
@@ -28,6 +35,10 @@ module.exports.handler = async (event) => {
     githubHandle,
     createdAt: user?.createdAt || now,
     lastUpdatedAt: now,
+    tier,
+    billingStartDate,
+    scanCount: user?.scanCount || 0,
+    maxScans: user?.maxScans || SUBSCRIPTION_TIERS[tier].maxScans,
   });
 
   return {

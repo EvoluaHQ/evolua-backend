@@ -35,7 +35,7 @@ import {
   submitPRReview,
 } from "./lib/github-helper";
 import { PullRequest, saveScanResults } from "./lib/scans";
-import { findUserByGithubHandle } from "./lib/users";
+import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
 import {
   AIResponse,
   Findings,
@@ -43,6 +43,7 @@ import {
   PRFileChanges,
   ScanResult,
 } from "./types";
+import { MaxScansExceededError } from "./types/errors";
 
 /**
  * Initialize observability tools with consistent service naming
@@ -632,6 +633,28 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       );
 
       return;
+    }
+
+    try {
+      await incrementScanCount(user.id);
+    } catch (error) {
+      if (error instanceof MaxScansExceededError) {
+        await commentOnPR(
+          detail.data.pull_request.node_id,
+          `Hi @${detail.data.sender.login},
+
+Thanks for submitting your PR! We've just scanned your code changes for potential
+issues in security, quality, and best practices. But it seems like you've
+reached your monthly scan limit.
+
+We hope you've enjoyed our service so far! If you'd like to continue getting detailed
+insights about your code, then drop us an email at support@evolua.io and upgrade your
+account.`);
+
+        return;
+      } else {
+        throw error;
+      }
     }
 
     const initCommentId = await commentOnPR(
