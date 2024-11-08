@@ -202,7 +202,7 @@ export class DataStack extends cdk.Stack {
   }
 
   private createScansTable(): dynamodb.Table {
-    return new dynamodb.Table(this, "ScansTable", {
+    const table = new dynamodb.Table(this, "ScansTable", {
       partitionKey: {
         name: "repoId",
         type: dynamodb.AttributeType.STRING,
@@ -215,6 +215,20 @@ export class DataStack extends cdk.Stack {
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
     });
+
+    table.addGlobalSecondaryIndex({
+      indexName: "byTimestampIndex",
+      partitionKey: {
+        name: "repoId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "timestamp",
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+    
+    return table;
   }
 
   private createScanResultsTable(): dynamodb.Table {

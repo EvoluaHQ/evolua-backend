@@ -6,6 +6,11 @@ schema {
 type Query {
   getUsage: SubscriptionTierUsage!
 
+  getStats(
+    startDate: AWSDate!
+    endDate: AWSDate!
+  ): Stats!
+
   listRepos(
     nextToken: String
   ): ReposPage!
@@ -119,4 +124,25 @@ type SubscriptionTierLimits {
   scans: Int!
   filesPerScan: Int!
   maxFileSize: Int!
+}
+
+type Datum {
+  scans: Int!
+  filesScanned: Int!
+  allIssues: Int!
+  critical: Int!
+  high: Int!
+  medium: Int!
+  low: Int!
+  repos: Int!
+}
+
+type Stats {
+  total: Datum!
+  dailyStats: [DailyStats!]
+}
+
+type DailyStats {
+  date: AWSDate!
+  data: Datum!
 }

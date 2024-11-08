@@ -1,5 +1,5 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb"
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb"
 import * as ulid from "ulid"
 import * as helper from "./dynamodb-helper"
 import { ScanResult, Summary } from '../types/index'
@@ -8,14 +8,8 @@ const dynamodbClient = new DynamoDB()
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient)
 
 const SCANS_TABLE_NAME = process.env.SCANS_TABLE_NAME || ""
-const SCAN_RESULTS_TABLE_NAME = process.env.SCAN_RESULTS_TABLE_NAME || ""
-
 if (!SCANS_TABLE_NAME) {
   throw new Error("SCANS_TABLE_NAME env var is missing")
-}
-
-if (!SCAN_RESULTS_TABLE_NAME) {
-  throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
 }
 
 export interface PullRequest {
@@ -26,11 +20,31 @@ export interface PullRequest {
   createdAt: string
 }
 
+export interface Scan {
+  repoId: string
+  scanId: string
+  timestamp: string
+  pullRequestId: string
+  pullRequest: PullRequest
+  filesScanned: number
+  issuesCount: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+}
+
 export async function saveScanResults(
   repoId: string,
   pr: PullRequest,
   results: ScanResult[]
 ) {
+  const SCAN_RESULTS_TABLE_NAME = process.env.SCAN_RESULTS_TABLE_NAME || ""
+
+  if (!SCAN_RESULTS_TABLE_NAME) {
+    throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
+  }
+
   const timestamp = new Date().toISOString()
   const prId = pr.id.toString()
   const scanId = ulid.ulid()
@@ -39,22 +53,24 @@ export async function saveScanResults(
     return results.reduce((acc, result) => acc + f(result.findings.summary), 0)
   }
 
+  const item: Scan = {
+    repoId,
+    scanId,
+    timestamp,
+    pullRequestId: prId,
+    pullRequest: pr,
+    filesScanned: results.length,
+    issuesCount: countIssues((summary) => summary.totalIssues),
+    critical: countIssues((summary) => summary.riskLevels.critical),
+    high: countIssues((summary) => summary.riskLevels.high),
+    medium: countIssues((summary) => summary.riskLevels.medium),
+    low: countIssues((summary) => summary.riskLevels.low),
+  }
+
   await DocumentClient.send(
     new PutCommand({
       TableName: SCANS_TABLE_NAME,
-      Item: {
-        repoId,
-        scanId,
-        timestamp,
-        pullRequestId: prId,
-        pullRequest: pr,
-        filesScanned: results.length,
-        issuesCount: countIssues((summary) => summary.totalIssues),
-        critical: countIssues((summary) => summary.riskLevels.critical),
-        high: countIssues((summary) => summary.riskLevels.high),
-        medium: countIssues((summary) => summary.riskLevels.medium),
-        low: countIssues((summary) => summary.riskLevels.low),
-      },
+      Item: item
     })
   )
 
@@ -85,4 +101,32 @@ export async function saveScanResults(
     SCAN_RESULTS_TABLE_NAME,
     saveResultsReqs
   )
+}
+
+export async function listScansForRepo(repoId: string, startDate: string, endDate: string) {
+  let lastEvaluatedKey: any;
+  const allScans: Scan[] = [];
+
+  do {
+    const command = new QueryCommand({
+      TableName: SCANS_TABLE_NAME,
+      IndexName: 'byTimestampIndex',
+      KeyConditionExpression: "repoId = :repoId AND #timestamp BETWEEN :startDate AND :endDate",
+      ExpressionAttributeNames: {
+        "#timestamp": "timestamp",
+      },
+      ExpressionAttributeValues: {
+        ":repoId": repoId,
+        ":startDate": startDate,
+        ":endDate": endDate,
+      },
+      ExclusiveStartKey: lastEvaluatedKey,
+    });
+
+    const response = await DocumentClient.send(command);
+    allScans.push(...response.Items as Scan[]);
+    lastEvaluatedKey = response.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return allScans;
 }
