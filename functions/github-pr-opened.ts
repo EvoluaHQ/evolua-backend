@@ -245,7 +245,7 @@ const sendMessage = async (
 
   const message = `${ANALYSIS_PROMPT}
 
-The following code has changes in lines: ${file.changes.lineNumbers.join(", ")}.
+The following code has changes in lines: ${file.changes.lineNumbers.join(", ")}, marked with arrows (→), use the full file content for context but only report issues found in the changed lines.
 Review these lines carefully for security issues, code quality problems, and best practice violations.
 
 <source code>
