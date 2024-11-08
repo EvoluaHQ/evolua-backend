@@ -2,7 +2,6 @@ import { EventBridgeEvent } from 'aws-lambda';
 import { ClerkUserUpsertedEventDetail } from './types/eventbridge';
 import * as ulid from 'ulid';
 import * as Users from './lib/users';
-import { SUBSCRIPTION_TIERS } from './lib/constants';
 
 type Event = EventBridgeEvent<'user.created' | 'user.updated', ClerkUserUpsertedEventDetail>;
 
@@ -19,9 +18,6 @@ export const handler = async (event: Event) => {
   const now = new Date().toJSON();
   
   const tier = user?.tier || 'FREE';
-  const subscriptionTier = tier === 'FREE'
-    ? SUBSCRIPTION_TIERS.FREE
-    : SUBSCRIPTION_TIERS.PRO;
   
   // billing start date should be in 'YYYY-MM-DD' format
   // and every day, we'll reset users who's billing cycle is up
@@ -41,8 +37,7 @@ export const handler = async (event: Event) => {
     deleted: false,
     tier,
     billingStartDate,
-    scanCount: user?.scanCount || 0,
-    maxScans: user?.maxScans || subscriptionTier.maxScans,
+    scanCount: user?.scanCount || 0
   });
 
   return {

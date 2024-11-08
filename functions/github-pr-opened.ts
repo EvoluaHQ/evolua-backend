@@ -596,8 +596,12 @@ Go to https://evolua.io to learn more and sign up for your free account.`
       return;
     }
 
+    const subscriptionLimits = user.tier === 'FREE'
+      ? SUBSCRIPTION_TIERS.FREE
+      : SUBSCRIPTION_TIERS.PRO;
+
     try {
-      await incrementScanCount(user.id);
+      await incrementScanCount(user.id, subscriptionLimits.maxScans);
     } catch (error) {
       if (error instanceof MaxScansExceededError) {
         await commentOnPR(
@@ -616,11 +620,7 @@ account.`);
       } else {
         throw error;
       }
-    }
-
-    const subscriptionLimits = user.tier === 'FREE'
-      ? SUBSCRIPTION_TIERS.FREE
-      : SUBSCRIPTION_TIERS.PRO;
+    }    
 
     const initCommentId = await commentOnPR(
       detail.data.pull_request.node_id,

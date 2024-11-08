@@ -32,7 +32,6 @@ export interface User {
   tier: string
   billingStartDate: string
   scanCount: number
-  maxScans: number
 }
 
 export async function findUserByClerkUserId(clerkUserId?: string): Promise<User | null> {
@@ -135,7 +134,7 @@ export async function deleteUser(id: string) {
   )
 }
 
-export async function incrementScanCount(id: string) {
+export async function incrementScanCount(id: string, maxScans: number) {
   try {
     await DocumentClient.send(
       new UpdateCommand({
@@ -145,9 +144,10 @@ export async function incrementScanCount(id: string) {
         },
         UpdateExpression: "ADD scanCount :one",
         ExpressionAttributeValues: {
-          ":one": 1
+          ":one": 1,
+          ":maxScans": maxScans,
         },
-        ConditionExpression: "attribute_exists(id) AND scanCount < maxScans",
+        ConditionExpression: "attribute_exists(id) AND scanCount < :maxScans",
       })
     )
   } catch (err) {
