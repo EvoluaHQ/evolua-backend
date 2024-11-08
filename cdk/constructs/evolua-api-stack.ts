@@ -183,6 +183,8 @@ export class EvoluaApiStack extends cdk.Stack {
     const getStats = new lambdaNodejs.NodejsFunction(this, 'GetStatsFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: 'functions/get-stats.ts',
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(20),
       handler: 'handler',
       environment: {
         TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
