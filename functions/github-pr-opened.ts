@@ -150,7 +150,7 @@ Analysis Areas:
 3. Best Practices: Assess adherence to design patterns and coding standards
 
 Guidelines:
-- Use the full file content for context but ONLY report issues found in the changed lines marked with arrows (→)
+- Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Provide actionable recommendations with code examples
 - Reference relevant standards (CWE, OWASP)
