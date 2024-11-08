@@ -24,7 +24,7 @@ import {
 } from "../types";
 
 const logger = new Logger({
-  serviceName: "GitHubService",
+  serviceName: "GitHub Service",
   logLevel: "INFO",
 });
 
