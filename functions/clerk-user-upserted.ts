@@ -1,6 +1,6 @@
 import { EventBridgeEvent } from "aws-lambda";
 import * as ulid from "ulid";
-import { findUser, Tier, upsertUser } from "./lib/users";
+import * as Users from "./lib/users";
 import { ClerkUserUpsertedEventDetail } from "./types/eventbridge";
 
 type Event = EventBridgeEvent<
@@ -16,17 +16,17 @@ export const handler = async (event: Event) => {
   );
   const githubHandle = githubAccount?.username;
 
-  const user = await findUser(clerkUserId, email, githubHandle);
+  const user = await Users.findUser(clerkUserId, email, githubHandle);
   const id = user?.id || ulid.ulid();
   const now = new Date().toJSON();
 
-  const tier: Tier = user?.tier || Tier.FREE;
+  const tier = user?.tier || "FREE";
 
   // billing start date should be in 'YYYY-MM-DD' format
   // and every day, we'll reset users who's billing cycle is up
   const billingStartDate = user?.billingStartDate || now.slice(0, 10);
 
-  await upsertUser({
+  await Users.upsertUser({
     id,
     email,
     username: event.detail.data.data.username,

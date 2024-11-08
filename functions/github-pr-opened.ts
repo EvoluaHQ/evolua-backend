@@ -37,7 +37,7 @@ import {
   submitPRReview,
 } from "./lib/github-helper";
 import { PullRequest, saveScanResults } from "./lib/scans";
-import { findUserByGithubHandle, incrementScanCount, Tier } from "./lib/users";
+import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
 import {
   AIResponse,
   Findings,
@@ -335,9 +335,7 @@ const _handler = async (event: Event, context: any) => {
     }
 
     const subscriptionLimits =
-      user.tier === Tier.FREE
-        ? SUBSCRIPTION_TIERS.FREE
-        : SUBSCRIPTION_TIERS.PRO;
+      user.tier === "FREE" ? SUBSCRIPTION_TIERS.FREE : SUBSCRIPTION_TIERS.PRO;
 
     try {
       await incrementScanCount(user.id, subscriptionLimits.maxScans);
