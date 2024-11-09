@@ -3,5 +3,8 @@
   "editor.formatOnSave": true,
   "editor.formatOnPaste": false,
   "prettier.useTabs": false,
-  "prettier.configPath": ".prettierrc.json"
+  "prettier.configPath": ".prettierrc.json",
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  }
 }

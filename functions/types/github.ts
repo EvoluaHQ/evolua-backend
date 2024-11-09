@@ -170,3 +170,24 @@ export interface DraftPullRequestReviewThread {
    */
   startSide?: DiffSide;
 }
+
+export interface ScanGitHubPrInput {
+  reason: string;
+  installation_id: number;
+  sender_login: string; // the event sender: the PR creator or commenter
+  pull_request_number: number,
+  pull_request?: {
+    id: number;
+    node_id: string;
+    number: number;
+    title: string;
+    url: string;
+    created_at: string;
+  },
+  repository: {
+    id: number;
+    name: string;
+    full_name: string;
+    owner_login: string;
+  }
+}

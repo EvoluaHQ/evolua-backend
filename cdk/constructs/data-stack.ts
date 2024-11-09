@@ -66,7 +66,8 @@ export class DataStack extends cdk.Stack {
       stringValue: this.eventBus.eventBusArn,
     });
 
-    this.createGitHubPrOpenedEventHandlerFunction();
+    this.createScanGitHubPrFunction();
+
     this.createGitHubInstallationAddedEventHandlerFunction();
     this.createGitHubInstallationRemovedEventHandlerFunction();
 
@@ -267,15 +268,15 @@ export class DataStack extends cdk.Stack {
     });
   }
 
-  private createGitHubPrOpenedEventHandlerFunction() {
+  private createScanGitHubPrFunction() {
     const handler = new TypescriptFunction(
       this,
-      "GitHubPrOpenedHandlerFunction",
+      "ScanGitHubPrFunction",
       {
-        serviceName: 'github-pr-opened-handler',
+        serviceName: 'scan-github-pr',
         stageName: this.props.stageName,
         ssmStageName: this.props.ssmStageName,
-        entry: "functions/github-pr-opened.ts",
+        entry: "functions/scan-github-pr.ts",
         handler: "handler",
         timeout: cdk.Duration.minutes(5),
         environment: {
@@ -288,18 +289,19 @@ export class DataStack extends cdk.Stack {
       }
     );
 
-    const ghWebhookRule = new events.Rule(this, "GithubPrRule", {
+    const ghWebhookRule = new events.Rule(this, "ScanTriggeredGithubPrRule", {
       eventBus: this.eventBus,
       eventPattern: {
         source: ["github"],
         detail: {
           metadata: {
-            type: ["pull_request.opened"],
+            type: ["scan_triggered"],
           },
         },
       },
     });
     ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
 
     handler.addToRolePolicy(
       new iam.PolicyStatement({
@@ -321,6 +323,8 @@ export class DataStack extends cdk.Stack {
     this.scansTable.grantWriteData(handler);
     this.scanResultsTable.grantWriteData(handler);
     this.usersTable.grantReadWriteData(handler);
+
+    return handler;
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {
