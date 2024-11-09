@@ -4,9 +4,9 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
-import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import { EvoluaServiceStackProps } from './evolua-stack-props';
 import { Construct } from 'constructs';
+import { TypescriptFunction } from './typescript-function';
 
 export class EvoluaWebhookStack extends cdk.Stack {
   props: EvoluaServiceStackProps;
@@ -43,11 +43,12 @@ export class EvoluaWebhookStack extends cdk.Stack {
   }
 
   private createClerkWebhook() {
-    const webhookFunction = new lambda.NodejsFunction(this, 'ClerkWebhookFunction', {
-      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+    const webhookFunction = new TypescriptFunction(this, 'ClerkWebhookFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
       entry: 'functions/clerk-webhook.ts',
       handler: 'handler',
-      memorySize: 1024,
       environment: {
         EVENTS_TABLE_NAME: this.eventsTable.tableName,
         USERS_TABLE_NAME: this.usersTable.tableName,
@@ -80,11 +81,12 @@ export class EvoluaWebhookStack extends cdk.Stack {
   }
 
   private createGitHubWebhook() {
-    const webhookFunction = new lambda.NodejsFunction(this, 'GitHubWebhookFunction', {
-      runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-      entry: 'functions/github-webhook.js',
+    const webhookFunction = new TypescriptFunction(this, 'GitHubWebhookFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/github-webhook.ts',
       handler: 'handler',
-      memorySize: 1024,
       environment: {
         EVENTS_TABLE_NAME: this.eventsTable.tableName,
         EVENT_BUS_NAME: this.eventBus.eventBusName,
