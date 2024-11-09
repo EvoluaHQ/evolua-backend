@@ -6,10 +6,12 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { EvoluaServiceStackProps } from './evolua-stack-props';
+import { TypescriptFunction } from './typescript-function';
 import { Construct } from 'constructs';
 import { STAGE_NAMES } from '../constants';
 
 export class EvoluaApiStack extends cdk.Stack {
+  props: EvoluaServiceStackProps;
   usersTable: dynamodb.ITable;
   reposTable: dynamodb.ITable;
   tenantReposTable: dynamodb.ITable;
@@ -18,6 +20,8 @@ export class EvoluaApiStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: EvoluaServiceStackProps) {
     super(scope, id);
+
+    this.props = props;
 
     const usersTableArn = ssm.StringParameter.valueForStringParameter(
       this, `/evolua/${props.ssmStageName}/dynamodb/users-table/arn`);
@@ -180,10 +184,11 @@ export class EvoluaApiStack extends cdk.Stack {
   }
 
   private createGetStatsFunction() {
-    const getStats = new lambdaNodejs.NodejsFunction(this, 'GetStatsFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
+    const getStats = new TypescriptFunction(this, 'GetStatsFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
       entry: 'functions/get-stats.ts',
-      memorySize: 1024,
       timeout: cdk.Duration.seconds(20),
       handler: 'handler',
       environment: {

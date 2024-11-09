@@ -7,6 +7,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda-nodejs";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import { EvoluaStackProps } from "./evolua-stack-props";
+import { TypescriptFunction } from "./typescript-function";
 
 export class DataStack extends cdk.Stack {
   props: EvoluaStackProps;
@@ -267,24 +268,16 @@ export class DataStack extends cdk.Stack {
   }
 
   private createGitHubPrOpenedEventHandlerFunction() {
-    const handler = new lambda.NodejsFunction(
+    const handler = new TypescriptFunction(
       this,
       "GitHubPrOpenedHandlerFunction",
       {
-        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+        serviceName: 'github-pr-opened-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
         entry: "functions/github-pr-opened.ts",
         handler: "handler",
-        memorySize: 1024,
         timeout: cdk.Duration.minutes(5),
-        bundling: {
-          minify: true, // Minify code for production
-          sourceMap: false, // Include source maps for better debugging
-          externalModules: [
-            // Modules that should be excluded from bundling
-            "aws-sdk", // AWS SDK is available in the Lambda runtime
-          ],
-          target: "node20", // Target Node.js version
-        },
         environment: {
           SCANS_TABLE_NAME: this.scansTable.tableName,
           SCAN_RESULTS_TABLE_NAME: this.scanResultsTable.tableName,
@@ -399,14 +392,15 @@ export class DataStack extends cdk.Stack {
   }
 
   private createClerkUserUpsertedEventHandlerFunction() {
-    const handler = new lambda.NodejsFunction(
+    const handler = new TypescriptFunction(
       this,
       "ClerkUserUpsertedHandlerFunction",
       {
-        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+        serviceName: 'clerk-user-upserted-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
         entry: "functions/clerk-user-upserted.ts",
         handler: "handler",
-        memorySize: 1024,
         timeout: cdk.Duration.seconds(6),
         environment: {
           USERS_TABLE_NAME: this.usersTable.tableName,
@@ -431,14 +425,15 @@ export class DataStack extends cdk.Stack {
   }
 
   private createClerkUserDeletedEventHandlerFunction() {    
-    const handler = new lambda.NodejsFunction(
+    const handler = new TypescriptFunction(
       this,
       "ClerkUserDeletedHandlerFunction",
       {
-        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+        serviceName: 'clerk-user-deleted-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
         entry: "functions/clerk-user-deleted.ts",
         handler: "handler",
-        memorySize: 1024,
         timeout: cdk.Duration.seconds(6),
         environment: {
           USERS_TABLE_NAME: this.usersTable.tableName,
@@ -465,14 +460,15 @@ export class DataStack extends cdk.Stack {
   private createResetScanCountsFunction() {
     // this cron function fetches all users and resets their scan count if their billing cycle is up
     // TODO: refactor this once we have a decent number of users (say, 1000+)
-    const handler = new lambda.NodejsFunction(
+    const handler = new TypescriptFunction(
       this,
       "ResetScanCountsFunction",
       {
-        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
+        serviceName: 'reset-scan-counts',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
         entry: "functions/reset-scan-counts.ts",
         handler: "handler",
-        memorySize: 1024,
         timeout: cdk.Duration.seconds(15),
         environment: {
           USERS_TABLE_NAME: this.usersTable.tableName,
