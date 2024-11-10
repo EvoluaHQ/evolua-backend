@@ -23,10 +23,7 @@ import {
   ScanResult,
 } from "../types";
 
-const logger = new Logger({
-  serviceName: "GitHub Service",
-  logLevel: "INFO",
-});
+const logger = new Logger();
 
 // Configuration for rate limiting
 const GITHUB_API_RATE_LIMIT = {
@@ -298,6 +295,19 @@ async function fetchPRFileContent(
     logger.error("Failed to fetch file content", error as Error);
     return null;
   }
+}
+
+export async function fetchPRDetails(owner: string, repo: string, prNumber: number) {
+  const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
+    owner,
+    repo,
+    pull_number: prNumber,
+    headers: {
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+
+  return data;
 }
 
 /**

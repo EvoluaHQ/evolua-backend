@@ -1,11 +1,11 @@
 require("../steps/init");
-const { handler } = require("../../functions/github-pr-opened");
-const { GitHubPROpenedEventDetail } = require("../../functions/types");
+const { handler } = require("../../functions/scan-github-pr");
+const { ScanGitHubPrInput } = require("../../functions/types");
 const fs = require("fs");
 
 describe("GitHub Event Handler", () => {
   /**
-   * @returns {import('aws-lambda').EventBridgeEvent<'pull_request.opened', GitHubPROpenedEventDetail>}
+   * @returns {import('aws-lambda').EventBridgeEvent<'scan_triggered', ScanGitHubPrInput>}
    */
   function newGitHubEvent(data) {
     return {
@@ -31,7 +31,7 @@ describe("GitHub Event Handler", () => {
   }
 
   it("should handle PR opened event", async () => {
-    const data = fs.readFileSync("examples/github/pr-opened.json", "utf8");
+    const data = fs.readFileSync("examples/github/scan-github-pr.json", "utf8");
     const event = newGitHubEvent(JSON.parse(data));
 
     const result = await handler(event, {});

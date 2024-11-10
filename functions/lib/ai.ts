@@ -1,7 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Message } from "@anthropic-ai/sdk/resources";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Metrics } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import {
   BedrockRuntimeClient,
@@ -11,23 +10,9 @@ import {
 import { PRFileChanges } from "../types";
 import { ANTHROPIC_API_KEY, SITE_URL } from "./constants";
 
-/**
- * Initialize observability tools with consistent service naming
- */
-const SERVICE_NAME = "AI Service";
-
-/**
- * Initialize AWS Lambda Powertools for enhanced observability
- * These tools provide structured logging, metrics, and tracing capabilities
- */
-const logger = new Logger({
-  serviceName: SERVICE_NAME,
-  logLevel: "INFO",
-});
-
-const tracer = new Tracer({
-  serviceName: SERVICE_NAME,
-});
+// service name comes from the "POWERTOOLS_SERVICE_NAME" environment variable
+const logger = new Logger();
+const tracer = new Tracer();
 
 /**
  * Configuration constants for file processing and analysis

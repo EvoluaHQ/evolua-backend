@@ -17,7 +17,6 @@ import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import { ContentBlock } from "@aws-sdk/client-bedrock-runtime";
 import { Sema } from "async-sema";
-import { EventBridgeEvent } from "aws-lambda";
 import {
   AI_ANALYSIS_CONFIG,
   getScanLimitMessage,
@@ -31,6 +30,7 @@ import { shouldSkipFile } from "./lib/file-ignore";
 import {
   commentOnPR,
   deleteCommentOnPR,
+  fetchPRDetails,
   fetchPRFiles,
   init,
   processAIResponse,
@@ -39,47 +39,212 @@ import {
 import { PullRequest, saveScanResults } from "./lib/scans";
 import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
 import {
+  Metadata,
   AIResponse,
   Findings,
-  GitHubPROpenedEventDetail,
   PRFileChanges,
   ScanResult,
+  ScanGitHubPrInput
 } from "./types";
+import { EventBridgeEvent } from 'aws-lambda';
 import { MaxScansExceededError } from "./types/errors";
 
-/**
- * Initialize observability tools with consistent service naming
- */
-const SERVICE_NAME = "PullRequest Service";
+const { SSM_STAGE_NAME, STAGE_NAME, SERVICE_NAME } = process.env;
 
-/**
- * Initialize AWS Lambda Powertools for enhanced observability
- * These tools provide structured logging, metrics, and tracing capabilities
- */
-const logger = new Logger({
-  serviceName: SERVICE_NAME,
-  logLevel: "INFO",
-});
-
+const logger = new Logger();
+const tracer = new Tracer();
 const metrics = new Metrics({
   namespace: "CodeReview",
-  serviceName: SERVICE_NAME,
 });
 
-const tracer = new Tracer({
-  serviceName: SERVICE_NAME,
-});
+type EventEnvelope = {
+  metadata: Metadata;
+  data: ScanGitHubPrInput;
+}
+type Event = EventBridgeEvent<'scan_triggered', EventEnvelope>;
 
-// Import middleware for AWS Systems Manager Parameter Store
-const middy = require("@middy/core");
-const ssm = require("@middy/ssm");
+const _handler = async (event: Event, context: any) => {
+  const input = event.detail.data;
+  logger.debug("Scanning GitHub PR", { input });
 
-/**
- * Environment configuration and feature flags
- * SSM_STAGE_NAME: Deployment stage (dev/staging/prod)
- * BY_PASS_BEDROCK: Flag to use Anthropic directly instead of AWS Bedrock
- */
-const { SSM_STAGE_NAME, ENVIRONMENT = "development" } = process.env;
+  const startTime = Date.now();
+
+  try {
+    // Initialize observability tools
+    logger.addContext(context);
+    tracer.putAnnotation("service", SERVICE_NAME || 'PullRequest Service');
+    metrics.addMetadata("environment", STAGE_NAME || 'dev');
+
+    // Initialize GitHub client
+    const installationId = input.installation_id;
+    const ghAppId = context.GITHUB_APP_ID;
+    const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
+    await init(ghAppId, ghPrivateKey, installationId);
+
+    let pullRequest = input.pull_request;
+    if (!pullRequest) {
+      logger.debug('Fetching PR details from GitHub');
+      
+      const ghRepoData = await fetchPRDetails(
+        input.repository.owner_login,
+        input.repository.name,
+        input.pull_request_number
+      );
+      pullRequest = {
+        id: ghRepoData.id,
+        number: input.pull_request_number,
+        node_id: ghRepoData.node_id,
+        title: ghRepoData.title,
+        url: ghRepoData.url,
+        created_at: ghRepoData.created_at,
+      }
+    }
+
+    const username = input.sender_login;
+    const user = await findUserByGithubHandle(username);
+    if (!user) {
+      await commentOnPR(
+        pullRequest.node_id,
+        getUnregisteredUserMessage(username)
+      );
+
+      return;
+    }
+
+    const subscriptionLimits =
+      user.tier === "FREE" ? SUBSCRIPTION_TIERS.FREE : SUBSCRIPTION_TIERS.PRO;
+
+    try {
+      await incrementScanCount(user.id, subscriptionLimits.maxScans);
+    } catch (error) {
+      logger.error("Scan increment error", { error, username });
+
+      if (error instanceof MaxScansExceededError) {
+        // User reached their scan limit
+        await commentOnPR(
+          pullRequest.node_id,
+          getScanLimitMessage(username)
+        );
+
+        return;
+      } else {
+        logger.error("Unable to comment on PR", error as Error);
+        throw error;
+      }
+    }
+
+    const initCommentId = await commentOnPR(
+      pullRequest.node_id,
+      getStartReviewMessage(username)
+    );
+
+    const owner = input.repository.owner_login;
+    const repo = input.repository.name;
+    const pullNumber = pullRequest.number;
+
+    // Fetch and analyze files
+    const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
+
+    // Filter out files with null content
+    const validFiles = prFileContent.filter(
+      (file): file is PRFileChanges & { content: string } => {
+        // Check if file content is null
+        if (!file.content) {
+          logger.warn(`Skipping file ${file.path}: null content`);
+          metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
+          return false;
+        }
+
+        // Check if file should be skipped based on filters
+        if (shouldSkipFile(file.path)) {
+          logger.info(`Skipping excluded file: ${file.path}`);
+          metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1);
+          return false;
+        }
+
+        // Check if file has any changes
+        if (file.changes.lineNumbers.length === 0) {
+          logger.info(`Skipping file with no changes: ${file.path}`);
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+    logger.info(
+      "Filtered out invalid files (e.g. null content, excluded file types, etc.)",
+      {
+        filesCount: validFiles.length,
+      }
+    );
+
+    const maxFilesPerScan = subscriptionLimits.filesPerScan;
+    // only process the first maxFilesPerScan files
+    const filesToAnalyze = validFiles.slice(0, maxFilesPerScan);
+
+    // Notify users if they reach the max file per tier to scan
+    if (filesToAnalyze.length > validFiles.length) {
+      const maxFilesMessage = getSubscriptionLimitMessage(
+        username,
+        maxFilesPerScan
+      );
+
+      await commentOnPR(pullRequest.node_id, maxFilesMessage);
+    }
+
+    const results = await processFiles(filesToAnalyze);
+
+    await deleteCommentOnPR(initCommentId);
+
+    // Submit review with all comments
+    if (results.length > 0) {
+      await submitPRReview(owner, repo, pullNumber, results);
+    }
+
+    // Calculate final metrics
+    const duration = Date.now() - startTime;
+    const totalIssues = results.reduce(
+      (sum, { findings }) => sum + findings.issues.length,
+      0
+    );
+
+    // Record execution metrics
+    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
+    metrics.addMetric("FilesAnalyzed", MetricUnit.Count, filesToAnalyze.length);
+    metrics.addMetric("IssuesFound", MetricUnit.Count, totalIssues);
+
+    logger.info("Analysis completed successfully", {
+      filesAnalyzed: filesToAnalyze.length,
+      issuesFound: totalIssues,
+      duration,
+    });
+
+    const repoId = `github#${input.repository.id}`;
+    const pr: PullRequest = {
+      id: pullRequest.id.toString(),
+      number: pullRequest.number,
+      url: pullRequest.url,
+      title: pullRequest.title,
+      createdAt: pullRequest.created_at,
+    };
+    await saveScanResults(repoId, pr, results);
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    // Log error details and record error metric
+    logger.error("Handler execution failed", {
+      error: error as Error,
+      duration,
+    });
+
+    metrics.addMetric("HandlerErrors", MetricUnit.Count, 1);
+    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
+
+    throw error;
+  }
+};
 
 /**
  * Analyzes a single file for code issues
@@ -297,195 +462,15 @@ const processFiles = async (
   return filteredResults;
 };
 
-type Event = EventBridgeEvent<"pull_request.opened", GitHubPROpenedEventDetail>;
+const middy = require("@middy/core");
+const ssm = require("@middy/ssm");
 
 /**
- * Main Lambda handler function
- * Orchestrates the entire code review process
- *
- * @param event - Lambda event containing GitHub webhook payload
- * @param context - Lambda context
- * @returns Promise containing execution results
+ * Export the handler with middleware
+ * Adds SSM parameter fetching capability to the base handler
  */
-const _handler = async (event: Event, context: any) => {
-  const startTime = Date.now();
-  try {
-    const detail = event.detail;
-
-    // Initialize observability tools
-    logger.addContext(context);
-    tracer.putAnnotation("service", SERVICE_NAME);
-    metrics.addMetadata("environment", ENVIRONMENT);
-
-    // Initialize GitHub client
-    const installationId = detail.data.installation.id;
-    const ghAppId = context.GITHUB_APP_ID;
-    const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
-    await init(ghAppId, ghPrivateKey, installationId);
-
-    const username = detail.data.sender.login;
-    const user = await findUserByGithubHandle(username);
-    if (!user) {
-      await commentOnPR(
-        detail.data.pull_request.node_id,
-        getUnregisteredUserMessage(username)
-      );
-
-      return;
-    }
-
-    const subscriptionLimits =
-      user.tier === "FREE" ? SUBSCRIPTION_TIERS.FREE : SUBSCRIPTION_TIERS.PRO;
-
-    try {
-      await incrementScanCount(user.id, subscriptionLimits.maxScans);
-    } catch (error) {
-      logger.error("Scan increment error", { error, username });
-
-      if (error instanceof MaxScansExceededError) {
-        // User reached their scan limit
-        await commentOnPR(
-          detail.data.pull_request.node_id,
-          getScanLimitMessage(username)
-        );
-
-        return;
-      } else {
-        logger.error("Unable to comment on PR", error as Error);
-        throw error;
-      }
-    }
-
-    const initCommentId = await commentOnPR(
-      detail.data.pull_request.node_id,
-      getStartReviewMessage(username)
-    );
-
-    const owner = detail.data.repository.owner.login;
-    const repo = detail.data.repository.name;
-    const pullNumber = detail.data.pull_request.number;
-
-    // Fetch and analyze files
-    const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
-
-    // Filter out files with null content
-    const validFiles = prFileContent.filter(
-      (file): file is PRFileChanges & { content: string } => {
-        // Check if file content is null
-        if (!file.content) {
-          logger.warn(`Skipping file ${file.path}: null content`);
-          metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
-          return false;
-        }
-
-        // Check if file should be skipped based on filters
-        if (shouldSkipFile(file.path)) {
-          logger.info(`Skipping excluded file: ${file.path}`);
-          metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1);
-          return false;
-        }
-
-        // Check if file has any changes
-        if (file.changes.lineNumbers.length === 0) {
-          logger.info(`Skipping file with no changes: ${file.path}`);
-          return false;
-        }
-
-        return true;
-      }
-    );
-
-    logger.info(
-      "Filtered out invalid files (e.g. null content, excluded file types, etc.)",
-      {
-        filesCount: validFiles.length,
-      }
-    );
-
-    const maxFilesPerScan = subscriptionLimits.filesPerScan;
-    // only process the first maxFilesPerScan files
-    const filesToAnalyze = validFiles.slice(0, maxFilesPerScan);
-
-    // Notify users if they reach the max file per tier to scan
-    if (filesToAnalyze.length > validFiles.length) {
-      const maxFilesMessage = getSubscriptionLimitMessage(
-        username,
-        maxFilesPerScan
-      );
-
-      await commentOnPR(detail.data.pull_request.node_id, maxFilesMessage);
-    }
-
-    const results = await processFiles(filesToAnalyze);
-
-    await deleteCommentOnPR(initCommentId);
-
-    // Submit review with all comments
-    if (results.length > 0) {
-      await submitPRReview(owner, repo, pullNumber, results);
-    }
-
-    // Calculate final metrics
-    const duration = Date.now() - startTime;
-    const totalIssues = results.reduce(
-      (sum, { findings }) => sum + findings.issues.length,
-      0
-    );
-
-    // Record execution metrics
-    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
-    metrics.addMetric("FilesAnalyzed", MetricUnit.Count, filesToAnalyze.length);
-    metrics.addMetric("IssuesFound", MetricUnit.Count, totalIssues);
-
-    logger.info("Analysis completed successfully", {
-      filesAnalyzed: filesToAnalyze.length,
-      issuesFound: totalIssues,
-      duration,
-    });
-
-    const repoId = `github#${detail.data.repository.id}`;
-    const pr: PullRequest = {
-      id: detail.data.pull_request.id.toString(),
-      number: detail.data.pull_request.number,
-      url: detail.data.pull_request.url,
-      title: detail.data.pull_request.title,
-      createdAt: detail.data.pull_request.created_at,
-    };
-    await saveScanResults(repoId, pr, results);
-
-    // Return success response with metrics
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: "PR review completed",
-        metrics: {
-          filesAnalyzed: filesToAnalyze.length,
-          issuesFound: totalIssues,
-          processingTimeMs: duration,
-        },
-      }),
-    };
-  } catch (error) {
-    const duration = Date.now() - startTime;
-
-    // Log error details and record error metric
-    logger.error("Handler execution failed", {
-      error: error as Error,
-      duration,
-    });
-
-    metrics.addMetric("HandlerErrors", MetricUnit.Count, 1);
-    metrics.addMetric("ProcessingTime", MetricUnit.Milliseconds, duration);
-
-    throw error;
-  }
-};
-
-/**
- * Middleware configuration for AWS Systems Manager Parameter Store
- * Automatically fetches and caches GitHub credentials
- */
-const ssmConfig = {
+export const handler = middy(_handler)
+.use(ssm({
   cache: true,
   cacheExpiry: 5 * 60 * 1000, // Cache credentials for 5 minutes
   setToContext: true,
@@ -493,10 +478,4 @@ const ssmConfig = {
     GITHUB_APP_ID: `/evolua/${SSM_STAGE_NAME}/github/app-id`,
     GITHUB_PRIVATE_KEY: `/evolua/${SSM_STAGE_NAME}/github/private-key`,
   },
-};
-
-/**
- * Export the handler with middleware
- * Adds SSM parameter fetching capability to the base handler
- */
-export const handler = middy().use(ssm(ssmConfig)).handler(_handler);
+}));
