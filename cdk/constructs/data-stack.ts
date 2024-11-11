@@ -3,7 +3,6 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as events from "aws-cdk-lib/aws-events";
 import * as eventTargets from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as lambda from "aws-cdk-lib/aws-lambda-nodejs";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import { EvoluaStackProps } from "./evolua-stack-props";
@@ -328,14 +327,15 @@ export class DataStack extends cdk.Stack {
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {
-    const handler = new lambda.NodejsFunction(
+    const handler = new TypescriptFunction(
       this,
       "GitHubInstallationAddedHandlerFunction",
       {
-        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-        entry: "functions/github-installation-added.js",
+        serviceName: 'github-installation-added-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/github-installation-added.ts",
         handler: "handler",
-        memorySize: 1024,
         timeout: cdk.Duration.seconds(6),
         environment: {
           REPOS_TABLE_NAME: this.reposTable.tableName,
@@ -351,7 +351,7 @@ export class DataStack extends cdk.Stack {
         source: ["github"],
         detail: {
           metadata: {
-            type: ["installation.added"],
+            type: ["repos_installed"],
           },
         },
       },
@@ -364,14 +364,15 @@ export class DataStack extends cdk.Stack {
   }
 
   private createGitHubInstallationRemovedEventHandlerFunction() {
-    const handler = new lambda.NodejsFunction(
+    const handler = new TypescriptFunction(
       this,
       "GitHubInstallationRemovedHandlerFunction",
       {
-        runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
-        entry: "functions/github-installation-removed.js",
+        serviceName: 'github-installation-removed-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/github-installation-removed.ts",
         handler: "handler",
-        memorySize: 1024,
         timeout: cdk.Duration.seconds(6),
         environment: {
           REPOS_TABLE_NAME: this.reposTable.tableName,
@@ -385,7 +386,7 @@ export class DataStack extends cdk.Stack {
         source: ["github"],
         detail: {
           metadata: {
-            type: ["installation.removed"],
+            type: ["repos_uninstalled"],
           },
         },
       },

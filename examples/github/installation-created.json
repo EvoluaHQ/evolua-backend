@@ -1,0 +1,133 @@
+{
+  "action": "created",
+  "installation": {
+    "id": 57029443,
+    "client_id": "Iv23lipTVqEwLjFISGde",
+    "account": {
+      "login": "EvoluaHQ",
+      "id": 184421884,
+      "node_id": "O_kgDOCv4N_A",
+      "avatar_url": "https://avatars.githubusercontent.com/u/184421884?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/EvoluaHQ",
+      "html_url": "https://github.com/EvoluaHQ",
+      "followers_url": "https://api.github.com/users/EvoluaHQ/followers",
+      "following_url": "https://api.github.com/users/EvoluaHQ/following{/other_user}",
+      "gists_url": "https://api.github.com/users/EvoluaHQ/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/EvoluaHQ/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/EvoluaHQ/subscriptions",
+      "organizations_url": "https://api.github.com/users/EvoluaHQ/orgs",
+      "repos_url": "https://api.github.com/users/EvoluaHQ/repos",
+      "events_url": "https://api.github.com/users/EvoluaHQ/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/EvoluaHQ/received_events",
+      "type": "Organization",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "repository_selection": "all",
+    "access_tokens_url": "https://api.github.com/app/installations/57029443/access_tokens",
+    "repositories_url": "https://api.github.com/installation/repositories",
+    "html_url": "https://github.com/organizations/EvoluaHQ/settings/installations/57029443",
+    "app_id": 1026323,
+    "app_slug": "evolua-ai-dev",
+    "target_id": 184421884,
+    "target_type": "Organization",
+    "permissions": {
+      "members": "read",
+      "administration": "read",
+      "checks": "read",
+      "contents": "read",
+      "discussions": "read",
+      "issues": "write",
+      "metadata": "read",
+      "pull_requests": "write",
+      "repository_advisories": "read",
+      "secret_scanning_alerts": "read",
+      "security_events": "read",
+      "statuses": "read",
+      "vulnerability_alerts": "read"
+    },
+    "events": [
+      "check_run",
+      "code_scanning_alert",
+      "commit_comment",
+      "discussion_comment",
+      "issue_comment",
+      "pull_request",
+      "pull_request_review",
+      "pull_request_review_comment",
+      "pull_request_review_thread",
+      "push",
+      "release",
+      "repository",
+      "secret_scanning_alert",
+      "security_and_analysis"
+    ],
+    "created_at": "2024-11-11T10:19:38.000-05:00",
+    "updated_at": "2024-11-11T10:19:39.000-05:00",
+    "single_file_name": null,
+    "has_multiple_single_files": false,
+    "single_file_paths": [],
+    "suspended_by": null,
+    "suspended_at": null
+  },
+  "repositories": [
+    {
+      "id": 868640984,
+      "node_id": "R_kgDOM8Zo2A",
+      "name": "evolua-backend",
+      "full_name": "EvoluaHQ/evolua-backend",
+      "private": true
+    },
+    {
+      "id": 868993191,
+      "node_id": "R_kgDOM8vIpw",
+      "name": "evolua-shared-infra",
+      "full_name": "EvoluaHQ/evolua-shared-infra",
+      "private": true
+    },
+    {
+      "id": 870799363,
+      "node_id": "R_kgDOM-dYAw",
+      "name": "evolua-demo-poc",
+      "full_name": "EvoluaHQ/evolua-demo-poc",
+      "private": true
+    },
+    {
+      "id": 873023256,
+      "node_id": "R_kgDONAlHGA",
+      "name": "evolua",
+      "full_name": "EvoluaHQ/evolua",
+      "private": true
+    },
+    {
+      "id": 873152211,
+      "node_id": "R_kgDONAs-0w",
+      "name": "evolua-workspace",
+      "full_name": "EvoluaHQ/evolua-workspace",
+      "private": true
+    }
+  ],
+  "requester": null,
+  "sender": {
+    "login": "samuelcastro",
+    "id": 5281701,
+    "node_id": "MDQ6VXNlcjUyODE3MDE=",
+    "avatar_url": "https://avatars.githubusercontent.com/u/5281701?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/samuelcastro",
+    "html_url": "https://github.com/samuelcastro",
+    "followers_url": "https://api.github.com/users/samuelcastro/followers",
+    "following_url": "https://api.github.com/users/samuelcastro/following{/other_user}",
+    "gists_url": "https://api.github.com/users/samuelcastro/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/samuelcastro/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/samuelcastro/subscriptions",
+    "organizations_url": "https://api.github.com/users/samuelcastro/orgs",
+    "repos_url": "https://api.github.com/users/samuelcastro/repos",
+    "events_url": "https://api.github.com/users/samuelcastro/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/samuelcastro/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  }
+}
