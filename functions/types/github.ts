@@ -191,3 +191,15 @@ export interface ScanGitHubPrInput {
     owner_login: string;
   }
 }
+
+export interface ReposChangedInput {
+  action: 'added' | 'removed';
+  sender_login: string;
+  repositories: {
+    id: number;
+    name: string;
+    full_name: string;
+    private: boolean;
+    owner_login?: string; // only for personal accounts
+  }[];
+}

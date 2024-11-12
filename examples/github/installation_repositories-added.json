@@ -51,6 +51,7 @@
       "code_scanning_alert",
       "commit_comment",
       "discussion_comment",
+      "issue_comment",
       "pull_request",
       "pull_request_review",
       "pull_request_review_comment",
@@ -62,28 +63,24 @@
       "security_and_analysis"
     ],
     "created_at": "2024-10-25T19:02:09.000+02:00",
-    "updated_at": "2024-10-31T20:27:14.000+01:00",
+    "updated_at": "2024-11-11T16:24:01.000+01:00",
     "single_file_name": null,
     "has_multiple_single_files": false,
-    "single_file_paths": [
-
-    ],
+    "single_file_paths": [],
     "suspended_by": null,
     "suspended_at": null
   },
   "repository_selection": "selected",
   "repositories_added": [
     {
-      "id": 855455062,
-      "node_id": "R_kgDOMv01Vg",
-      "name": "api-gateway-auth-cognito-access-token-demo",
-      "full_name": "theburningmonk/api-gateway-auth-cognito-access-token-demo",
+      "id": 47832623,
+      "node_id": "MDEwOlJlcG9zaXRvcnk0NzgzMjYyMw==",
+      "name": "AdventOfCodeFs",
+      "full_name": "theburningmonk/AdventOfCodeFs",
       "private": false
     }
   ],
-  "repositories_removed": [
-
-  ],
+  "repositories_removed": [],
   "requester": null,
   "sender": {
     "login": "theburningmonk",
