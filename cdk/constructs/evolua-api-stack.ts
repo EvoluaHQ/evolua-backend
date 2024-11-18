@@ -120,6 +120,14 @@ export class EvoluaApiStack extends cdk.Stack {
       code: appsync.Code.fromAsset('appsync-resolvers/func-list-scans.js')
     });
 
+    const getScanFunction = new appsync.AppsyncFunction(this, 'GetScanFunction', {
+      api: graphQlApi,
+      name: 'getScanFunction',
+      dataSource: scansTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-get-scan.js')
+    });
+
     graphQlApi.createResolver('QueryListReposResolver', {
       typeName: 'Query',
       fieldName: 'listRepos',
@@ -150,6 +158,17 @@ export class EvoluaApiStack extends cdk.Stack {
       pipelineConfig: [
         getRepoByTenantRepoIdFunction,
         listScansFunction,
+      ]
+    });
+
+    graphQlApi.createResolver('QueryGetScansResolver', {
+      typeName: 'Query',
+      fieldName: 'getScan',
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
+      pipelineConfig: [
+        getRepoByTenantRepoIdFunction,
+        getScanFunction,
       ]
     });
 

@@ -23,6 +23,11 @@ type Query {
     tenantRepoId: String!
     nextToken: String
   ): ScansPage!
+
+  getScan(
+    tenantRepoId: String!
+    scanId: String!
+  ): Scan
 }
 
 type Mutation {
