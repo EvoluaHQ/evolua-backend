@@ -23,6 +23,7 @@ import {
   getStartReviewMessage,
   getSubscriptionLimitMessage,
   getUnregisteredUserMessage,
+  getPRClosedMessage,
   sendMessage,
 } from "./lib/ai";
 import { SUBSCRIPTION_TIERS } from "./lib/constants";
@@ -81,23 +82,34 @@ const _handler = async (event: Event, context: any) => {
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
     await init(ghAppId, ghPrivateKey, installationId);
 
-    let pullRequest = input.pull_request;
-    if (!pullRequest) {
-      logger.debug('Fetching PR details from GitHub');
-      
-      const ghRepoData = await fetchPRDetails(
-        input.repository.owner_login,
-        input.repository.name,
-        input.pull_request_number
+    logger.debug('Fetching PR details from GitHub');
+    
+    const ghRepoData = await fetchPRDetails(
+      input.repository.owner_login,
+      input.repository.name,
+      input.pull_request_number
+    );
+    if (ghRepoData.state === "closed") {
+      await commentOnPR(
+        ghRepoData.node_id,
+        getPRClosedMessage(input.sender_login)
       );
-      pullRequest = {
-        id: ghRepoData.id,
-        number: input.pull_request_number,
-        node_id: ghRepoData.node_id,
-        title: ghRepoData.title,
-        url: ghRepoData.url,
-        created_at: ghRepoData.created_at,
-      }
+
+      logger.info("PR is closed, skipped...", { 
+        repoName: input.repository.name,
+        prNumber: input.pull_request_number,        
+      });
+
+      return;
+    }
+
+    const pullRequest = {
+      id: ghRepoData.id,
+      number: input.pull_request_number,
+      node_id: ghRepoData.node_id,
+      title: ghRepoData.title,
+      url: ghRepoData.url,
+      created_at: ghRepoData.created_at,
     }
 
     const username = input.sender_login;
@@ -107,6 +119,8 @@ const _handler = async (event: Event, context: any) => {
         pullRequest.node_id,
         getUnregisteredUserMessage(username)
       );
+
+      logger.info("User not found in database, skipped...", { username });
 
       return;
     }

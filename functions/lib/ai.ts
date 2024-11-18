@@ -325,3 +325,11 @@ Let's make your code even better together! 🚀`;
  */
 export const getStartReviewMessage = (username: string) =>
   `Hey @${username}, I got this, I'll review it now, give me a sec. 🚀`;
+
+/**
+ * Shown when a PR is closed
+ * @param username
+ * @returns
+ */
+export const getPRClosedMessage = (username: string) =>
+  `Hey @${username}, please reopen this PR if you want me to review it.`;
