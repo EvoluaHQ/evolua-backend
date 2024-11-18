@@ -7,20 +7,22 @@ const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
 export interface Repo {
   provider: string;
-  providerId: string;
+  providerRepoId: string;
   name: string;
   fullName: string;
   private: boolean;
+  evoluaRepoId: string;
 }
 
 export interface TenantRepo {
   tenantId: string;
   repoId: string;
   provider: string;
-  providerId: string;
+  providerRepoId: string;
   name: string;
   fullName: string;
   private: boolean;
+  evoluaRepoId: string;
 }
 
 export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
@@ -33,9 +35,10 @@ export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
     PutRequest: {
       Item: {
         tenantId,
-        repoId: `${repo.provider}#${repo.providerId}`,
+        repoId: `${repo.provider}#${repo.providerRepoId}`,
         provider: repo.provider,
-        providerId: repo.providerId,
+        providerRepoId: repo.providerRepoId,
+        evoluaRepoId: repo.evoluaRepoId,
         name: repo.name,
         fullName: repo.fullName,
         private: repo.private
@@ -55,9 +58,10 @@ export async function saveRepos(repos: Repo[]) {
   const allRequests = repos.map(repo => ({
     PutRequest: {
       Item: {
-        repoId: `${repo.provider}#${repo.providerId}`,
+        repoId: `${repo.provider}#${repo.providerRepoId}`,
         provider: repo.provider,
-        providerId: repo.providerId,
+        providerRepoId: repo.providerRepoId,
+        evoluaRepoId: repo.evoluaRepoId,
         name: repo.name,
         fullName: repo.fullName,
         private: repo.private
@@ -68,16 +72,16 @@ export async function saveRepos(repos: Repo[]) {
   await helper.executeBatchWriteCommand(DocumentClient, REPOS_TABLE_NAME, allRequests);
 }
 
-export async function deleteRepos(repos: Repo[]) {
+export async function deleteRepos(repoIds: string[]) {
   const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
   if (!REPOS_TABLE_NAME) {
     throw new Error('REPOS_TABLE_NAME env var is missing');
   }
 
-  const allRequests = repos.map(repo => ({
+  const allRequests = repoIds.map(repoId => ({
     DeleteRequest: {
       Key: {
-        repoId: `${repo.provider}#${repo.providerId}`
+        repoId
       }
     }
   }));

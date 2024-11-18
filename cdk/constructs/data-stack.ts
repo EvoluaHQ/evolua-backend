@@ -181,6 +181,14 @@ export class DataStack extends cdk.Stack {
       removalPolicy: this.dataRemovalPolicy,
     });
 
+    table.addGlobalSecondaryIndex({
+      indexName: "evoluaRepoIdIndex",
+      partitionKey: {
+        name: "evoluaRepoId",
+        type: dynamodb.AttributeType.STRING,
+      },
+    })
+
     return table;
   }
 
@@ -197,6 +205,18 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: "evoluaRepoIdIndex",
+      partitionKey: {
+        name: "tenantId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "evoluaRepoId",
+        type: dynamodb.AttributeType.STRING,
+      },
     });
 
     return table;

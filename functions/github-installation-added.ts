@@ -4,6 +4,7 @@ import * as Repos from './lib/repos';
 import { EventBridgeEvent } from 'aws-lambda';
 import { ReposChangedInput } from './types/github';
 import { Metadata } from './types/eventbridge';
+import * as Ulid from 'ulid';
 
 type EventEnvelope = {
   metadata: Metadata;
@@ -17,7 +18,8 @@ export const handler = async (event: Event): Promise<void> => {
   const reposAdded = event.detail.data.repositories;
   const repos = reposAdded.map(x => ({
     provider: 'github',
-    providerId: x.id.toString(),
+    providerRepoId: x.id.toString(),
+    evoluaRepoId: Ulid.ulid(),
     name: x.name,
     fullName: x.full_name,
     private: x.private,

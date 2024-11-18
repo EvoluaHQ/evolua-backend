@@ -6,7 +6,8 @@ import { util } from '@aws-appsync/utils'
 * @returns {import('@aws-appsync/utils').DynamoDBQueryRequest}
 */
 export function request(ctx) {
-  const repoId = `${ctx.arguments.provider}#${ctx.arguments.providerId}`
+  const repo = ctx.prev.result.items[0]
+  const repoId = `${repo.provider}#${repo.providerRepoId}`
 
   return {
     operation: 'Query',

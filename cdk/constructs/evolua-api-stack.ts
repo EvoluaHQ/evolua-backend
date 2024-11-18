@@ -96,13 +96,41 @@ export class EvoluaApiStack extends cdk.Stack {
       code: appsync.Code.fromAsset('appsync-resolvers/func-hydrate-tenant-repos.js')
     });
 
+    const getRepoByEvoluaRepoIdFunction = new appsync.AppsyncFunction(this, 'GetRepoByEvoluaRepoIdFunction', {
+      api: graphQlApi,
+      name: 'getRepoByEvoluaRepoIdFunction',
+      dataSource: tenantReposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-get-repo-by-evoluaRepoId.js')
+    });
+
+    const listScansFunction = new appsync.AppsyncFunction(this, 'ListScansFunction', {
+      api: graphQlApi,
+      name: 'listScansFunction',
+      dataSource: scansTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-list-scans.js')
+    });
+
     graphQlApi.createResolver('QueryListReposResolver', {
       typeName: 'Query',
       fieldName: 'listRepos',
       runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/query-list-repos.js'),
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
       pipelineConfig: [
         listTenantReposFunction,
+        hydrateTenantReposFunction,
+      ]
+    });
+
+    graphQlApi.createResolver('QueryGetRepoResolver', {
+      typeName: 'Query',
+      fieldName: 'getRepo',
+      dataSource: tenantReposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
+      pipelineConfig: [
+        getRepoByEvoluaRepoIdFunction,
         hydrateTenantReposFunction,
       ]
     });
@@ -110,9 +138,12 @@ export class EvoluaApiStack extends cdk.Stack {
     graphQlApi.createResolver('QueryListScansResolver', {
       typeName: 'Query',
       fieldName: 'listScans',
-      dataSource: scansTableDataSource,
       runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/query-list-scans.js'),
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
+      pipelineConfig: [
+        getRepoByEvoluaRepoIdFunction,
+        listScansFunction,
+      ]
     });
 
     graphQlApi.createResolver('ScanResultsResolver', {
