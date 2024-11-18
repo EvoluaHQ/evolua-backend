@@ -117,3 +117,27 @@ export async function listReposForTenant(tenantId: string): Promise<TenantRepo[]
 
   return items;
 }
+
+export async function getTenantRepo(tenantId: string, tenantRepoId: string): Promise<TenantRepo | null> {
+  const TENANT_REPOS_TABLE_NAME = process.env.TENANT_REPOS_TABLE_NAME || '';
+  if (!TENANT_REPOS_TABLE_NAME) {
+    throw new Error('TENANT_REPOS_TABLE_NAME env var is missing');
+  }
+
+  const queryResp = await DocumentClient.send(new QueryCommand({
+    TableName: TENANT_REPOS_TABLE_NAME,
+    IndexName: 'tenantRepoIdIndex',
+    Limit: 1,
+    KeyConditionExpression: 'tenantId = :tenantId AND tenantRepoId = :tenantRepoId',
+    ExpressionAttributeValues: {
+      ':tenantId': tenantId,
+      ':tenantRepoId': tenantRepoId
+    }
+  }));
+
+  if (!queryResp.Items || queryResp.Items.length === 0) {
+    return null;
+  }
+
+  return queryResp.Items[0] as TenantRepo;
+}

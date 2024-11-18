@@ -46,6 +46,7 @@ export class EvoluaApiStack extends cdk.Stack {
     const authorizerFunction = this.createAuthorizerFunction();
 
     const getStatsFunction = this.createGetStatsFunction();
+    const getRepoStatsFunction = this.createGetRepoStatsFunction();
 
     const graphQlApi = new appsync.GraphqlApi(this, 'Api', {
       name: `${props.serviceName}-${props.stageName}`,
@@ -79,6 +80,7 @@ export class EvoluaApiStack extends cdk.Stack {
     const scansTableDataSource = graphQlApi.addDynamoDbDataSource('ScansTableDataSource', this.scansTable);
     const scanResultsTableDataSource = graphQlApi.addDynamoDbDataSource('ScanResultsTableDataSource', this.scanResultsTable);
     const getStatsDataSource = graphQlApi.addLambdaDataSource('GetStatsDataSource', getStatsFunction);
+    const getRepoStatsDataSource = graphQlApi.addLambdaDataSource('GetRepoStatsDataSource', getRepoStatsFunction);
 
     const listTenantReposFunction = new appsync.AppsyncFunction(this, 'ListTenantReposFunction', {
       api: graphQlApi,
@@ -193,15 +195,25 @@ export class EvoluaApiStack extends cdk.Stack {
       fieldName: 'getStats',
     });
 
+    getRepoStatsDataSource.createResolver('GetRepoStatsResolver', {
+      typeName: 'Query',
+      fieldName: 'getRepoStats',
+    });
+
     this.reposTable.grantReadData(reposTableDataSource);
     this.tenantReposTable.grantReadData(tenantReposTableDataSource);
     tenantReposTableDataSource.grantPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
       actions: ['dynamodb:Query'],
       resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
-    }));
+    }));    
     this.scansTable.grantReadData(scansTableDataSource);
     this.scanResultsTable.grantReadData(scanResultsTableDataSource);
     this.usersTable.grantReadData(usersTableDataSource);
+
+    getRepoStatsFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
+    }));
   }
 
   private getIntrospectionConfig(stageName: string): appsync.IntrospectionConfig {
@@ -250,6 +262,31 @@ export class EvoluaApiStack extends cdk.Stack {
       stageName: this.props.stageName,
       ssmStageName: this.props.ssmStageName,
       entry: 'functions/get-stats.ts',
+      timeout: cdk.Duration.seconds(20),
+      handler: 'handler',
+      environment: {
+        TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
+        SCANS_TABLE_NAME: this.scansTable.tableName,
+      }
+    });
+
+    this.tenantReposTable.grantReadData(getStats);
+    this.scansTable.grantReadData(getStats);
+
+    getStats.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.scansTable.tableArn}/index/byTimestampIndex`],
+    }));
+
+    return getStats;
+  }
+
+  private createGetRepoStatsFunction() {
+    const getStats = new TypescriptFunction(this, 'GetRepoStatsFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/get-repo-stats.ts',
       timeout: cdk.Duration.seconds(20),
       handler: 'handler',
       environment: {
