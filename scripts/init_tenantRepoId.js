@@ -2,8 +2,7 @@ const { DynamoDB } = require("@aws-sdk/client-dynamodb");
 const { 
   DynamoDBDocumentClient, 
   ScanCommand, 
-  UpdateCommand, 
-  GetCommand
+  UpdateCommand,
 } = require("@aws-sdk/lib-dynamodb");
 const Ulid = require('ulid');
 
@@ -11,9 +10,8 @@ const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
 const tenantReposTableName = 'EvoluaDataStack-dev-TenantReposTable14FAF19D-1HBBGGMDV5R6E';
-const reposTableName = 'EvoluaDataStack-dev-ReposTable1EB2A097-F79GQBVPP66I';
 
-const repoIdToEvoluaRepoId = {};
+const repoIdToTenantRepoId = {};
 
 // recursively scan all items in the tenantRepos table
 async function updateRepos() {
@@ -36,51 +34,28 @@ async function updateRepos() {
         lastEvaluatedKey = result.LastEvaluatedKey;
 
         for (const tenantRepo of result.Items) {
-          if (tenantRepo.evoluaRepoId) {
+          if (tenantRepo.tenantRepoId) {
             continue;
           }
 
           const repoId = tenantRepo.repoId;
-          const evoluaRepoId = repoIdToEvoluaRepoId[repoId] || Ulid.ulid();
+          const tenantRepoId = repoIdToTenantRepoId[repoId] || Ulid.ulid();
 
-          // update the tenantRepo item with the evoluaRepoId
+          // update the tenantRepo item with the tenantRepoId
           const updateParams = {
             TableName: tenantReposTableName,
             Key: {
               tenantId: tenantRepo.tenantId,
               repoId: tenantRepo.repoId
             },
-            UpdateExpression: 'SET evoluaRepoId = :evoluaRepoId',
+            UpdateExpression: 'SET tenantRepoId = :tenantRepoId',
             ExpressionAttributeValues: {
-              ':evoluaRepoId': evoluaRepoId
+              ':tenantRepoId': tenantRepoId
             }
           };
           await DocumentClient.send(new UpdateCommand(updateParams));
 
-          repoIdToEvoluaRepoId[repoId] = evoluaRepoId;
-
-          // get the repo item from the repos table
-          const getRepoResult = await DocumentClient.send(new GetCommand({
-            TableName: reposTableName,
-            Key: {
-              repoId: repoId
-            }
-          }));
-
-          if (getRepoResult.Item) {
-            // update the repo item with the evoluaRepoId
-            const updateRepoParams = {
-              TableName: reposTableName,
-              Key: {
-                repoId: repoId
-              },
-              UpdateExpression: 'SET evoluaRepoId = :evoluaRepoId',
-              ExpressionAttributeValues: {
-                ':evoluaRepoId': evoluaRepoId
-              }
-            };
-            await DocumentClient.send(new UpdateCommand(updateRepoParams));
-          }
+          repoIdToTenantRepoId[repoId] = tenantRepoId;          
         }
     } while (lastEvaluatedKey);    
 }

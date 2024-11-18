@@ -1,6 +1,7 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import * as helper from './dynamodb-helper';
+import * as Ulid from 'ulid';
 
 const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
@@ -11,7 +12,6 @@ export interface Repo {
   name: string;
   fullName: string;
   private: boolean;
-  evoluaRepoId: string;
 }
 
 export interface TenantRepo {
@@ -22,7 +22,7 @@ export interface TenantRepo {
   name: string;
   fullName: string;
   private: boolean;
-  evoluaRepoId: string;
+  tenantRepoId: string;
 }
 
 export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
@@ -38,7 +38,7 @@ export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
         repoId: `${repo.provider}#${repo.providerRepoId}`,
         provider: repo.provider,
         providerRepoId: repo.providerRepoId,
-        evoluaRepoId: repo.evoluaRepoId,
+        tenantRepoId: Ulid.ulid(),
         name: repo.name,
         fullName: repo.fullName,
         private: repo.private
@@ -61,7 +61,6 @@ export async function saveRepos(repos: Repo[]) {
         repoId: `${repo.provider}#${repo.providerRepoId}`,
         provider: repo.provider,
         providerRepoId: repo.providerRepoId,
-        evoluaRepoId: repo.evoluaRepoId,
         name: repo.name,
         fullName: repo.fullName,
         private: repo.private

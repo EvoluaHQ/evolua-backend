@@ -16,11 +16,11 @@ type Query {
   ): ReposPage!
 
   getRepo(
-    evoluaRepoId: String!
-  ): Repo!
+    tenantRepoId: String!
+  ): Repo
 
   listScans(
-    evoluaRepoId: String!
+    tenantRepoId: String!
     nextToken: String
   ): ScansPage!
 }
@@ -34,7 +34,7 @@ type ReposPage {
 }
 
 type Repo {
-  evoluaRepoId: String!
+  tenantRepoId: String!
   provider: String!
   providerRepoId: String!
   name: String!

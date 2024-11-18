@@ -19,7 +19,7 @@ export const handler = async (event: Event): Promise<void> => {
   const repos = reposAdded.map(x => ({
     provider: 'github',
     providerRepoId: x.id.toString(),
-    evoluaRepoId: Ulid.ulid(),
+    tenantRepoId: Ulid.ulid(),
     name: x.name,
     fullName: x.full_name,
     private: x.private,

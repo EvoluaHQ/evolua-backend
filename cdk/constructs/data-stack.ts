@@ -181,14 +181,6 @@ export class DataStack extends cdk.Stack {
       removalPolicy: this.dataRemovalPolicy,
     });
 
-    table.addGlobalSecondaryIndex({
-      indexName: "evoluaRepoIdIndex",
-      partitionKey: {
-        name: "evoluaRepoId",
-        type: dynamodb.AttributeType.STRING,
-      },
-    })
-
     return table;
   }
 
@@ -208,13 +200,13 @@ export class DataStack extends cdk.Stack {
     });
 
     table.addGlobalSecondaryIndex({
-      indexName: "evoluaRepoIdIndex",
+      indexName: "tenantRepoIdIndex",
       partitionKey: {
         name: "tenantId",
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
-        name: "evoluaRepoId",
+        name: "tenantRepoId",
         type: dynamodb.AttributeType.STRING,
       },
     });

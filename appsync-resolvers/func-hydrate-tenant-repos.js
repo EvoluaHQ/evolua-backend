@@ -1,4 +1,4 @@
-import { util } from '@aws-appsync/utils'
+import { util, runtime } from '@aws-appsync/utils'
 
 /**
  * @param { import('@aws-appsync/utils').Context 
@@ -6,6 +6,15 @@ import { util } from '@aws-appsync/utils'
 * @returns {import('@aws-appsync/utils').DynamoDBBatchGetItemRequest}
 */
 export function request(ctx) {
+  if (!ctx.prev.result.items || ctx.prev.result.items.length === 0) {
+    runtime.earlyReturn({
+      repos: [],
+      nextToken: null
+    })
+
+    return
+  }
+
   const tableName = ctx.env.REPOS_TABLE_NAME
   const keys = ctx.prev.result.items.map(x => 
     util.dynamodb.toMapValues({

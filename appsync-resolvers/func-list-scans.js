@@ -6,6 +6,14 @@ import { util } from '@aws-appsync/utils'
 * @returns {import('@aws-appsync/utils').DynamoDBQueryRequest}
 */
 export function request(ctx) {
+  if (!ctx.prev.result.items || ctx.prev.result.items.length === 0) {
+    runtime.earlyReturn({
+      scans: []
+    })
+
+    return
+  }
+
   const repo = ctx.prev.result.items[0]
   const repoId = `${repo.provider}#${repo.providerRepoId}`
 

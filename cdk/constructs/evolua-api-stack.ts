@@ -96,12 +96,20 @@ export class EvoluaApiStack extends cdk.Stack {
       code: appsync.Code.fromAsset('appsync-resolvers/func-hydrate-tenant-repos.js')
     });
 
-    const getRepoByEvoluaRepoIdFunction = new appsync.AppsyncFunction(this, 'GetRepoByEvoluaRepoIdFunction', {
+    const hydrateTenantRepoFunction = new appsync.AppsyncFunction(this, 'HydrateTenantRepoFunction', {
       api: graphQlApi,
-      name: 'getRepoByEvoluaRepoIdFunction',
+      name: 'hydrateTenantRepo',
+      dataSource: reposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-hydrate-tenant-repo.js')
+    });
+
+    const getRepoByTenantRepoIdFunction = new appsync.AppsyncFunction(this, 'GetRepoByTenantRepoIdFunction', {
+      api: graphQlApi,
+      name: 'getRepoByTenantRepoIdFunction',
       dataSource: tenantReposTableDataSource,
       runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/func-get-repo-by-evoluaRepoId.js')
+      code: appsync.Code.fromAsset('appsync-resolvers/func-get-repo-by-tenantRepoId.js')
     });
 
     const listScansFunction = new appsync.AppsyncFunction(this, 'ListScansFunction', {
@@ -126,12 +134,11 @@ export class EvoluaApiStack extends cdk.Stack {
     graphQlApi.createResolver('QueryGetRepoResolver', {
       typeName: 'Query',
       fieldName: 'getRepo',
-      dataSource: tenantReposTableDataSource,
       runtime: appsync.FunctionRuntime.JS_1_0_0,
       code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
       pipelineConfig: [
-        getRepoByEvoluaRepoIdFunction,
-        hydrateTenantReposFunction,
+        getRepoByTenantRepoIdFunction,
+        hydrateTenantRepoFunction,
       ]
     });
 
@@ -141,7 +148,7 @@ export class EvoluaApiStack extends cdk.Stack {
       runtime: appsync.FunctionRuntime.JS_1_0_0,
       code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
       pipelineConfig: [
-        getRepoByEvoluaRepoIdFunction,
+        getRepoByTenantRepoIdFunction,
         listScansFunction,
       ]
     });
@@ -169,6 +176,10 @@ export class EvoluaApiStack extends cdk.Stack {
 
     this.reposTable.grantReadData(reposTableDataSource);
     this.tenantReposTable.grantReadData(tenantReposTableDataSource);
+    tenantReposTableDataSource.grantPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
+    }));
     this.scansTable.grantReadData(scansTableDataSource);
     this.scanResultsTable.grantReadData(scanResultsTableDataSource);
     this.usersTable.grantReadData(usersTableDataSource);

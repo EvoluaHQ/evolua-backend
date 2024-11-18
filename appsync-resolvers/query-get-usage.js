@@ -23,7 +23,7 @@ export function request(ctx) {
 
   return {
     operation: 'GetItem',
-    key: util.dynamodb.toMapValues({ id: tenantId })    
+    key: util.dynamodb.toMapValues({ id: tenantId })
   }
 }
 

@@ -1,4 +1,4 @@
-import { util, runtime } from '@aws-appsync/utils'
+import { util } from '@aws-appsync/utils'
 
 /**
  * @param { import('@aws-appsync/utils').Context 
@@ -9,17 +9,16 @@ export function request(ctx) {
   const tenantId = ctx.identity.resolverContext.tenantId
 
   return {
-    operation: 'GetItem',
-    index: 'evoluaRepoIdIndex',
+    operation: 'Query',
+    index: 'tenantRepoIdIndex',
     query: {
-      expression: 'tenantId = :tenantId AND evoluaRepoId = :evoluaRepoId',
+      expression: 'tenantId = :tenantId AND tenantRepoId = :tenantRepoId',
       expressionValues: util.dynamodb.toMapValues({
         ':tenantId': tenantId,
-        ':evoluaRepoId': ctx.arguments.evoluaRepoId
+        ':tenantRepoId': ctx.arguments.tenantRepoId
       }),
     },
     limit: 1,
-    scanIndexForward: true,
     select: 'ALL_ATTRIBUTES',
     consistentRead: false
   }
@@ -28,13 +27,6 @@ export function request(ctx) {
 /**
 * @param {import('@aws-appsync/utils').Context} ctx 
 */
-export function response(ctx) {
-  const matches = ctx.result.items || []
-  if (matches.length < 1) {
-    runtime.earlyReturn({
-      scans: [],
-    })
-  }
-
+export function response(ctx) {  
   return ctx.result
 }
