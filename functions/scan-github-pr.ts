@@ -69,7 +69,7 @@ const _handler = async (event: Event, context: any) => {
   const input = event.detail.data;
   logger.debug("Scanning GitHub PR", { input });
 
-  initAnthropic(context.ANTROPIC_API_KEY);
+  initAnthropic(context.ANTHROPIC_API_KEY);
 
   const startTime = Date.now();
 
