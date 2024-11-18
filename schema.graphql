@@ -19,6 +19,12 @@ type Query {
     tenantRepoId: String!
   ): Repo
 
+  getRepoStats(
+    tenantRepoId: String!
+    startDate: AWSDate!
+    endDate: AWSDate!
+  ): Stats
+
   listScans(
     tenantRepoId: String!
     nextToken: String
