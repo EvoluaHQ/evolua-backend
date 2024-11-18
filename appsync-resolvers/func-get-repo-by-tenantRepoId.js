@@ -6,31 +6,27 @@ import { util } from '@aws-appsync/utils'
 * @returns {import('@aws-appsync/utils').DynamoDBQueryRequest}
 */
 export function request(ctx) {
-  const repoId = `${ctx.arguments.provider}#${ctx.arguments.providerId}`
+  const tenantId = ctx.identity.resolverContext.tenantId
 
   return {
     operation: 'Query',
-    scanIndexForward: false,
-    limit: 10,
-    nextToken: ctx.arguments.nextToken,
+    index: 'tenantRepoIdIndex',
     query: {
-      expression: 'repoId = :repoId',
+      expression: 'tenantId = :tenantId AND tenantRepoId = :tenantRepoId',
       expressionValues: util.dynamodb.toMapValues({
-        ':repoId': repoId
+        ':tenantId': tenantId,
+        ':tenantRepoId': ctx.arguments.tenantRepoId
       }),
     },
+    limit: 1,
+    select: 'ALL_ATTRIBUTES',
+    consistentRead: false
   }
 }
 
 /**
 * @param {import('@aws-appsync/utils').Context} ctx 
 */
-export function response(ctx) {
-  const scans = ctx.result.items
-  const nextToken = ctx.result.nextToken
-
-  return {
-    scans,
-    nextToken
-  }
+export function response(ctx) {  
+  return ctx.result
 }

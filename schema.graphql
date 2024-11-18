@@ -15,9 +15,12 @@ type Query {
     nextToken: String
   ): ReposPage!
 
+  getRepo(
+    tenantRepoId: String!
+  ): Repo
+
   listScans(
-    provider: String! 
-    providerId: String!
+    tenantRepoId: String!
     nextToken: String
   ): ScansPage!
 }
@@ -31,8 +34,9 @@ type ReposPage {
 }
 
 type Repo {
+  tenantRepoId: String!
   provider: String!
-  providerId: String!
+  providerRepoId: String!
   name: String!
   fullName: String!
   private: Boolean!

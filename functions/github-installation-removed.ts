@@ -11,13 +11,7 @@ type Event = EventBridgeEvent<'repos_uninstalled', EventEnvelope>;
 
 export const handler = async (event: Event) => {
   const reposRemoved = event.detail.data.repositories;
-  const repos = reposRemoved.map(x => ({
-    provider: 'github',
-    providerId: x.id.toString(),
-    name: x.name,
-    fullName: x.full_name,
-    private: x.private,
-  }));
+  const repoIds = reposRemoved.map(x => `github#${x.id}`);
 
-  await Repos.deleteRepos(repos);
+  await Repos.deleteRepos(repoIds);
 };

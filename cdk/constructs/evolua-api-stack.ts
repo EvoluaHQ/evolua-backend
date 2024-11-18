@@ -96,23 +96,61 @@ export class EvoluaApiStack extends cdk.Stack {
       code: appsync.Code.fromAsset('appsync-resolvers/func-hydrate-tenant-repos.js')
     });
 
+    const hydrateTenantRepoFunction = new appsync.AppsyncFunction(this, 'HydrateTenantRepoFunction', {
+      api: graphQlApi,
+      name: 'hydrateTenantRepo',
+      dataSource: reposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-hydrate-tenant-repo.js')
+    });
+
+    const getRepoByTenantRepoIdFunction = new appsync.AppsyncFunction(this, 'GetRepoByTenantRepoIdFunction', {
+      api: graphQlApi,
+      name: 'getRepoByTenantRepoIdFunction',
+      dataSource: tenantReposTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-get-repo-by-tenantRepoId.js')
+    });
+
+    const listScansFunction = new appsync.AppsyncFunction(this, 'ListScansFunction', {
+      api: graphQlApi,
+      name: 'listScansFunction',
+      dataSource: scansTableDataSource,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/func-list-scans.js')
+    });
+
     graphQlApi.createResolver('QueryListReposResolver', {
       typeName: 'Query',
       fieldName: 'listRepos',
       runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/query-list-repos.js'),
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
       pipelineConfig: [
         listTenantReposFunction,
         hydrateTenantReposFunction,
       ]
     });
 
+    graphQlApi.createResolver('QueryGetRepoResolver', {
+      typeName: 'Query',
+      fieldName: 'getRepo',
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
+      pipelineConfig: [
+        getRepoByTenantRepoIdFunction,
+        hydrateTenantRepoFunction,
+      ]
+    });
+
     graphQlApi.createResolver('QueryListScansResolver', {
       typeName: 'Query',
       fieldName: 'listScans',
-      dataSource: scansTableDataSource,
       runtime: appsync.FunctionRuntime.JS_1_0_0,
-      code: appsync.Code.fromAsset('appsync-resolvers/query-list-scans.js'),
+      code: appsync.Code.fromAsset('appsync-resolvers/default-pipeline.js'),
+      pipelineConfig: [
+        getRepoByTenantRepoIdFunction,
+        listScansFunction,
+      ]
     });
 
     graphQlApi.createResolver('ScanResultsResolver', {
@@ -138,6 +176,10 @@ export class EvoluaApiStack extends cdk.Stack {
 
     this.reposTable.grantReadData(reposTableDataSource);
     this.tenantReposTable.grantReadData(tenantReposTableDataSource);
+    tenantReposTableDataSource.grantPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
+    }));
     this.scansTable.grantReadData(scansTableDataSource);
     this.scanResultsTable.grantReadData(scanResultsTableDataSource);
     this.usersTable.grantReadData(usersTableDataSource);
