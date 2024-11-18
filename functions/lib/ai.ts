@@ -8,7 +8,7 @@ import {
   ConverseCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { PRFileChanges } from "../types";
-import { ANTHROPIC_API_KEY, SITE_URL } from "./constants";
+import { SITE_URL } from "./constants";
 
 // service name comes from the "POWERTOOLS_SERVICE_NAME" environment variable
 const logger = new Logger();
@@ -59,13 +59,17 @@ export const AI_ANALYSIS_CONFIG = {
   },
 } as const;
 
-// Initialize AI clients
-const anthropic = new Anthropic({
-  apiKey: ANTHROPIC_API_KEY,
-});
-
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
 const byPassBedrock = true; //BY_PASS_BEDROCK === "true"
+
+let anthropic: Anthropic
+export const initAnthropic = (apiKey: string) => {
+  if (!anthropic) {
+    anthropic = new Anthropic({
+      apiKey,
+    });
+  }
+}
 
 /**
  * Analysis prompt template defining the expected response format

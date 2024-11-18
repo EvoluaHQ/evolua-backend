@@ -19,6 +19,7 @@ import { ContentBlock } from "@aws-sdk/client-bedrock-runtime";
 import { Sema } from "async-sema";
 import {
   AI_ANALYSIS_CONFIG,
+  initAnthropic,
   getScanLimitMessage,
   getStartReviewMessage,
   getSubscriptionLimitMessage,
@@ -67,6 +68,8 @@ type Event = EventBridgeEvent<'scan_triggered', EventEnvelope>;
 const _handler = async (event: Event, context: any) => {
   const input = event.detail.data;
   logger.debug("Scanning GitHub PR", { input });
+
+  initAnthropic(context.ANTROPIC_API_KEY);
 
   const startTime = Date.now();
 
@@ -491,5 +494,6 @@ export const handler = middy(_handler)
   fetchData: {
     GITHUB_APP_ID: `/evolua/${SSM_STAGE_NAME}/github/app-id`,
     GITHUB_PRIVATE_KEY: `/evolua/${SSM_STAGE_NAME}/github/private-key`,
+    ANTHROPIC_API_KEY: `/evolua/${SSM_STAGE_NAME}/anthropic/api-key`,
   },
 }));
