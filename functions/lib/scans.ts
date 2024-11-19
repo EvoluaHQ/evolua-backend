@@ -64,6 +64,9 @@ export async function saveScanResults(
     return results.reduce((acc, result) => acc + f(result.findings.summary), 0)
   }
 
+  // IMPORTANT: save the scan results first, then the scan summary
+  // so that when the ScansTable's DynamoDB stream triggers the
+  // algolia sync function, the scan results are already available
   const saveResultsReqs = results.map((result) => ({
     PutRequest: {
       Item: {
