@@ -18,6 +18,11 @@ export const scansIndexName = () => {
   return `scans-${process.env.STAGE_NAME}`;
 }
 
+export const initSearchClient = (appId: string, apiKey: string) => {
+  const client = searchClient(appId, apiKey)
+  return client
+}
+
 export const initTenantReposIndex = async (appId: string, apiKey: string) => {
   const indexName = tenantReposIndexName()
 
@@ -53,7 +58,10 @@ export const initScansIndex = async (appId: string, apiKey: string) => {
       ],
       attributesForFaceting: [
         "repoId"
-      ]
+      ],
+      customRanking: [
+        "desc(pullRequest.createdAt)"
+      ],
     }
   })
 

@@ -47,6 +47,8 @@ export class EvoluaApiStack extends cdk.Stack {
 
     const getStatsFunction = this.createGetStatsFunction();
     const getRepoStatsFunction = this.createGetRepoStatsFunction();
+    const searchReposFunction = this.createSearchReposFunction();
+    const searchScansFunction = this.createSearchScansFunction();
 
     const graphQlApi = new appsync.GraphqlApi(this, 'Api', {
       name: `${props.serviceName}-${props.stageName}`,
@@ -81,6 +83,8 @@ export class EvoluaApiStack extends cdk.Stack {
     const scanResultsTableDataSource = graphQlApi.addDynamoDbDataSource('ScanResultsTableDataSource', this.scanResultsTable);
     const getStatsDataSource = graphQlApi.addLambdaDataSource('GetStatsDataSource', getStatsFunction);
     const getRepoStatsDataSource = graphQlApi.addLambdaDataSource('GetRepoStatsDataSource', getRepoStatsFunction);
+    const searchReposDataSource = graphQlApi.addLambdaDataSource('SearchReposDataSource', searchReposFunction);
+    const searchScansDataSource = graphQlApi.addLambdaDataSource('SearchScansDataSource', searchScansFunction);
 
     const listTenantReposFunction = new appsync.AppsyncFunction(this, 'ListTenantReposFunction', {
       api: graphQlApi,
@@ -200,6 +204,16 @@ export class EvoluaApiStack extends cdk.Stack {
       fieldName: 'getRepoStats',
     });
 
+    searchReposDataSource.createResolver('SearchReposResolver', {
+      typeName: 'Query',
+      fieldName: 'searchRepos',
+    });
+
+    searchScansDataSource.createResolver('SearchScansResolver', {
+      typeName: 'Query',
+      fieldName: 'searchScans',
+    });
+
     this.reposTable.grantReadData(reposTableDataSource);
     this.tenantReposTable.grantReadData(tenantReposTableDataSource);
     tenantReposTableDataSource.grantPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
@@ -209,11 +223,6 @@ export class EvoluaApiStack extends cdk.Stack {
     this.scansTable.grantReadData(scansTableDataSource);
     this.scanResultsTable.grantReadData(scanResultsTableDataSource);
     this.usersTable.grantReadData(usersTableDataSource);
-
-    getRepoStatsFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['dynamodb:Query'],
-      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
-    }));
   }
 
   private getIntrospectionConfig(stageName: string): appsync.IntrospectionConfig {
@@ -282,7 +291,7 @@ export class EvoluaApiStack extends cdk.Stack {
   }
 
   private createGetRepoStatsFunction() {
-    const getStats = new TypescriptFunction(this, 'GetRepoStatsFunction', {
+    const getRepoStats = new TypescriptFunction(this, 'GetRepoStatsFunction', {
       serviceName: this.props.serviceName,
       stageName: this.props.stageName,
       ssmStageName: this.props.ssmStageName,
@@ -295,14 +304,78 @@ export class EvoluaApiStack extends cdk.Stack {
       }
     });
 
-    this.tenantReposTable.grantReadData(getStats);
-    this.scansTable.grantReadData(getStats);
+    this.tenantReposTable.grantReadData(getRepoStats);
+    this.scansTable.grantReadData(getRepoStats);
 
-    getStats.addToRolePolicy(new iam.PolicyStatement({
+    getRepoStats.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
+    }));
+
+    getRepoStats.addToRolePolicy(new iam.PolicyStatement({
       actions: ['dynamodb:Query'],
       resources: [`${this.scansTable.tableArn}/index/byTimestampIndex`],
     }));
 
-    return getStats;
+    return getRepoStats;
+  }
+
+  private createSearchReposFunction() {
+    const searchRepos = new TypescriptFunction(this, 'SearchReposFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/search-repos.ts',
+      timeout: cdk.Duration.seconds(6),
+      handler: 'handler',
+      environment: {
+        REPOS_TABLE_NAME: this.reposTable.tableName,
+      }
+    });
+
+    this.reposTable.grantReadData(searchRepos);
+
+    searchRepos.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/app-id`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/search-api-key`
+        ],
+      })
+    );
+
+    return searchRepos;
+  }
+
+  private createSearchScansFunction() {
+    const searchScans = new TypescriptFunction(this, 'SearchScansFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/search-scans.ts',
+      timeout: cdk.Duration.seconds(6),
+      handler: 'handler',
+      environment: {
+        TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
+      }
+    });
+
+    searchScans.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
+    }));
+
+    searchScans.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/app-id`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/search-api-key`
+        ],
+      })
+    );
+
+    return searchScans;
   }
 }
