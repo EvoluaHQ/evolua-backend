@@ -157,6 +157,22 @@ export async function updateLastReviewedAt(repoId: string, timestamp: Date) {
   }));
 }
 
+export async function updateTenantRepoLastReviewedAt(tenantId: string, repoId: string, lastReviewedAt: string) {
+  const tableName = tenantReposTableName();
+
+  await DocumentClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: { 
+      tenantId,
+      repoId
+    },
+    UpdateExpression: 'SET lastReviewedAt = :lastReviewedAt',
+    ExpressionAttributeValues: {
+      ':lastReviewedAt': lastReviewedAt
+    }
+  }));
+}
+
 export async function findTenantReposByRepoId(repoId: string): Promise<TenantRepo[]> {
   const tableName = tenantReposTableName();
 
@@ -183,23 +199,4 @@ export async function findTenantReposByRepoId(repoId: string): Promise<TenantRep
   } while (lastEvaluatedKey);
 
   return items;
-}
-
-export async function batchUpdateTenantRepoLastReviewedAt(repoId: string, tenantIds: string[], lastReviewedAt: string) {
-  const tableName = tenantReposTableName();
-
-  const allRequests = tenantIds.map(tenantId => ({
-    Update: {
-      Key: {
-        tenantId,
-        repoId
-      },
-      UpdateExpression: 'SET lastReviewedAt = :lastReviewedAt',
-      ExpressionAttributeValues: {
-        ':lastReviewedAt': lastReviewedAt
-      }
-    }
-  }));
-
-  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
 }

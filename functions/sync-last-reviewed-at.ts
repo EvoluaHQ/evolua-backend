@@ -1,6 +1,6 @@
 import { EventBridgeEvent } from 'aws-lambda';
 import { EventEnvelope, ScanCompletedEventDetail } from "./types";
-import { findTenantReposByRepoId, batchUpdateTenantRepoLastReviewedAt } from './lib/repos';
+import { findTenantReposByRepoId, updateTenantRepoLastReviewedAt } from './lib/repos';
 
 type Event = EventBridgeEvent<'scan_triggered', EventEnvelope<ScanCompletedEventDetail>>;
 
@@ -9,6 +9,10 @@ export const handler = async (event: Event, context: any) => {
   const lastReviewedAt = event.detail.data.reviewedAt;
   
   const tenantRepos = await findTenantReposByRepoId(repoId);
-  const tenantIds = tenantRepos.map(x => x.tenantId);
-  await batchUpdateTenantRepoLastReviewedAt(repoId, tenantIds, lastReviewedAt);
+  for (const tenantRepo of tenantRepos) {
+    await updateTenantRepoLastReviewedAt(
+      tenantRepo.tenantId,
+      tenantRepo.repoId,
+      lastReviewedAt);
+  }
 };
