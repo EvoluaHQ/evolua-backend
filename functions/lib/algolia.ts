@@ -38,6 +38,32 @@ export const initTenantReposIndex = async (appId: string, apiKey: string) => {
         "provider",
         "private",
         "tenantId",
+      ],
+      customRanking: [
+        "desc(lastReviewedAt)"
+      ],
+      replicas: [
+        '${indexName}-asc-lastReviewedAt',
+      ]
+    },
+    forwardToReplicas: true
+  })
+
+  // replica setting
+  await client.setSettings({
+    indexName: '${indexName}-asc-lastReviewedAt',
+    indexSettings: {
+      searchableAttributes: [
+        "name",
+        "fullName",
+      ],
+      attributesForFaceting: [
+        "provider",
+        "private",
+        "tenantId",
+      ],
+      customRanking: [
+        "asc(lastReviewedAt)"
       ]
     }
   })

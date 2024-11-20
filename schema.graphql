@@ -18,8 +18,8 @@ type Query {
   searchRepos(
     query: String!
     count: Int!
-    # sortBy: ReposSortBy!
-    # sortDirection: SortDirection!
+    sortBy: ReposSortBy!
+    sortDirection: SortDirection!
     nextToken: String
   ): ReposPage!
 
@@ -60,7 +60,6 @@ enum SortDirection {
 }
 
 enum ReposSortBy {
-  name
   lastReviewedAt
 }
 
@@ -77,6 +76,7 @@ type Repo {
   fullName: String!
   private: Boolean!
   enabled: Boolean!
+  lastReviewedAt: AWSDateTime
 }
 
 type ScansPage {
