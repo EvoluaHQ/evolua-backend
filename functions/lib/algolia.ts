@@ -26,7 +26,8 @@ export const initSearchClient = (appId: string, apiKey: string) => {
 export const initTenantReposIndex = async (appId: string, apiKey: string) => {
   const indexName = tenantReposIndexName()
 
-  const client = searchClient(appId, apiKey)    
+  const client = searchClient(appId, apiKey)
+
   await client.setSettings({
     indexName,
     indexSettings: {
@@ -43,7 +44,7 @@ export const initTenantReposIndex = async (appId: string, apiKey: string) => {
         "desc(lastReviewedAt)"
       ],
       replicas: [
-        '${indexName}-asc-lastReviewedAt',
+        `${indexName}-asc-lastReviewedAt`,
       ]
     },
     forwardToReplicas: true
@@ -51,7 +52,7 @@ export const initTenantReposIndex = async (appId: string, apiKey: string) => {
 
   // replica setting
   await client.setSettings({
-    indexName: '${indexName}-asc-lastReviewedAt',
+    indexName: `${indexName}-asc-lastReviewedAt`,
     indexSettings: {
       searchableAttributes: [
         "name",
