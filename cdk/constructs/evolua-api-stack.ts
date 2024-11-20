@@ -2,8 +2,6 @@ import * as cdk from 'aws-cdk-lib';
 import * as appsync from 'aws-cdk-lib/aws-appsync';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { EvoluaServiceStackProps } from './evolua-stack-props';
 import { TypescriptFunction } from './typescript-function';
@@ -247,11 +245,12 @@ export class EvoluaApiStack extends cdk.Stack {
   }
 
   private createAuthorizerFunction() {
-    const authorizer = new lambdaNodejs.NodejsFunction(this, 'Authorizer', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: 'functions/authorizer.js',
+    const authorizer = new TypescriptFunction(this, 'Authorizer', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/authorizer.ts',
       handler: 'handler',
-      memorySize: 1024,
       environment: {
         USERS_TABLE_NAME: this.usersTable.tableName,
       }
@@ -271,8 +270,8 @@ export class EvoluaApiStack extends cdk.Stack {
       stageName: this.props.stageName,
       ssmStageName: this.props.ssmStageName,
       entry: 'functions/get-stats.ts',
-      timeout: cdk.Duration.seconds(20),
       handler: 'handler',
+      timeout: cdk.Duration.seconds(20),
       environment: {
         TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
         SCANS_TABLE_NAME: this.scansTable.tableName,
