@@ -4,6 +4,7 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as eventTargets from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as ssm from "aws-cdk-lib/aws-ssm";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import { EvoluaStackProps } from "./evolua-stack-props";
 import { TypescriptFunction } from "./typescript-function";
@@ -74,6 +75,9 @@ export class DataStack extends cdk.Stack {
     this.createClerkUserDeletedEventHandlerFunction();
     
     this.createResetScanCountsFunction();
+
+    this.createAlgoliaSyncTenantReposFunction();
+    this.createAlgoliaSyncScansFunction();
 
     new cdk.CfnOutput(this, "SSM_STAGE_NAME", {
       key: "SsmStageName",
@@ -313,7 +317,6 @@ export class DataStack extends cdk.Stack {
     });
     ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
-
     handler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["ssm:GetParameter*"],
@@ -504,5 +507,73 @@ export class DataStack extends cdk.Stack {
     });
 
     this.usersTable.grantReadWriteData(handler);
+  }
+
+  private createAlgoliaSyncTenantReposFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "AlgoliaSyncTenantReposFunction",
+      {
+        serviceName: 'sync-tenant-repos-to-algolia',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/sync-tenant-repos-to-algolia.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(30)
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/app-id`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/write-api-key`
+        ],
+      })
+    );
+
+    this.tenantReposTable.grantStreamRead(handler);
+
+    handler.addEventSourceMapping("SyncTenantReposToAlgoliaESM", {
+      eventSourceArn: this.tenantReposTable.tableStreamArn,
+      startingPosition: lambda.StartingPosition.TRIM_HORIZON,
+    });
+  }
+
+  private createAlgoliaSyncScansFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "AlgoliaSyncScansFunction",
+      {
+        serviceName: 'sync-scans-to-algolia',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/sync-scans-to-algolia.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(30),
+        environment: {
+          SCAN_RESULTS_TABLE_NAME: this.scanResultsTable.tableName,
+        }
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/app-id`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/algolia/write-api-key`
+        ],
+      })
+    );
+
+    this.scanResultsTable.grantReadData(handler);
+    this.scansTable.grantStreamRead(handler);
+
+    handler.addEventSourceMapping("SyncScansToAlgoliaESM", {
+      eventSourceArn: this.scansTable.tableStreamArn,
+      startingPosition: lambda.StartingPosition.TRIM_HORIZON,
+    });
   }
 }

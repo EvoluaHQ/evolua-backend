@@ -7,11 +7,6 @@ import { ScanResult, Summary } from '../types/index'
 const dynamodbClient = new DynamoDB()
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient)
 
-const SCANS_TABLE_NAME = process.env.SCANS_TABLE_NAME || ""
-if (!SCANS_TABLE_NAME) {
-  throw new Error("SCANS_TABLE_NAME env var is missing")
-}
-
 export interface PullRequest {
   id: string
   number: number
@@ -34,16 +29,32 @@ export interface Scan {
   low: number
 }
 
+const scansTableName = () => {
+  const tableName = process.env.SCANS_TABLE_NAME || ""
+  if (!tableName) {
+    throw new Error("SCANS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
+const scanResultsTableName = () => {
+  const tableName = process.env.SCAN_RESULTS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
 export async function saveScanResults(
   repoId: string,
   pr: PullRequest,
   results: ScanResult[]
 ) {
-  const SCAN_RESULTS_TABLE_NAME = process.env.SCAN_RESULTS_TABLE_NAME || ""
-
-  if (!SCAN_RESULTS_TABLE_NAME) {
-    throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
-  }
+  const SCANS_TABLE_NAME = scansTableName();
+  const SCAN_RESULTS_TABLE_NAME = scanResultsTableName();
 
   const timestamp = new Date().toISOString()
   const prId = pr.id.toString()
@@ -53,27 +64,9 @@ export async function saveScanResults(
     return results.reduce((acc, result) => acc + f(result.findings.summary), 0)
   }
 
-  const item: Scan = {
-    repoId,
-    scanId,
-    timestamp,
-    pullRequestId: prId,
-    pullRequest: pr,
-    filesScanned: results.length,
-    issuesCount: countIssues((summary) => summary.totalIssues),
-    critical: countIssues((summary) => summary.riskLevels.critical),
-    high: countIssues((summary) => summary.riskLevels.high),
-    medium: countIssues((summary) => summary.riskLevels.medium),
-    low: countIssues((summary) => summary.riskLevels.low),
-  }
-
-  await DocumentClient.send(
-    new PutCommand({
-      TableName: SCANS_TABLE_NAME,
-      Item: item
-    })
-  )
-
+  // IMPORTANT: save the scan results first, then the scan summary
+  // so that when the ScansTable's DynamoDB stream triggers the
+  // algolia sync function, the scan results are already available
   const saveResultsReqs = results.map((result) => ({
     PutRequest: {
       Item: {
@@ -101,9 +94,59 @@ export async function saveScanResults(
     SCAN_RESULTS_TABLE_NAME,
     saveResultsReqs
   )
+
+  const scanSummary: Scan = {
+    repoId,
+    scanId,
+    timestamp,
+    pullRequestId: prId,
+    pullRequest: pr,
+    filesScanned: results.length,
+    issuesCount: countIssues((summary) => summary.totalIssues),
+    critical: countIssues((summary) => summary.riskLevels.critical),
+    high: countIssues((summary) => summary.riskLevels.high),
+    medium: countIssues((summary) => summary.riskLevels.medium),
+    low: countIssues((summary) => summary.riskLevels.low),
+  }
+
+  await DocumentClient.send(
+    new PutCommand({
+      TableName: SCANS_TABLE_NAME,
+      Item: scanSummary
+    })
+  )
+}
+
+export async function getScanResults(scanId: string) {
+  const SCAN_RESULTS_TABLE_NAME = scanResultsTableName();
+
+  const results = [];
+  let lastEvaluatedKey;
+  do {
+    const cmd = new QueryCommand({
+      TableName: SCAN_RESULTS_TABLE_NAME,
+      KeyConditionExpression: "scanId = :scanId",
+      ExpressionAttributeValues: {
+        ":scanId": scanId,
+      },      
+    });
+
+    if (lastEvaluatedKey) {
+      cmd.input.ExclusiveStartKey = lastEvaluatedKey;
+    }
+
+    const resp = await DocumentClient.send(cmd);
+    const newResults = resp.Items || [];
+    results.push(...newResults);
+    lastEvaluatedKey = resp.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return results;
 }
 
 export async function listScansForRepo(repoId: string, startDate: string, endDate: string) {
+  const SCANS_TABLE_NAME = scansTableName();
+
   let lastEvaluatedKey: any;
   const allScans: Scan[] = [];
 

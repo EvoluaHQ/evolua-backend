@@ -88,6 +88,21 @@ export async function deleteRepos(repoIds: string[]) {
   await helper.executeBatchWriteCommand(DocumentClient, REPOS_TABLE_NAME, allRequests);
 }
 
+export async function batchGetRepos(repoIds: string[]): Promise<(Repo & { repoId: string })[]> {
+  const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
+  if (!REPOS_TABLE_NAME) {
+    throw new Error('REPOS_TABLE_NAME env var is missing');
+  }
+
+  const allKeys = repoIds.map(repoId => ({
+    repoId
+  }));
+
+  const resp = await helper.executeBatchGetCommand(DocumentClient, REPOS_TABLE_NAME, allKeys);
+
+  return resp.map(item => item as Repo & { repoId: string });
+}
+
 export async function listReposForTenant(tenantId: string): Promise<TenantRepo[]> {
   const TENANT_REPOS_TABLE_NAME = process.env.TENANT_REPOS_TABLE_NAME || '';
   if (!TENANT_REPOS_TABLE_NAME) {

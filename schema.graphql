@@ -15,6 +15,14 @@ type Query {
     nextToken: String
   ): ReposPage!
 
+  searchRepos(
+    query: String!
+    count: Int!
+    # sortBy: ReposSortBy!
+    # sortDirection: SortDirection!
+    nextToken: String
+  ): ReposPage!
+
   getRepo(
     tenantRepoId: String!
   ): Repo
@@ -30,6 +38,13 @@ type Query {
     nextToken: String
   ): ScansPage!
 
+  searchScans(
+    tenantRepoId: String!
+    query: String!
+    count: Int!
+    nextToken: String
+  ): ScansPage!
+
   getScan(
     tenantRepoId: String!
     scanId: String!
@@ -37,6 +52,16 @@ type Query {
 }
 
 type Mutation {
+}
+
+enum SortDirection {
+  asc
+  desc
+}
+
+enum ReposSortBy {
+  name
+  lastReviewedAt
 }
 
 type ReposPage {
