@@ -2,7 +2,7 @@ import { searchClient, BatchRequest as AlgoliaBatchRequest } from "@algolia/clie
 
 export type BatchRequest = AlgoliaBatchRequest
 
-export const tenantReposIndexName = (sortBy: string, sortDirection: string) => {
+export const tenantReposIndexName = (sortBy?: string, sortDirection?: string) => {
   if (!process.env.STAGE_NAME) {
     throw new Error("STAGE_NAME env var is not set");
   }
@@ -32,6 +32,7 @@ export const initSearchClient = (appId: string, apiKey: string) => {
 
 export const initTenantReposIndex = async (appId: string, apiKey: string) => {
   const indexName = tenantReposIndexName()
+  const replicaIndexName = tenantReposIndexName("lastReviewedAt", "asc")
 
   const client = searchClient(appId, apiKey)
 
@@ -51,7 +52,7 @@ export const initTenantReposIndex = async (appId: string, apiKey: string) => {
         "desc(lastReviewedAt)"
       ],
       replicas: [
-        `${indexName}-asc-lastReviewedAt`,
+        replicaIndexName,
       ]
     },
     forwardToReplicas: true
@@ -59,7 +60,7 @@ export const initTenantReposIndex = async (appId: string, apiKey: string) => {
 
   // replica setting
   await client.setSettings({
-    indexName: `${indexName}-asc-lastReviewedAt`,
+    indexName: replicaIndexName,
     indexSettings: {
       searchableAttributes: [
         "name",
