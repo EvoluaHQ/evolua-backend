@@ -13,8 +13,8 @@ const logger = new Logger();
 type Arguments = {
   query: string
   count: number
-  // sortBy: "name" | "lastReviewedAt"
-  // sortDirection: "asc" | "desc"
+  sortBy: "lastReviewedAt"
+  sortDirection: "asc" | "desc"
   nextToken?: string
 }
 
@@ -28,14 +28,14 @@ const _handler = async (event: AppSyncResolverEvent<Arguments>, context: any) =>
 
   const searchParams = parseNextToken(event.arguments.nextToken) || {
     query: event.arguments.query,
-    // sortBy: event.arguments.sortBy,
-    // sortDirection: event.arguments.sortDirection,
+    sortBy: event.arguments.sortBy,
+    sortDirection: event.arguments.sortDirection,
     count: event.arguments.count,
   };
 
   logger.debug('Search params', { searchParams });
 
-  const indexName = tenantReposIndexName();
+  const indexName = tenantReposIndexName(searchParams.sortBy, searchParams.sortDirection);
   const identity = event.identity as AppSyncIdentityLambda;
 
   const resp = await algolia.search({

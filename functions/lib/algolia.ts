@@ -2,12 +2,19 @@ import { searchClient, BatchRequest as AlgoliaBatchRequest } from "@algolia/clie
 
 export type BatchRequest = AlgoliaBatchRequest
 
-export const tenantReposIndexName = () => {
+export const tenantReposIndexName = (sortBy: string, sortDirection: string) => {
   if (!process.env.STAGE_NAME) {
     throw new Error("STAGE_NAME env var is not set");
   }
 
-  return `tenant-repos-${process.env.STAGE_NAME}`;
+  // the primary index is set for desc(lastReviewedAt)
+  const primaryIndexName = `tenant-repos-${process.env.STAGE_NAME}`;
+
+  if (sortBy === "lastReviewedAt" && sortDirection === "asc") {
+    return `${primaryIndexName}-asc-lastReviewedAt`;
+  }
+
+  return primaryIndexName;
 }
 
 export const scansIndexName = () => {
