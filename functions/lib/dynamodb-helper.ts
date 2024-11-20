@@ -76,10 +76,10 @@ export const tenantReposTableName = () => {
 }
 
 export const reposTableName = () => {
-  const tableName = process.env.TENANT_REPOS_TABLE_NAME || ""
+  const tableName = process.env.REPOS_TABLE_NAME || ""
 
   if (!tableName) {
-    throw new Error("TENANT_REPOS_TABLE_NAME env var is missing")
+    throw new Error("REPOS_TABLE_NAME env var is missing")
   }
 
   return tableName;
