@@ -2,7 +2,7 @@ import { APIGatewayEvent } from 'aws-lambda';
 import { Webhooks } from '@octokit/webhooks';
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
-import * as ulid from 'ulid';
+import { ulid } from 'ulid';
 import * as Events from './lib/events';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { ScanGitHubPrInput, ReposChangedInput } from './types/github';
@@ -102,7 +102,7 @@ const _handler = async (event: APIGatewayEvent, context: any) => {
       }
     };
 
-    const eventId = ulid.ulid();
+    const eventId = ulid();
     await Events.publishEvent(eventId, 'github', 'scan_triggered', input);
     await Events.saveEvent(eventId, 'github', 'scan_triggered', input);
   } else if (eventCategory === 'issue_comment' && action === 'created' && payload.comment?.body.startsWith('/evolua-review')) 
@@ -129,7 +129,7 @@ const _handler = async (event: APIGatewayEvent, context: any) => {
       }
     };
 
-    const eventId = ulid.ulid();
+    const eventId = ulid();
 
     await Events.publishEvent(eventId, 'github', 'scan_triggered', input);
     await Events.saveEvent(eventId, 'github', 'scan_triggered', input);
@@ -160,7 +160,7 @@ const _handler = async (event: APIGatewayEvent, context: any) => {
       }))
     };
 
-    const eventId = ulid.ulid();
+    const eventId = ulid();
     await Events.publishEvent(eventId, 'github', 'repos_installed', input);
     await Events.saveEvent(eventId, 'github', 'repos_installed', input);
   } else if (isRepoUninstalledEvent(eventCategory, action)) {
@@ -184,14 +184,14 @@ const _handler = async (event: APIGatewayEvent, context: any) => {
       }))
     };
 
-    const eventId = ulid.ulid();
+    const eventId = ulid();
     await Events.publishEvent(eventId, 'github', 'repos_uninstalled', input);
     await Events.saveEvent(eventId, 'github', 'repos_uninstalled', input);
   }
 
   const eventType = `${eventCategory}.${action}`;
 
-  const eventId = ulid.ulid();
+  const eventId = ulid();
   await Events.publishEvent(eventId, 'github', eventType, payload);
   await Events.saveEvent(eventId, 'github', eventType, payload);
 

@@ -1,7 +1,7 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb"
-import * as ulid from "ulid"
-import * as helper from "./dynamodb-helper"
+import { ulid } from "ulid"
+import { scansTableName, scanResultsTableName, executeBatchWriteCommand } from "./dynamodb-helper"
 import { ScanResult, Summary } from '../types/index'
 
 const dynamodbClient = new DynamoDB()
@@ -29,36 +29,18 @@ export interface Scan {
   low: number
 }
 
-const scansTableName = () => {
-  const tableName = process.env.SCANS_TABLE_NAME || ""
-  if (!tableName) {
-    throw new Error("SCANS_TABLE_NAME env var is missing")
-  }
-
-  return tableName;
-}
-
-const scanResultsTableName = () => {
-  const tableName = process.env.SCAN_RESULTS_TABLE_NAME || ""
-
-  if (!tableName) {
-    throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
-  }
-
-  return tableName;
-}
-
 export async function saveScanResults(
   repoId: string,
   pr: PullRequest,
+  reviewedAt: Date,
   results: ScanResult[]
 ) {
   const SCANS_TABLE_NAME = scansTableName();
   const SCAN_RESULTS_TABLE_NAME = scanResultsTableName();
 
-  const timestamp = new Date().toISOString()
+  const timestamp = reviewedAt.toISOString()
   const prId = pr.id.toString()
-  const scanId = ulid.ulid()
+  const scanId = ulid()
 
   const countIssues = (f: (summary: Summary) => number) => {
     return results.reduce((acc, result) => acc + f(result.findings.summary), 0)
@@ -89,7 +71,7 @@ export async function saveScanResults(
     },
   }))
 
-  await helper.executeBatchWriteCommand(
+  await executeBatchWriteCommand(
     DocumentClient,
     SCAN_RESULTS_TABLE_NAME,
     saveResultsReqs
@@ -115,6 +97,8 @@ export async function saveScanResults(
       Item: scanSummary
     })
   )
+
+  return scanSummary
 }
 
 export async function getScanResults(scanId: string) {

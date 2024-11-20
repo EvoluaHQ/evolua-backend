@@ -45,3 +45,42 @@ export async function executeBatchGetCommand(
   const responses = await Promise.all(batches);
   return responses.flatMap(response => response.Responses![tableName]);
 }
+
+export const scansTableName = () => {
+  const tableName = process.env.SCANS_TABLE_NAME || ""
+  if (!tableName) {
+    throw new Error("SCANS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
+export const scanResultsTableName = () => {
+  const tableName = process.env.SCAN_RESULTS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("SCAN_RESULTS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
+export const tenantReposTableName = () => {
+  const tableName = process.env.TENANT_REPOS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("TENANT_REPOS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
+export const reposTableName = () => {
+  const tableName = process.env.REPOS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("REPOS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}

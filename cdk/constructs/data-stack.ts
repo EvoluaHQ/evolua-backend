@@ -67,6 +67,7 @@ export class DataStack extends cdk.Stack {
     });
 
     this.createScanGitHubPrFunction();
+    this.createSyncLastReviewedAtFunction();
 
     this.createGitHubInstallationAddedEventHandlerFunction();
     this.createGitHubInstallationRemovedEventHandlerFunction();
@@ -215,6 +216,18 @@ export class DataStack extends cdk.Stack {
       },
     });
 
+    table.addGlobalSecondaryIndex({
+      indexName: "repoIdIndex",
+      partitionKey: {
+        name: "repoId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "tenantId",
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
     return table;
   }
 
@@ -300,6 +313,8 @@ export class DataStack extends cdk.Stack {
           STAGE_NAME: this.props.stageName,
           SSM_STAGE_NAME: this.props.ssmStageName,
           USERS_TABLE_NAME: this.usersTable.tableName,
+          REPOS_TABLE_NAME: this.reposTable.tableName,
+          EVENT_BUS_NAME: this.eventBus.eventBusName,
         },
       }
     );
@@ -338,8 +353,43 @@ export class DataStack extends cdk.Stack {
     this.scansTable.grantWriteData(handler);
     this.scanResultsTable.grantWriteData(handler);
     this.usersTable.grantReadWriteData(handler);
+    this.reposTable.grantWriteData(handler);
+    this.eventBus.grantPutEventsTo(handler);
 
     return handler;
+  }
+
+  private createSyncLastReviewedAtFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "SyncLastReviewedAtFunction",
+      {
+        serviceName: 'sync-last-reviewed-at',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/sync-last-reviewed-at.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(30),
+        environment: {
+          TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
+        },
+      }
+    );
+
+    const ghWebhookRule = new events.Rule(this, "SyncLastReviewedAtRule", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["scan-github-pr-handler"],
+        detail: {
+          metadata: {
+            type: ["scan_completed"],
+          },
+        },
+      },
+    });
+    ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+    
+    this.tenantReposTable.grantReadWriteData(handler);
   }
 
   private createGitHubInstallationAddedEventHandlerFunction() {

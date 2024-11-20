@@ -1,7 +1,12 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import * as helper from './dynamodb-helper';
-import * as Ulid from 'ulid';
+import { DynamoDBDocumentClient, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { ulid } from 'ulid';
+import { 
+  reposTableName,
+  tenantReposTableName,
+  executeBatchWriteCommand,
+  executeBatchGetCommand
+} from './dynamodb-helper';
 
 const dynamodbClient = new DynamoDB();
 const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
@@ -26,10 +31,7 @@ export interface TenantRepo {
 }
 
 export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
-  const TENANT_REPOS_TABLE_NAME = process.env.TENANT_REPOS_TABLE_NAME || '';
-  if (!TENANT_REPOS_TABLE_NAME) {
-    throw new Error('TENANT_REPOS_TABLE_NAME env var is missing');
-  }
+  const tableName = tenantReposTableName();
 
   const allRequests = repos.map(repo => ({
     PutRequest: {
@@ -38,7 +40,7 @@ export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
         repoId: `${repo.provider}#${repo.providerRepoId}`,
         provider: repo.provider,
         providerRepoId: repo.providerRepoId,
-        tenantRepoId: Ulid.ulid(),
+        tenantRepoId: ulid(),
         name: repo.name,
         fullName: repo.fullName,
         private: repo.private
@@ -46,14 +48,11 @@ export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
     }
   }));
 
-  await helper.executeBatchWriteCommand(DocumentClient, TENANT_REPOS_TABLE_NAME, allRequests);
+  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
 }
 
 export async function saveRepos(repos: Repo[]) {
-  const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
-  if (!REPOS_TABLE_NAME) {
-    throw new Error('REPOS_TABLE_NAME env var is missing');
-  }
+  const tableName = reposTableName();
 
   const allRequests = repos.map(repo => ({
     PutRequest: {
@@ -68,14 +67,11 @@ export async function saveRepos(repos: Repo[]) {
     }
   }));
 
-  await helper.executeBatchWriteCommand(DocumentClient, REPOS_TABLE_NAME, allRequests);
+  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
 }
 
 export async function deleteRepos(repoIds: string[]) {
-  const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
-  if (!REPOS_TABLE_NAME) {
-    throw new Error('REPOS_TABLE_NAME env var is missing');
-  }
+  const tableName = reposTableName();
 
   const allRequests = repoIds.map(repoId => ({
     DeleteRequest: {
@@ -85,32 +81,26 @@ export async function deleteRepos(repoIds: string[]) {
     }
   }));
 
-  await helper.executeBatchWriteCommand(DocumentClient, REPOS_TABLE_NAME, allRequests);
+  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
 }
 
 export async function batchGetRepos(repoIds: string[]): Promise<(Repo & { repoId: string })[]> {
-  const REPOS_TABLE_NAME = process.env.REPOS_TABLE_NAME || '';
-  if (!REPOS_TABLE_NAME) {
-    throw new Error('REPOS_TABLE_NAME env var is missing');
-  }
+  const tableName = reposTableName();
 
   const allKeys = repoIds.map(repoId => ({
     repoId
   }));
 
-  const resp = await helper.executeBatchGetCommand(DocumentClient, REPOS_TABLE_NAME, allKeys);
+  const resp = await executeBatchGetCommand(DocumentClient, tableName, allKeys);
 
   return resp.map(item => item as Repo & { repoId: string });
 }
 
 export async function listReposForTenant(tenantId: string): Promise<TenantRepo[]> {
-  const TENANT_REPOS_TABLE_NAME = process.env.TENANT_REPOS_TABLE_NAME || '';
-  if (!TENANT_REPOS_TABLE_NAME) {
-    throw new Error('TENANT_REPOS_TABLE_NAME env var is missing');
-  }
+  const tableName = tenantReposTableName();
 
   const params = {
-    TableName: TENANT_REPOS_TABLE_NAME,
+    TableName: tableName,
     KeyConditionExpression: 'tenantId = :tenantId',
     ExpressionAttributeValues: {
       ':tenantId': tenantId
@@ -134,13 +124,10 @@ export async function listReposForTenant(tenantId: string): Promise<TenantRepo[]
 }
 
 export async function getTenantRepo(tenantId: string, tenantRepoId: string): Promise<TenantRepo | null> {
-  const TENANT_REPOS_TABLE_NAME = process.env.TENANT_REPOS_TABLE_NAME || '';
-  if (!TENANT_REPOS_TABLE_NAME) {
-    throw new Error('TENANT_REPOS_TABLE_NAME env var is missing');
-  }
+  const tableName = tenantReposTableName();
 
   const queryResp = await DocumentClient.send(new QueryCommand({
-    TableName: TENANT_REPOS_TABLE_NAME,
+    TableName: tableName,
     IndexName: 'tenantRepoIdIndex',
     Limit: 1,
     KeyConditionExpression: 'tenantId = :tenantId AND tenantRepoId = :tenantRepoId',
@@ -155,4 +142,61 @@ export async function getTenantRepo(tenantId: string, tenantRepoId: string): Pro
   }
 
   return queryResp.Items[0] as TenantRepo;
+}
+
+export async function updateLastReviewedAt(repoId: string, timestamp: Date) {
+  const tableName = reposTableName();
+
+  await DocumentClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: { repoId },
+    UpdateExpression: 'SET lastReviewedAt = :lastReviewedAt',
+    ExpressionAttributeValues: {
+      ':lastReviewedAt': timestamp.toJSON()
+    }
+  }));
+}
+
+export async function updateTenantRepoLastReviewedAt(tenantId: string, repoId: string, lastReviewedAt: string) {
+  const tableName = tenantReposTableName();
+
+  await DocumentClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: { 
+      tenantId,
+      repoId
+    },
+    UpdateExpression: 'SET lastReviewedAt = :lastReviewedAt',
+    ExpressionAttributeValues: {
+      ':lastReviewedAt': lastReviewedAt
+    }
+  }));
+}
+
+export async function findTenantReposByRepoId(repoId: string): Promise<TenantRepo[]> {
+  const tableName = tenantReposTableName();
+
+  const params = {
+    TableName: tableName,
+    IndexName: 'repoIdIndex',
+    KeyConditionExpression: 'repoId = :repoId',
+    ExpressionAttributeValues: {
+      ':repoId': repoId
+    }
+  };
+
+  let items: TenantRepo[] = [];
+  let lastEvaluatedKey: any;
+
+  do {
+    const data = await DocumentClient.send(new QueryCommand({
+      ...params,
+      ExclusiveStartKey: lastEvaluatedKey
+    }));
+
+    items.push(...data.Items as TenantRepo[]);
+    lastEvaluatedKey = data.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return items;
 }

@@ -17,6 +17,7 @@ import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import { ContentBlock } from "@aws-sdk/client-bedrock-runtime";
 import { Sema } from "async-sema";
+import { ulid } from "ulid";
 import {
   AI_ANALYSIS_CONFIG,
   initAnthropic,
@@ -39,14 +40,17 @@ import {
   submitPRReview,
 } from "./lib/github-helper";
 import { PullRequest, saveScanResults } from "./lib/scans";
+import { updateLastReviewedAt } from "./lib/repos";
+import { publishEvent } from "./lib/events";
 import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
 import {
-  Metadata,
+  EventEnvelope,
   AIResponse,
   Findings,
   PRFileChanges,
   ScanResult,
-  ScanGitHubPrInput
+  ScanGitHubPrInput,
+  ScanCompletedEventDetail
 } from "./types";
 import { EventBridgeEvent } from 'aws-lambda';
 import { MaxScansExceededError } from "./types/errors";
@@ -59,11 +63,7 @@ const metrics = new Metrics({
   namespace: "CodeReview",
 });
 
-type EventEnvelope = {
-  metadata: Metadata;
-  data: ScanGitHubPrInput;
-}
-type Event = EventBridgeEvent<'scan_triggered', EventEnvelope>;
+type Event = EventBridgeEvent<'scan_triggered', EventEnvelope<ScanGitHubPrInput>>;
 
 const _handler = async (event: Event, context: any) => {
   const input = event.detail.data;
@@ -71,7 +71,7 @@ const _handler = async (event: Event, context: any) => {
 
   initAnthropic(context.ANTHROPIC_API_KEY);
 
-  const startTime = Date.now();
+  const startTime = new Date();
 
   try {
     // Initialize observability tools
@@ -220,7 +220,7 @@ const _handler = async (event: Event, context: any) => {
     }
 
     // Calculate final metrics
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startTime.getTime();
     const totalIssues = results.reduce(
       (sum, { findings }) => sum + findings.issues.length,
       0
@@ -245,10 +245,21 @@ const _handler = async (event: Event, context: any) => {
       title: pullRequest.title,
       createdAt: pullRequest.created_at,
     };
-    await saveScanResults(repoId, pr, results);
     
+    const scanSummary = await saveScanResults(repoId, pr, startTime, results);
+    await updateLastReviewedAt(repoId, startTime);
+
+    const scanCompletedEvent: ScanCompletedEventDetail = {
+      repoId,
+      scanId: scanSummary.scanId,
+      reviewedAt: startTime.toJSON(),
+      pullRequest: pr,
+      summary: scanSummary,
+      reviewedFiles: filesToAnalyze.map((file) => file.path),
+    }
+    await publishEvent(ulid(), 'scan-github-pr-handler', 'scan_completed', scanCompletedEvent);
   } catch (error) {
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startTime.getTime();
 
     // Log error details and record error metric
     logger.error("Handler execution failed", {
