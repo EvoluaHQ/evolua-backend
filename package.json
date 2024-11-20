@@ -23,7 +23,7 @@
     "@jest/globals": "^29.7.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/jest": "^29.5.12",
-"@types/jsonwebtoken": "^9.0.2"
+    "@types/jsonwebtoken": "^9.0.2",
     "@types/lodash": "^4.17.13",
     "@types/node": "20.14.9",
     "@typescript-eslint/eslint-plugin": "^8.12.2",
