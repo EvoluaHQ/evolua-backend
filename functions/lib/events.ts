@@ -6,8 +6,6 @@ const dynamodbClient = new DynamoDB({});
 const dynamodb = DynamoDBDocumentClient.from(dynamodbClient);
 const ebClient = new EventBridgeClient({});
 
-const { EVENT_BUS_NAME, EVENTS_TABLE_NAME } = process.env;
-
 interface EventDetail {
   metadata: {
     eventId: string;
@@ -37,7 +35,7 @@ export const publishEvent = async (eventId: string, source: string, eventType: s
         Source: source,
         DetailType: eventType,
         Detail: JSON.stringify(detail),
-        EventBusName: EVENT_BUS_NAME,
+        EventBusName: process.env.EVENT_BUS_NAME,
       }
     ]
   });
@@ -46,7 +44,7 @@ export const publishEvent = async (eventId: string, source: string, eventType: s
 
 export const saveEvent = async (eventId: string, source: string, eventType: string, data: any): Promise<void> => {
   const command = new PutCommand({
-    TableName: EVENTS_TABLE_NAME,
+    TableName: process.env.EVENTS_TABLE_NAME,
     Item: {
       eventId,
       source,

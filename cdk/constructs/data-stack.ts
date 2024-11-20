@@ -314,6 +314,7 @@ export class DataStack extends cdk.Stack {
           SSM_STAGE_NAME: this.props.ssmStageName,
           USERS_TABLE_NAME: this.usersTable.tableName,
           REPOS_TABLE_NAME: this.reposTable.tableName,
+          EVENT_BUS_NAME: this.eventBus.eventBusName,
         },
       }
     );
