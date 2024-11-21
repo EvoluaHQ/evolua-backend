@@ -62,14 +62,14 @@ export const AI_ANALYSIS_CONFIG = {
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
 const byPassBedrock = true; //BY_PASS_BEDROCK === "true"
 
-let anthropic: Anthropic
+let anthropic: Anthropic;
 export const initAnthropic = (apiKey: string) => {
   if (!anthropic) {
     anthropic = new Anthropic({
       apiKey,
     });
   }
-}
+};
 
 /**
  * Analysis prompt template defining the expected response format
@@ -87,7 +87,7 @@ Guidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Provide actionable recommendations with code examples
-- Reference relevant standards (CWE, OWASP)
+- Reference relevant standards (CWE, OWASP, Documentations)
 - Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
@@ -123,8 +123,9 @@ Always return findings in this exact JSON format within <findings> tags:
       },
       "cwe_id": string,        // e.g., "CWE-287"
       "references": {
-        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001"
-        "rule_id": string      // e.g., "A1:2021", "MSC21-C"
+        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001", "ESLint"
+        "rule_id": string,     // e.g., "A1:2021", "MSC21-C"
+        "url": string          // Official documentation link
       }
     }
   ]
