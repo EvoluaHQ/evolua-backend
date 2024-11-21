@@ -123,11 +123,10 @@ Always return findings in this exact JSON format within <findings> tags:
         "description": string, // Use MDX markdown for code snippets if needed.
         "code": string         // Complete replacement code only
       },
-      "cwe_id": string | null,        // e.g., "CWE-287". Keep empty if not found.
+      "cwe_id": string | null,        // e.g., "CWE-287".
       "references": {
-        "standard": string | null,    // e.g., "OWASP", "CERT", "ISO-27001", "ESLint"
-        "rule_id": string | null,     // e.g., "A1:2021", "MSC21-C"
-        "url": string | null          // Official documentation link
+        "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
+        "url": string | null      // Official documentation links, etc
       }
     }
   ]
