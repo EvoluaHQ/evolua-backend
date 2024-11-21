@@ -88,6 +88,8 @@ Guidelines:
 - Use exact line numbers from the prefix
 - Provide actionable recommendations with code examples
 - Reference relevant standards (CWE, OWASP, Documentations)
+- Keep responses concise and structured. Only report concrete, evidence-based issues.
+- Never include opinions, style preferences, or speculative issues.
 - Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
@@ -121,11 +123,11 @@ Always return findings in this exact JSON format within <findings> tags:
         "description": string, // Use MDX markdown for code snippets if needed.
         "code": string         // Complete replacement code only
       },
-      "cwe_id": string,        // e.g., "CWE-287"
+      "cwe_id": string | null,        // e.g., "CWE-287". Keep empty if not found.
       "references": {
-        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001", "ESLint"
-        "rule_id": string,     // e.g., "A1:2021", "MSC21-C"
-        "url": string          // Official documentation link
+        "standard": string | null,    // e.g., "OWASP", "CERT", "ISO-27001", "ESLint"
+        "rule_id": string | null,     // e.g., "A1:2021", "MSC21-C"
+        "url": string | null          // Official documentation link
       }
     }
   ]
