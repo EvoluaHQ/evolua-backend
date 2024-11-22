@@ -1,21 +1,14 @@
-import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import {
-  DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
   ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { documentClient, usersTableName } from './dynamodb-helper';
 import { ServiceException } from "@smithy/smithy-client";
 import { MaxScansExceededError } from "../types/errors";
 
-const dynamodbClient = new DynamoDB();
-const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
-
-const USERS_TABLE_NAME = process.env.USERS_TABLE_NAME || "";
-if (!USERS_TABLE_NAME) {
-  throw new Error("USERS_TABLE_NAME env var is missing");
-}
+const USERS_TABLE_NAME = usersTableName();
 
 export interface User {
   id: string;
@@ -41,7 +34,7 @@ export async function findUserByClerkUserId(
     return null;
   }
 
-  const { Items } = await DocumentClient.send(
+  const { Items } = await documentClient.send(
     new QueryCommand({
       TableName: USERS_TABLE_NAME,
       IndexName: "clerkUserIdIndex",
@@ -60,7 +53,7 @@ export async function findUserByEmail(email?: string): Promise<User | null> {
     return null;
   }
 
-  const { Items } = await DocumentClient.send(
+  const { Items } = await documentClient.send(
     new QueryCommand({
       TableName: USERS_TABLE_NAME,
       IndexName: "emailIndex",
@@ -81,7 +74,7 @@ export async function findUserByGithubHandle(
     return null;
   }
 
-  const { Items } = await DocumentClient.send(
+  const { Items } = await documentClient.send(
     new QueryCommand({
       TableName: USERS_TABLE_NAME,
       IndexName: "githubHandleIndex",
@@ -110,7 +103,7 @@ export async function findUser(
 }
 
 export async function upsertUser(user: User) {
-  await DocumentClient.send(
+  await documentClient.send(
     new PutCommand({
       TableName: USERS_TABLE_NAME,
       Item: {
@@ -122,7 +115,7 @@ export async function upsertUser(user: User) {
 }
 
 export async function deleteUser(id: string) {
-  await DocumentClient.send(
+  await documentClient.send(
     new UpdateCommand({
       TableName: USERS_TABLE_NAME,
       Key: {
@@ -140,7 +133,7 @@ export async function deleteUser(id: string) {
 
 export async function incrementScanCount(id: string, maxScans: number) {
   try {
-    await DocumentClient.send(
+    await documentClient.send(
       new UpdateCommand({
         TableName: USERS_TABLE_NAME,
         Key: {
@@ -167,7 +160,7 @@ export async function incrementScanCount(id: string, maxScans: number) {
 }
 
 export async function resetScanCount(id: string) {
-  await DocumentClient.send(
+  await documentClient.send(
     new UpdateCommand({
       TableName: USERS_TABLE_NAME,
       Key: {
@@ -187,7 +180,7 @@ export async function getAllUsers(): Promise<User[]> {
   const users: User[] = [];
 
   do {
-    const { Items, LastEvaluatedKey } = await DocumentClient.send(
+    const { Items, LastEvaluatedKey } = await documentClient.send(
       new ScanCommand({
         TableName: USERS_TABLE_NAME,
         ExclusiveStartKey: lastEvaluatedKey,

@@ -1,11 +1,12 @@
-import { DynamoDB } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb"
+import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb"
 import { ulid } from "ulid"
-import { scansTableName, scanResultsTableName, executeBatchWriteCommand } from "./dynamodb-helper"
+import { 
+  documentClient,
+  scansTableName, 
+  scanResultsTableName, 
+  executeBatchWriteCommand
+} from "./dynamodb-helper"
 import { ScanResult, Summary } from '../types/index'
-
-const dynamodbClient = new DynamoDB()
-const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient)
 
 export interface PullRequest {
   id: string
@@ -71,11 +72,7 @@ export async function saveScanResults(
     },
   }))
 
-  await executeBatchWriteCommand(
-    DocumentClient,
-    SCAN_RESULTS_TABLE_NAME,
-    saveResultsReqs
-  )
+  await executeBatchWriteCommand(SCAN_RESULTS_TABLE_NAME, saveResultsReqs)
 
   const scanSummary: Scan = {
     repoId,
@@ -91,7 +88,7 @@ export async function saveScanResults(
     low: countIssues((summary) => summary.riskLevels.low),
   }
 
-  await DocumentClient.send(
+  await documentClient.send(
     new PutCommand({
       TableName: SCANS_TABLE_NAME,
       Item: scanSummary
@@ -119,7 +116,7 @@ export async function getScanResults(scanId: string) {
       cmd.input.ExclusiveStartKey = lastEvaluatedKey;
     }
 
-    const resp = await DocumentClient.send(cmd);
+    const resp = await documentClient.send(cmd);
     const newResults = resp.Items || [];
     results.push(...newResults);
     lastEvaluatedKey = resp.LastEvaluatedKey;
@@ -150,7 +147,7 @@ export async function listScansForRepo(repoId: string, startDate: string, endDat
       ExclusiveStartKey: lastEvaluatedKey,
     });
 
-    const response = await DocumentClient.send(command);
+    const response = await documentClient.send(command);
     allScans.push(...response.Items as Scan[]);
     lastEvaluatedKey = response.LastEvaluatedKey;
   } while (lastEvaluatedKey);

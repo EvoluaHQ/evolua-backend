@@ -1,20 +1,32 @@
+import { DynamoDB } from "@aws-sdk/client-dynamodb"
 import { 
   DynamoDBDocumentClient, 
   BatchWriteCommand, 
   BatchGetCommand
 } from "@aws-sdk/lib-dynamodb";
 
+const dynamodbClient = new DynamoDB()
+export const documentClient = DynamoDBDocumentClient.from(dynamodbClient, {
+  marshallOptions: {
+    // Automatically removes undefined values
+    // Otherwise, DynamoDB client can throw error
+    // "Pass options.removeUndefinedValues=true to remove undefined values from map/array/set."
+    removeUndefinedValues: true,
+  },
+})
+
 // DynamoDB's batch operations also allow this many items in a batch
 const BATCH_SIZE = 25;
 
-export async function executeBatchWriteCommand(
-  documentclient: DynamoDBDocumentClient, tableName: string, allRequests: any[]
-) {
+export async function executeBatchWriteCommand(tableName: string, allRequests: any[]) {
+  console.log(`Executing batch write command for ${allRequests.length} items`);
+  console.log(JSON.stringify(allRequests, null, 2));
+
   const batches = [];
 
   for (let i = 0; i < allRequests.length; i += BATCH_SIZE) {
     const requests = allRequests.slice(i, i + BATCH_SIZE);
-    const batch = documentclient.send(new BatchWriteCommand({
+    const batch = documentClient.send(new BatchWriteCommand({
       RequestItems: {
         [tableName]: requests
       }
@@ -25,14 +37,12 @@ export async function executeBatchWriteCommand(
   await Promise.all(batches);
 }
 
-export async function executeBatchGetCommand(
-  documentclient: DynamoDBDocumentClient, tableName: string, keys: any[]
-) {
+export async function executeBatchGetCommand(tableName: string, keys: any[]) {
   const batches = [];
 
   for (let i = 0; i < keys.length; i += BATCH_SIZE) {
     const requests = keys.slice(i, i + BATCH_SIZE);
-    const batch = documentclient.send(new BatchGetCommand({
+    const batch = documentClient.send(new BatchGetCommand({
       RequestItems: {
         [tableName]: {
           Keys: requests
@@ -80,6 +90,16 @@ export const reposTableName = () => {
 
   if (!tableName) {
     throw new Error("REPOS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
+export const usersTableName = () => {
+  const tableName = process.env.USERS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("USERS_TABLE_NAME env var is missing")
   }
 
   return tableName;
