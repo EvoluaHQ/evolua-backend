@@ -26,9 +26,9 @@ export interface AIResponse {
       code: string;
     };
     cwe_id?: string;
-    references?: {
-      standard: string;
-      rule_id: string;
+    reference?: {
+      name: string;
+      url: string;
     };
   }>;
 }
@@ -37,8 +37,8 @@ export interface AIResponse {
  * Interface for issue references (standards, rules, etc.)
  */
 export interface IssueReference {
-  standard: string; // e.g., "OWASP", "CERT", "ISO-27001"
-  ruleId: string; // e.g., "A1:2021", "MSC21-C"
+  name: string; // e.g., "OWASP", "CERT", "ISO-27001", "ESLint"
+  url: string; // Documentation Link
 }
 
 /**
@@ -77,7 +77,7 @@ export interface CodeIssue {
   impact?: string;
   recommendation?: Recommendation;
   cweId?: string;
-  references?: IssueReference;
+  reference?: IssueReference;
 }
 
 export interface Summary {
