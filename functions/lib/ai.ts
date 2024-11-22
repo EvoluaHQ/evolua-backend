@@ -124,7 +124,7 @@ Always return findings in this exact JSON format within <findings> tags:
         "code": string         // Complete replacement code only
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
-      "references": {
+      "reference": {
         "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
         "url": string | null      // Official documentation links, etc
       }
@@ -151,6 +151,7 @@ export const sendMessage = async (
 
   const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
   
+  File path: ${file.path}
   Changed lines: ${file.changes.lineNumbers.join(", ")}
   
   <source code>

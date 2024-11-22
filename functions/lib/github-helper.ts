@@ -297,15 +297,22 @@ async function fetchPRFileContent(
   }
 }
 
-export async function fetchPRDetails(owner: string, repo: string, prNumber: number) {
-  const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
-    owner,
-    repo,
-    pull_number: prNumber,
-    headers: {
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
+export async function fetchPRDetails(
+  owner: string,
+  repo: string,
+  prNumber: number
+) {
+  const { data } = await octokit.request(
+    "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+    {
+      owner,
+      repo,
+      pull_number: prNumber,
+      headers: {
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    }
+  );
 
   return data;
 }
@@ -555,13 +562,13 @@ export function formatIssueComment(issue: CodeIssue): string {
   }
 
   // Reference section (if CWE or other references exist)
-  if (issue.cweId || (issue.references?.standard && issue.references?.ruleId)) {
+  if (issue.cweId || (issue.reference?.name && issue.reference?.url)) {
     comment += "### References\n";
     if (issue.cweId) {
       comment += `- [${issue.cweId}](https://cwe.mitre.org/data/definitions/${issue.cweId.replace("CWE-", "")}.html)\n`;
     }
-    if (issue.references?.standard && issue.references?.ruleId) {
-      comment += `- ${issue.references.standard}: ${issue.references.ruleId}\n`;
+    if (issue.reference?.name && issue.reference?.url) {
+      comment += `- [${issue?.reference?.name}](${issue?.reference?.url})\n`;
     }
     comment += "\n";
   }
@@ -743,10 +750,10 @@ export function processAIResponse(rawResponse: AIResponse): Findings {
         code: issue.recommendation.code,
       },
       cweId: issue.cwe_id,
-      references: issue.references
+      reference: issue.reference
         ? {
-            standard: issue.references.standard,
-            ruleId: issue.references.rule_id,
+            name: issue.reference.name,
+            url: issue.reference.url,
           }
         : undefined,
     })),
