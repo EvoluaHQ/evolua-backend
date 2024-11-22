@@ -139,6 +139,8 @@ Always return findings in this exact JSON format within <findings> tags:
 }`;
 
 const useBedrock = async (modelId: string, userPrompt: string, tokenLimit: number): Promise<string[]> => {
+  logger.info('Using Bedrock for analysis', { modelId, tokenLimit });
+
   const resp = await bedrockClient.send(
     new ConverseCommand({
       modelId: modelId,
@@ -161,6 +163,8 @@ const useBedrock = async (modelId: string, userPrompt: string, tokenLimit: numbe
 }
 
 const runAnthropic = async (modelId: string, userPrompt: string, tokenLimit: number): Promise<string[]> => {
+  logger.info('Using Anthropic for analysis', { modelId, tokenLimit });
+
   const resp = await anthropic.messages.create({
     model: modelId,
     max_tokens: tokenLimit,
