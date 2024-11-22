@@ -19,9 +19,6 @@ export const documentClient = DynamoDBDocumentClient.from(dynamodbClient, {
 const BATCH_SIZE = 25;
 
 export async function executeBatchWriteCommand(tableName: string, allRequests: any[]) {
-  console.log(`Executing batch write command for ${allRequests.length} items`);
-  console.log(JSON.stringify(allRequests, null, 2));
-
   const batches = [];
 
   for (let i = 0; i < allRequests.length; i += BATCH_SIZE) {
