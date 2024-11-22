@@ -307,19 +307,7 @@ const analyzeFile = async (
       return null;
     }
 
-    const resp = (await sendMessage(file)) as any;
-    const content = resp?.output?.message?.content || resp?.content;
-
-    // Log raw AI response
-    logger.info("AI service response", {
-      path: file.path,
-      hasContent: !!content,
-      contentLength: content?.length,
-      rawResponse: JSON.stringify(resp).substring(0, 500), // First 500 chars for debugging
-    });
-
-    // Parse and combine AI response content blocks
-    const output = content?.map((msg: ContentBlock) => msg.text).join("\n\n");
+    const output = await sendMessage(file);
 
     if (!output) {
       throw new Error("No output received from AI service");
