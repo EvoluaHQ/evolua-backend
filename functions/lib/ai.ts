@@ -1,11 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { Message, TextBlock } from "@anthropic-ai/sdk/resources";
+import { TextBlock } from "@anthropic-ai/sdk/resources";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import {
   BedrockRuntimeClient,
   ConverseCommand,
-  ConverseCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { PRFileChanges } from "../types";
 import { SITE_URL } from "./constants";
