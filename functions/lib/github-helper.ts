@@ -719,15 +719,15 @@ export async function submitPRReview(
 export function processAIResponse(rawResponse: AIResponse): Findings {
   return {
     summary: {
-      totalIssues: rawResponse.summary.total_issues,
+      totalIssues: rawResponse.summary?.total_issues || 0,
       riskLevels: {
-        critical: rawResponse.summary.risk_levels.critical,
-        high: rawResponse.summary.risk_levels.high,
-        medium: rawResponse.summary.risk_levels.medium,
-        low: rawResponse.summary.risk_levels.low,
+        critical: rawResponse.summary?.risk_levels?.critical || 0,
+        high: rawResponse.summary?.risk_levels?.high || 0,
+        medium: rawResponse.summary?.risk_levels?.medium || 0,
+        low: rawResponse.summary?.risk_levels?.low || 0,
       },
     },
-    issues: rawResponse.issues.map((issue) => ({
+    issues: rawResponse.issues?.map((issue) => ({
       id: issue.id,
       type: issue.type,
       riskLevel: issue.risk_level,
