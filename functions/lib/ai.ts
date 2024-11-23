@@ -69,14 +69,14 @@ export const AI_ANALYSIS_CONFIG = {
 
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
 
-let anthropic: Anthropic
+let anthropic: Anthropic;
 export const initAnthropic = (apiKey: string) => {
   if (!anthropic) {
     anthropic = new Anthropic({
       apiKey,
     });
   }
-}
+};
 
 /**
  * Analysis prompt template defining the expected response format
@@ -94,7 +94,9 @@ Guidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Provide actionable recommendations with code examples
-- Reference relevant standards (CWE, OWASP)
+- Reference relevant standards (CWE, OWASP, Documentations)
+- Keep responses concise and structured. Only report concrete, evidence-based issues.
+- Never include opinions, style preferences, or speculative issues.
 - Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
@@ -128,10 +130,10 @@ Always return findings in this exact JSON format within <findings> tags:
         "description": string, // Use MDX markdown for code snippets if needed.
         "code": string         // Complete replacement code only
       },
-      "cwe_id": string,        // e.g., "CWE-287"
-      "references": {
-        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001"
-        "rule_id": string      // e.g., "A1:2021", "MSC21-C"
+      "cwe_id": string | null,        // e.g., "CWE-287".
+      "reference": {
+        "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
+        "url": string | null      // Official documentation links, etc
       }
     }
   ]
@@ -226,6 +228,7 @@ export const sendMessage = async (
 
   const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
   
+  File path: ${file.path}
   Changed lines: ${file.changes.lineNumbers.join(", ")}
   
   <source code>
