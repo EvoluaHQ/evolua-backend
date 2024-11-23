@@ -126,7 +126,7 @@ type CodeIssue {
   impact: String
   recommendation: Recommendation
   cweId: String
-  references: IssueReference
+  reference: IssueReference
   location: IssueLocation!
 }
 
