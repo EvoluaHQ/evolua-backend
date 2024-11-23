@@ -1,11 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { Message } from "@anthropic-ai/sdk/resources";
+import { TextBlock } from "@anthropic-ai/sdk/resources";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import {
   BedrockRuntimeClient,
   ConverseCommand,
-  ConverseCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { PRFileChanges } from "../types";
 import { SITE_URL } from "./constants";
@@ -48,8 +47,17 @@ export const AI_ANALYSIS_CONFIG = {
   },
   // AI model configuration
   model: {
-    id: "claude-3-5-sonnet-20241022",
     temperature: 0.1, // Lower temperature for more consistent results
+    bedrock: {
+      sonnet35v2: "us.anthropic.claude-3-5-sonnet-20241022-v2:0", // cross-region inference
+      sonnet35v1: "us.anthropic.claude-3-5-sonnet-20240620-v1:0", // cross-region inference
+      sonnet3: "us.anthropic.claude-3-sonnet-20240229-v1:0", // cross-region inference
+      haiku35: "us.anthropic.claude-3-5-haiku-20241022-v1:0", // cross-region inference
+      haiku3: "us.anthropic.claude-3-haiku-20240307-v1:0", // cross-region inference
+    },
+    anthropic: {
+      sonnet35v2: "claude-3-5-sonnet-20241022"
+    }
   },
   // Concurrency and processing
   concurrency: {
@@ -60,16 +68,15 @@ export const AI_ANALYSIS_CONFIG = {
 } as const;
 
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
-const byPassBedrock = true; //BY_PASS_BEDROCK === "true"
 
-let anthropic: Anthropic
+let anthropic: Anthropic;
 export const initAnthropic = (apiKey: string) => {
   if (!anthropic) {
     anthropic = new Anthropic({
       apiKey,
     });
   }
-}
+};
 
 /**
  * Analysis prompt template defining the expected response format
@@ -87,7 +94,9 @@ Guidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Provide actionable recommendations with code examples
-- Reference relevant standards (CWE, OWASP)
+- Reference relevant standards (CWE, OWASP, Documentations)
+- Keep responses concise and structured. Only report concrete, evidence-based issues.
+- Never include opinions, style preferences, or speculative issues.
 - Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
@@ -121,14 +130,84 @@ Always return findings in this exact JSON format within <findings> tags:
         "description": string, // Use MDX markdown for code snippets if needed.
         "code": string         // Complete replacement code only
       },
-      "cwe_id": string,        // e.g., "CWE-287"
-      "references": {
-        "standard": string,    // e.g., "OWASP", "CERT", "ISO-27001"
-        "rule_id": string      // e.g., "A1:2021", "MSC21-C"
+      "cwe_id": string | null,        // e.g., "CWE-287".
+      "reference": {
+        "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
+        "url": string | null      // Official documentation links, etc
       }
     }
   ]
 }`;
+
+const useBedrock = async (modelId: string, userPrompt: string, tokenLimit: number): Promise<string[]> => {
+  logger.info('Using Bedrock for analysis', { modelId, tokenLimit });
+
+  const resp = await bedrockClient.send(
+    new ConverseCommand({
+      modelId: modelId,
+      system: [{ text: SCAN_SYSTEM_PROMPT } ],
+      messages: [
+        {
+          role: "user",
+          content: [{ text: userPrompt } ],
+        },
+      ],
+      inferenceConfig: {
+        temperature: AI_ANALYSIS_CONFIG.model.temperature,
+        maxTokens: tokenLimit,
+      },      
+    })
+  );
+
+  const contentBlocks = resp.output?.message?.content || [];
+  return contentBlocks.map(msg => msg.text || "");
+}
+
+const runAnthropic = async (modelId: string, userPrompt: string, tokenLimit: number): Promise<string[]> => {
+  logger.info('Using Anthropic for analysis', { modelId, tokenLimit });
+
+  const resp = await anthropic.messages.create({
+    model: modelId,
+    max_tokens: tokenLimit,
+    temperature: AI_ANALYSIS_CONFIG.model.temperature,
+    system: SCAN_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  logger.info("Anthropic response received", {
+    hasContent: !!resp.content,
+    contentLength: resp.content?.length,
+  });
+
+  return resp.content?.map(msg => (msg as TextBlock).text);
+}
+
+type runAiScanFunc = (userPrompt: string, tokenLimit: number) => Promise<string[]>
+
+const analyzeWithFallbacks = async (userPrompt: string, tokenLimit: number): Promise<string | undefined> => {
+  const aiModels = AI_ANALYSIS_CONFIG.model
+  const modelsToRun: runAiScanFunc[] = [
+    (up, tl) => useBedrock(aiModels.bedrock.sonnet35v2, up, tl),
+    (up, tl) => runAnthropic(aiModels.anthropic.sonnet35v2, up, tl),
+    (up, tl) => useBedrock(aiModels.bedrock.sonnet35v1, up, tl),
+    (up, tl) => useBedrock(aiModels.bedrock.sonnet3, up, tl),
+    (up, tl) => useBedrock(aiModels.bedrock.haiku35, up, tl),
+    (up, tl) => useBedrock(aiModels.bedrock.haiku3, up, tl),
+  ]
+
+  for (const runAiScan of modelsToRun) {
+    try {
+      const contentBlocks = await runAiScan(userPrompt, tokenLimit);
+      return contentBlocks.join("\n\n");
+    } catch (error) {
+      logger.warn("AI API call failed, trying the next model", { error });
+    }
+  }
+
+  logger.error("All AI models failed to return a response");
+
+  return undefined;
+}
 
 /**
  * Sends code analysis request to the configured AI service
@@ -139,7 +218,7 @@ Always return findings in this exact JSON format within <findings> tags:
  */
 export const sendMessage = async (
   file: PRFileChanges & { content: string }
-): Promise<ConverseCommandOutput | Message> => {
+): Promise<string | undefined> => {
   // Get optimal token limit
   const tokenLimit = getTokenLimit(file.content);
   const codeWithLines = prepareCodeWithLineNumbers(
@@ -149,58 +228,14 @@ export const sendMessage = async (
 
   const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
   
+  File path: ${file.path}
   Changed lines: ${file.changes.lineNumbers.join(", ")}
   
   <source code>
   ${codeWithLines}
   </source code>`;
 
-  try {
-    if (byPassBedrock) {
-      const response = await anthropic.messages.create({
-        model: AI_ANALYSIS_CONFIG.model.id,
-        max_tokens: tokenLimit,
-        temperature: AI_ANALYSIS_CONFIG.model.temperature,
-        system: SCAN_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: USER_PROMPT }],
-      });
-
-      logger.info("Anthropic response received", {
-        hasContent: !!response.content,
-        contentLength: response.content?.length,
-      });
-
-      return response;
-    } else {
-      return await bedrockClient.send(
-        new ConverseCommand({
-          modelId: AI_ANALYSIS_CONFIG.model.id,
-          system: [
-            {
-              text: SCAN_SYSTEM_PROMPT,
-            },
-          ],
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  text: USER_PROMPT,
-                },
-              ],
-            },
-          ],
-          inferenceConfig: {
-            temperature: AI_ANALYSIS_CONFIG.model.temperature,
-            maxTokens: tokenLimit,
-          },
-        })
-      );
-    }
-  } catch (error) {
-    logger.error("AI API call failed", { error, file: file.path });
-    throw error;
-  }
+  return await analyzeWithFallbacks(USER_PROMPT, tokenLimit);
 };
 
 /**

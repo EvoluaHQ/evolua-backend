@@ -1,15 +1,12 @@
-import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';
 import { 
+  documentClient,
   reposTableName,
   tenantReposTableName,
   executeBatchWriteCommand,
   executeBatchGetCommand
 } from './dynamodb-helper';
-
-const dynamodbClient = new DynamoDB();
-const DocumentClient = DynamoDBDocumentClient.from(dynamodbClient);
 
 export interface Repo {
   provider: string;
@@ -48,7 +45,7 @@ export async function enableReposForTenant(tenantId: string, repos: Repo[]) {
     }
   }));
 
-  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
+  await executeBatchWriteCommand(tableName, allRequests);
 }
 
 export async function saveRepos(repos: Repo[]) {
@@ -67,7 +64,7 @@ export async function saveRepos(repos: Repo[]) {
     }
   }));
 
-  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
+  await executeBatchWriteCommand(tableName, allRequests);
 }
 
 export async function deleteRepos(repoIds: string[]) {
@@ -81,7 +78,7 @@ export async function deleteRepos(repoIds: string[]) {
     }
   }));
 
-  await executeBatchWriteCommand(DocumentClient, tableName, allRequests);
+  await executeBatchWriteCommand(tableName, allRequests);
 }
 
 export async function batchGetRepos(repoIds: string[]): Promise<(Repo & { repoId: string })[]> {
@@ -91,7 +88,7 @@ export async function batchGetRepos(repoIds: string[]): Promise<(Repo & { repoId
     repoId
   }));
 
-  const resp = await executeBatchGetCommand(DocumentClient, tableName, allKeys);
+  const resp = await executeBatchGetCommand(tableName, allKeys);
 
   return resp.map(item => item as Repo & { repoId: string });
 }
@@ -111,7 +108,7 @@ export async function listReposForTenant(tenantId: string): Promise<TenantRepo[]
   let lastEvaluatedKey: any;
 
   do {
-    const data = await DocumentClient.send(new QueryCommand({
+    const data = await documentClient.send(new QueryCommand({
       ...params,
       ExclusiveStartKey: lastEvaluatedKey
     }));
@@ -126,7 +123,7 @@ export async function listReposForTenant(tenantId: string): Promise<TenantRepo[]
 export async function getTenantRepo(tenantId: string, tenantRepoId: string): Promise<TenantRepo | null> {
   const tableName = tenantReposTableName();
 
-  const queryResp = await DocumentClient.send(new QueryCommand({
+  const queryResp = await documentClient.send(new QueryCommand({
     TableName: tableName,
     IndexName: 'tenantRepoIdIndex',
     Limit: 1,
@@ -147,7 +144,7 @@ export async function getTenantRepo(tenantId: string, tenantRepoId: string): Pro
 export async function updateLastReviewedAt(repoId: string, timestamp: Date) {
   const tableName = reposTableName();
 
-  await DocumentClient.send(new UpdateCommand({
+  await documentClient.send(new UpdateCommand({
     TableName: tableName,
     Key: { repoId },
     UpdateExpression: 'SET lastReviewedAt = :lastReviewedAt',
@@ -160,7 +157,7 @@ export async function updateLastReviewedAt(repoId: string, timestamp: Date) {
 export async function updateTenantRepoLastReviewedAt(tenantId: string, repoId: string, lastReviewedAt: string) {
   const tableName = tenantReposTableName();
 
-  await DocumentClient.send(new UpdateCommand({
+  await documentClient.send(new UpdateCommand({
     TableName: tableName,
     Key: { 
       tenantId,
@@ -189,7 +186,7 @@ export async function findTenantReposByRepoId(repoId: string): Promise<TenantRep
   let lastEvaluatedKey: any;
 
   do {
-    const data = await DocumentClient.send(new QueryCommand({
+    const data = await documentClient.send(new QueryCommand({
       ...params,
       ExclusiveStartKey: lastEvaluatedKey
     }));

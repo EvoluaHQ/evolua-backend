@@ -141,8 +141,8 @@ type IssueLocation {
 }
 
 type IssueReference {
-  standard: String
-  ruleId: String
+  name: String
+  url: String
 }
 
 type PullRequest {
