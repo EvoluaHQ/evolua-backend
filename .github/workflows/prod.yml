@@ -1,0 +1,37 @@
+name: deploy to dev
+
+on:
+  push:
+    branches: [ prod ]
+
+jobs:
+  deploy:
+    # this prevents concurrent builds
+    concurrency: prod-environment
+
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # this is required for authenticating to AWS via the OIDC Provider we set up
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::061051253693:role/GitHubActionsRole
+          role-session-name: GithubActionsSession
+
+      - name: npm ci
+        run: npm ci
+
+      - name: deploy to prod
+        run: npx cdk deploy --all --require-approval never --context stageName=prod
