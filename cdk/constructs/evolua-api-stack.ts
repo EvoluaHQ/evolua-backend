@@ -47,6 +47,8 @@ export class EvoluaApiStack extends cdk.Stack {
     const getRepoStatsFunction = this.createGetRepoStatsFunction();
     const searchReposFunction = this.createSearchReposFunction();
     const searchScansFunction = this.createSearchScansFunction();
+    const connectRepoFunction = this.createConnectRepoFunction();
+    const disconnectRepoFunction = this.createDisconnectRepoFunction();
 
     const graphQlApi = new appsync.GraphqlApi(this, 'Api', {
       name: `${props.serviceName}-${props.stageName}`,
@@ -83,6 +85,8 @@ export class EvoluaApiStack extends cdk.Stack {
     const getRepoStatsDataSource = graphQlApi.addLambdaDataSource('GetRepoStatsDataSource', getRepoStatsFunction);
     const searchReposDataSource = graphQlApi.addLambdaDataSource('SearchReposDataSource', searchReposFunction);
     const searchScansDataSource = graphQlApi.addLambdaDataSource('SearchScansDataSource', searchScansFunction);
+    const connectRepoDataSource = graphQlApi.addLambdaDataSource('ConnectRepoDataSource', connectRepoFunction);
+    const disconnectRepoDataSource = graphQlApi.addLambdaDataSource('DisconnectRepoDataSource', disconnectRepoFunction);
 
     const listTenantReposFunction = new appsync.AppsyncFunction(this, 'ListTenantReposFunction', {
       api: graphQlApi,
@@ -210,6 +214,16 @@ export class EvoluaApiStack extends cdk.Stack {
     searchScansDataSource.createResolver('SearchScansResolver', {
       typeName: 'Query',
       fieldName: 'searchScans',
+    });
+
+    connectRepoDataSource.createResolver('ConnectRepoResolver', {
+      typeName: 'Mutation',
+      fieldName: 'connectRepo',
+    });
+
+    disconnectRepoDataSource.createResolver('DisconnectRepoResolver', {
+      typeName: 'Mutation',
+      fieldName: 'disconnectRepo',
     });
 
     this.reposTable.grantReadData(reposTableDataSource);
@@ -385,5 +399,56 @@ export class EvoluaApiStack extends cdk.Stack {
     );
 
     return searchScans;
+  }
+
+  private createConnectRepoFunction() {
+    const connectRepo = new TypescriptFunction(this, 'ConnectRepoFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/connect-repo.ts',
+      timeout: cdk.Duration.seconds(6),
+      handler: 'handler',
+      environment: {
+        REPOS_TABLE_NAME: this.reposTable.tableName,
+        TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
+      }
+    });
+
+    this.reposTable.grantReadData(connectRepo);
+    this.tenantReposTable.grantWriteData(connectRepo);
+
+    connectRepo.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/secret-key`
+        ],
+      })
+    );
+
+    return connectRepo;
+  }
+
+  private createDisconnectRepoFunction() {
+    const disconnectRepo = new TypescriptFunction(this, 'DisconnectRepoFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/disconnect-repo.ts',
+      timeout: cdk.Duration.seconds(6),
+      handler: 'handler',
+      environment: {
+        TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
+      }
+    });
+
+    disconnectRepo.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:Query'],
+      resources: [`${this.tenantReposTable.tableArn}/index/tenantRepoIdIndex`],
+    }));
+    this.tenantReposTable.grantReadWriteData(disconnectRepo);
+
+    return disconnectRepo;
   }
 }

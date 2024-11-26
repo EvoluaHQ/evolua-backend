@@ -48,6 +48,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.679.0",
     "@aws-sdk/client-ssm": "^3.679.0",
     "@aws-sdk/util-dynamodb": "^3.693.0",
+    "@clerk/backend": "^1.18.0",
     "@middy/core": "^4.7.0",
     "@middy/ssm": "^4.7.0",
     "@octokit/auth-app": "^7.1.1",

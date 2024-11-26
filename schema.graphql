@@ -52,6 +52,18 @@ type Query {
 }
 
 type Mutation {
+  connectRepo(
+    provider: GitProvider!
+    providerRepoId: String!
+  ): Boolean
+
+  disconnectRepo(
+    tenantRepoId: String!
+  ): Boolean
+}
+
+enum GitProvider {
+  github
 }
 
 enum SortDirection {
