@@ -261,6 +261,15 @@ export class EvoluaApiStack extends cdk.Stack {
       resources: [`${this.usersTable.tableArn}/index/clerkUserIdIndex`],
     }));
 
+    authorizer.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/public-key`,
+        ],
+      })
+    );
+
     return authorizer;
   }
 

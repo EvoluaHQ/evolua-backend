@@ -2,19 +2,12 @@ import { verify, TokenExpiredError, JwtPayload } from "jsonwebtoken";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { AppSyncAuthorizerEvent, AppSyncAuthorizerResult } from "aws-lambda";
 import { findUserByClerkUserId } from "./lib/users";
+import middy from '@middy/core';
+import ssm from '@middy/ssm';
 
 const logger = new Logger()
 
-// move this to secure location
-const publicKey = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuLt73jz+9/nGhangwk8R
-s7qVdLrYsrcCsIkl00QJYY/45pdhpFpgD39wPeDDx/Wmkis2F3MvASV0V4SAnswn
-QmpmmmjKAB/aEZKDNxIxRZtrMn6y4bTtD09JKk1MP0e6Nzv3ZN0Vmhl8/lU1Bj9P
-jurDV095Z9pT3meokf3z02G+BwPhDrT8mzR9rVZ7CVQMiUeETiAKjBDn89/XmclS
-uX1vVpROKaemTWB1RFXF4HGPw9A6N2bp71jqBhaxG8rj2byLEJytw1FjM8XhzOIG
-uureAfLhU/zWxqMMGwh0O2Ub/CQpiOo/cAYHzapG+NEx74A9y/AvtPbLBbMmwTog
-mQIDAQAB
------END PUBLIC KEY-----`
+const { SSM_STAGE_NAME } = process.env;
 
 type ResolverContext = {
   tenantId: string
@@ -22,11 +15,11 @@ type ResolverContext = {
 
 type Result = AppSyncAuthorizerResult<ResolverContext>
 
-export const handler = async (event: AppSyncAuthorizerEvent): Promise<Result> => {
+const _handler = async (event: AppSyncAuthorizerEvent, context: any): Promise<Result> => {
   try {
     const token = getToken(event.authorizationToken);
   
-    const claims = verify(token, publicKey) as JwtPayload;
+    const claims = verify(token, context.CLERK_PUBLIC_KEY) as JwtPayload;
 
     logger.debug('Verified claims', { claims })
     const clerkUserId = claims.sub
@@ -71,3 +64,13 @@ const getToken = (jwtToken: string) => {
 
   return match[1];
 }
+
+export const handler = middy(_handler)
+  .use(ssm({
+    cache: true,
+    cacheExpiry: 5 * 60 * 1000, // 5 mins
+    setToContext: true,
+    fetchData: {
+      CLERK_PUBLIC_KEY: `/evolua/${SSM_STAGE_NAME}/clerk/public-key`
+    }
+  }));
