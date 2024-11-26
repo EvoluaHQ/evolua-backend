@@ -760,6 +760,39 @@ export function processAIResponse(rawResponse: AIResponse): Findings {
   };
 }
 
+export interface GitHubUserPermissions {
+  admin: boolean,
+  maintain: boolean,
+  push: boolean,
+  triage: boolean,
+  pull: boolean
+}
+
+export async function getUserPermissions(userAccessToken: string, repoId: number): Promise<GitHubUserPermissions> {
+  try {
+    const userOctokit = new Octokit({
+      auth: userAccessToken,
+    });
+  
+    const repoResponse = await userOctokit.request('GET /repositories/{repo_id}', {
+      repo_id: repoId,
+    });
+    const repo = repoResponse.data;
+  
+    return repo.permissions
+  } catch (error) {
+    logger.error("Failed to get user permissions", error as Error);
+    
+    return {
+      admin: false,
+      maintain: false,
+      push: false,
+      triage: false,
+      pull: false
+    };
+  }
+}
+
 function formatReviewSummary(summary: ReviewSummary): string {
   return `### Code Review Summary
 

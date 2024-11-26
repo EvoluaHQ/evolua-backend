@@ -1,4 +1,4 @@
-import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, QueryCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';
 import { 
   documentClient,
@@ -81,6 +81,17 @@ export async function deleteRepos(repoIds: string[]) {
   await executeBatchWriteCommand(tableName, allRequests);
 }
 
+export async function getRepo(repoId: string): Promise<Repo | undefined> {
+  const tableName = reposTableName();
+
+  const resp = await documentClient.send(new GetCommand({
+    TableName: tableName,
+    Key: { repoId }
+  }));
+
+  return resp.Item as Repo | undefined;
+}
+
 export async function batchGetRepos(repoIds: string[]): Promise<(Repo & { repoId: string })[]> {
   const tableName = reposTableName();
 
@@ -139,6 +150,18 @@ export async function getTenantRepo(tenantId: string, tenantRepoId: string): Pro
   }
 
   return queryResp.Items[0] as TenantRepo;
+}
+
+export async function deleteTenantRepo(tenantId: string, repoId: string) {
+  const tableName = tenantReposTableName();
+
+  await documentClient.send(new DeleteCommand({
+    TableName: tableName,
+    Key: {
+      tenantId,
+      repoId
+    }
+  }));
 }
 
 export async function updateLastReviewedAt(repoId: string, timestamp: Date) {

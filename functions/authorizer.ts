@@ -10,6 +10,7 @@ const logger = new Logger()
 const { SSM_STAGE_NAME } = process.env;
 
 type ResolverContext = {
+  clerkUserId: string
   tenantId: string
 }
 
@@ -22,6 +23,14 @@ const _handler = async (event: AppSyncAuthorizerEvent, context: any): Promise<Re
     const claims = verify(token, context.CLERK_PUBLIC_KEY) as JwtPayload;
 
     logger.debug('Verified claims', { claims })
+    if (!claims.sub) {
+      logger.warn('Invalid claim, "sub" (i.e. clerk user id) not found', { claims });
+
+      return {
+        isAuthorized: false
+      }
+    }
+
     const clerkUserId = claims.sub
     const user = await findUserByClerkUserId(clerkUserId)
 
@@ -36,7 +45,8 @@ const _handler = async (event: AppSyncAuthorizerEvent, context: any): Promise<Re
     return {
       isAuthorized: true,
       resolverContext: {
-        tenantId: user.id
+        clerkUserId,
+        tenantId: user.id,
       }
     };
   } catch (err) {
