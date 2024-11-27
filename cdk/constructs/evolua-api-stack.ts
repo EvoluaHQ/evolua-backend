@@ -158,6 +158,14 @@ export class EvoluaApiStack extends cdk.Stack {
       ]
     });
 
+    graphQlApi.createResolver('QueryBatchGetReposByProviderRepoIdsResolver', {
+      typeName: 'Query',
+      fieldName: 'batchGetReposByProviderRepoIds',
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      dataSource: tenantReposTableDataSource,
+      code: appsync.Code.fromAsset('appsync-resolvers/query-batch-get-repos-by-providerRepoIds.js')
+    });
+
     graphQlApi.createResolver('QueryListScansResolver', {
       typeName: 'Query',
       fieldName: 'listScans',

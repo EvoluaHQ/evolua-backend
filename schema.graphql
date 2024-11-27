@@ -27,6 +27,11 @@ type Query {
     tenantRepoId: String!
   ): Repo
 
+  batchGetReposByProviderRepoIds(
+    provider: GitProvider!
+    providerRepoIds: [String!]!    
+  ): [Repo!]
+
   getRepoStats(
     tenantRepoId: String!
     startDate: AWSDate!
