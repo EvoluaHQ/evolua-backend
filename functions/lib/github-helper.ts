@@ -22,6 +22,7 @@ import {
   ReviewSummary,
   ScanResult,
 } from "../types";
+import { getLanguageExtension } from "./utils";
 
 const logger = new Logger();
 
@@ -542,7 +543,7 @@ export async function createPRReview(
 /**
  * Format an issue into a review comment with MDX
  */
-export function formatIssueComment(issue: CodeIssue): string {
+export function formatIssueComment(issue: CodeIssue, filePath: string): string {
   const severityEmoji =
     {
       critical: "🚨",
@@ -575,11 +576,19 @@ export function formatIssueComment(issue: CodeIssue): string {
 
   // Recommendation section with suggestion block
   if (issue?.recommendation?.description) {
-    comment += `### Recommendation\n${issue.recommendation.description}\n\n`;
+    comment += `### Recommendation\n${issue.recommendation.description}\n`;
+
+    const code = issue?.recommendation?.code?.trim();
 
     // Only add suggestion block if we have valid suggestion code
-    if (issue.recommendation.code?.trim()) {
+    if (code) {
       comment += `
+<!-- code snippet -->
+\`\`\`${getLanguageExtension(filePath)}
+${code}
+\`\`\`
+<!-- code snippet ends -->
+\n\n
 <!-- suggestion_start -->
 <details>
 <summary>📝 Suggested fix</summary>
@@ -664,11 +673,24 @@ export async function submitPRReview(
             file.changes.lineNumbers.includes(issue.location.lineStart)
           )
           .map((issue) => {
-            return {
+            const lineStart = issue.location?.lineStart ?? 0;
+            const lineEnd = issue.location?.lineEnd ?? lineStart;
+            const isSameLine = lineStart === lineEnd;
+            const comment = {
               path: file.path,
-              line: issue.location.lineStart,
-              body: formatIssueComment(issue),
+              body: formatIssueComment(issue, file.path),
             };
+
+            return isSameLine
+              ? {
+                  ...comment,
+                  line: lineStart,
+                }
+              : {
+                  ...comment,
+                  startLine: lineStart,
+                  line: lineEnd,
+                };
           })
           .filter(
             (comment): comment is DraftPullRequestReviewThread =>
@@ -761,34 +783,40 @@ export function processAIResponse(rawResponse: AIResponse): Findings {
 }
 
 export interface GitHubUserPermissions {
-  admin: boolean,
-  maintain: boolean,
-  push: boolean,
-  triage: boolean,
-  pull: boolean
+  admin: boolean;
+  maintain: boolean;
+  push: boolean;
+  triage: boolean;
+  pull: boolean;
 }
 
-export async function getUserPermissions(userAccessToken: string, repoId: number): Promise<GitHubUserPermissions> {
+export async function getUserPermissions(
+  userAccessToken: string,
+  repoId: number
+): Promise<GitHubUserPermissions> {
   try {
     const userOctokit = new Octokit({
       auth: userAccessToken,
     });
-  
-    const repoResponse = await userOctokit.request('GET /repositories/{repo_id}', {
-      repo_id: repoId,
-    });
+
+    const repoResponse = await userOctokit.request(
+      "GET /repositories/{repo_id}",
+      {
+        repo_id: repoId,
+      }
+    );
     const repo = repoResponse.data;
-  
-    return repo.permissions
+
+    return repo.permissions;
   } catch (error) {
     logger.error("Failed to get user permissions", error as Error);
-    
+
     return {
       admin: false,
       maintain: false,
       push: false,
       triage: false,
-      pull: false
+      pull: false,
     };
   }
 }
@@ -814,6 +842,7 @@ ${summary.files.map((file) => `| ${file.path} | ${file.changes} | ${file.issues}
 ---
 > This analysis was performed by Evolua. For support, please contact our team.
 > - Email us @ support@evolua.io
+> - Run: **/evolua-review** to start a new code review.
 > - Visit [Evolua](https://evolua.io) for more information`;
 }
 
