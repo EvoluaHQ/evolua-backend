@@ -12,7 +12,7 @@
  */
 export function getLanguageExtension(filePath: string) {
   // Handle empty or invalid inputs
-  if (!filePath || typeof filePath !== "string") return "";
+  if (!filePath) return "";
 
   return filePath.split(".").pop()?.toLowerCase() || "";
 }

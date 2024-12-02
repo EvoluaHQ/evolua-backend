@@ -673,8 +673,8 @@ export async function submitPRReview(
             file.changes.lineNumbers.includes(issue.location.lineStart)
           )
           .map((issue) => {
-            const lineStart = issue.location?.lineStart;
-            const lineEnd = issue.location?.lineEnd;
+            const lineStart = issue.location?.lineStart ?? 0;
+            const lineEnd = issue.location?.lineEnd ?? lineStart;
             const isSameLine = lineStart === lineEnd;
             const comment = {
               path: file.path,

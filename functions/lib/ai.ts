@@ -188,7 +188,7 @@ const runAnthropic = async (
     contentLength: resp.content?.length,
   });
 
-  return resp.content?.map((msg) => (msg as TextBlock).text);
+  return resp.content?.map((msg) => (msg as TextBlock).text) ?? [];
 };
 
 type runAiScanFunc = (
