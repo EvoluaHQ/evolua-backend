@@ -98,7 +98,7 @@ Guidelines:
 - Reference relevant standards (CWE, OWASP, Documentations)
 - Keep responses concise and structured. Only report concrete, evidence-based issues.
 - Never include opinions, style preferences, or speculative issues.
-- Recommendation code must be complete. 
+- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.
 - Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
@@ -130,7 +130,7 @@ Always return findings in this exact JSON format within <findings> tags:
       "impact": string,
       "recommendation": {
         "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
-        "code": string         // Complete replacement and fixed code only. Add brief comments explaining key changes. Ensure the code follows the project's patterns. 
+        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Ensure the code follows the project's patterns. 
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
       "reference": {              // Only include if it's relevant to the issue.
