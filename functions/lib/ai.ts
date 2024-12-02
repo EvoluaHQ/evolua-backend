@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-bedrock-runtime";
 import { PRFileChanges } from "../types";
 import { SITE_URL } from "./constants";
+import { getLanguageExtension } from "./utils";
 
 // service name comes from the "POWERTOOLS_SERVICE_NAME" environment variable
 const logger = new Logger();
@@ -56,8 +57,8 @@ export const AI_ANALYSIS_CONFIG = {
       haiku3: "us.anthropic.claude-3-haiku-20240307-v1:0", // cross-region inference
     },
     anthropic: {
-      sonnet35v2: "claude-3-5-sonnet-20241022"
-    }
+      sonnet35v2: "claude-3-5-sonnet-20241022",
+    },
   },
   // Concurrency and processing
   concurrency: {
@@ -127,11 +128,11 @@ Always return findings in this exact JSON format within <findings> tags:
       "description": string,    // Clear explanation of the issue
       "impact": string,
       "recommendation": {
-        "description": string, // Use MDX markdown for code snippets if needed.
-        "code": string         // Complete replacement code only
+        "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
+        "code": string         // Complete production-ready fixed code replacement only. Add brief comments explaining key changes. Ensure the code follows the project's patterns
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
-      "reference": {
+      "reference": {              // Only include if it's relevant to the issue.
         "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
         "url": string | null      // Official documentation links, etc
       }
@@ -139,32 +140,40 @@ Always return findings in this exact JSON format within <findings> tags:
   ]
 }`;
 
-const useBedrock = async (modelId: string, userPrompt: string, tokenLimit: number): Promise<string[]> => {
-  logger.info('Using Bedrock for analysis', { modelId, tokenLimit });
+const useBedrock = async (
+  modelId: string,
+  userPrompt: string,
+  tokenLimit: number
+): Promise<string[]> => {
+  logger.info("Using Bedrock for analysis", { modelId, tokenLimit });
 
   const resp = await bedrockClient.send(
     new ConverseCommand({
       modelId: modelId,
-      system: [{ text: SCAN_SYSTEM_PROMPT } ],
+      system: [{ text: SCAN_SYSTEM_PROMPT }],
       messages: [
         {
           role: "user",
-          content: [{ text: userPrompt } ],
+          content: [{ text: userPrompt }],
         },
       ],
       inferenceConfig: {
         temperature: AI_ANALYSIS_CONFIG.model.temperature,
         maxTokens: tokenLimit,
-      },      
+      },
     })
   );
 
   const contentBlocks = resp.output?.message?.content || [];
-  return contentBlocks.map(msg => msg.text || "");
-}
+  return contentBlocks.map((msg) => msg.text || "");
+};
 
-const runAnthropic = async (modelId: string, userPrompt: string, tokenLimit: number): Promise<string[]> => {
-  logger.info('Using Anthropic for analysis', { modelId, tokenLimit });
+const runAnthropic = async (
+  modelId: string,
+  userPrompt: string,
+  tokenLimit: number
+): Promise<string[]> => {
+  logger.info("Using Anthropic for analysis", { modelId, tokenLimit });
 
   const resp = await anthropic.messages.create({
     model: modelId,
@@ -179,13 +188,19 @@ const runAnthropic = async (modelId: string, userPrompt: string, tokenLimit: num
     contentLength: resp.content?.length,
   });
 
-  return resp.content?.map(msg => (msg as TextBlock).text);
-}
+  return resp.content?.map((msg) => (msg as TextBlock).text);
+};
 
-type runAiScanFunc = (userPrompt: string, tokenLimit: number) => Promise<string[]>
+type runAiScanFunc = (
+  userPrompt: string,
+  tokenLimit: number
+) => Promise<string[]>;
 
-const analyzeWithFallbacks = async (userPrompt: string, tokenLimit: number): Promise<string | undefined> => {
-  const aiModels = AI_ANALYSIS_CONFIG.model
+const analyzeWithFallbacks = async (
+  userPrompt: string,
+  tokenLimit: number
+): Promise<string | undefined> => {
+  const aiModels = AI_ANALYSIS_CONFIG.model;
   const modelsToRun: runAiScanFunc[] = [
     (up, tl) => useBedrock(aiModels.bedrock.sonnet35v2, up, tl),
     (up, tl) => runAnthropic(aiModels.anthropic.sonnet35v2, up, tl),
@@ -193,7 +208,7 @@ const analyzeWithFallbacks = async (userPrompt: string, tokenLimit: number): Pro
     (up, tl) => useBedrock(aiModels.bedrock.sonnet3, up, tl),
     (up, tl) => useBedrock(aiModels.bedrock.haiku35, up, tl),
     (up, tl) => useBedrock(aiModels.bedrock.haiku3, up, tl),
-  ]
+  ];
 
   for (const runAiScan of modelsToRun) {
     try {
@@ -207,7 +222,7 @@ const analyzeWithFallbacks = async (userPrompt: string, tokenLimit: number): Pro
   logger.error("All AI models failed to return a response");
 
   return undefined;
-}
+};
 
 /**
  * Sends code analysis request to the configured AI service
@@ -229,6 +244,7 @@ export const sendMessage = async (
   const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
   
   File path: ${file.path}
+  File type: ${getLanguageExtension(file.path)}
   Changed lines: ${file.changes.lineNumbers.join(", ")}
   
   <source code>
