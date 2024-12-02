@@ -133,7 +133,7 @@ Always return findings in this exact JSON format within <findings> tags:
         "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Ensure the code follows the project's patterns. 
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
-      "reference": {              // Only include if it's relevant to the issue.
+      "reference": {
         "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
         "url": string | null      // Official documentation links, etc
       }
