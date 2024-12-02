@@ -129,7 +129,7 @@ Always return findings in this exact JSON format within <findings> tags:
       "impact": string,
       "recommendation": {
         "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
-        "code": string         // Complete production-ready fixed code replacement only. Add brief comments explaining key changes. Ensure the code follows the project's patterns
+        "code": string         // Complete, production-ready fixed code only. Add brief comments explaining key changes. Ensure the code follows the project's patterns
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
       "reference": {              // Only include if it's relevant to the issue.
