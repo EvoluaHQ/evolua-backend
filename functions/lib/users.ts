@@ -24,6 +24,8 @@ export interface User {
   deleted: boolean;
   tier: "FREE" | "PRO";
   billingStartDate: string;
+  freeTrialStartDate: string;
+  freeTrialEndDate: string;
   scanCount: number;
 }
 
@@ -132,6 +134,8 @@ export async function deleteUser(id: string) {
 }
 
 export async function incrementScanCount(id: string, maxScans: number) {
+  const todayDate = new Date().toJSON().slice(0, 10);
+
   try {
     await documentClient.send(
       new UpdateCommand({
@@ -143,8 +147,9 @@ export async function incrementScanCount(id: string, maxScans: number) {
         ExpressionAttributeValues: {
           ":one": 1,
           ":maxScans": maxScans,
+          ":todayDate": todayDate,
         },
-        ConditionExpression: "attribute_exists(id) AND scanCount < :maxScans",
+        ConditionExpression: "attribute_exists(id) AND (scanCount < :maxScans OR :todayDate < freeTrialEndDate)",
       })
     );
   } catch (err) {
