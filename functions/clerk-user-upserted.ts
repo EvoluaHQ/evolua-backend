@@ -25,6 +25,10 @@ export const handler = async (event: Event) => {
   // billing start date should be in 'YYYY-MM-DD' format
   // and every day, we'll reset users who's billing cycle is up
   const billingStartDate = user?.billingStartDate || now.slice(0, 10);
+  
+  const freeTrialStartDate = billingStartDate;
+  const freeTrialEndDate = new Date(billingStartDate);
+  freeTrialEndDate.setMonth(freeTrialEndDate.getMonth() + 1);
 
   await Users.upsertUser({
     id,
@@ -40,6 +44,8 @@ export const handler = async (event: Event) => {
     deleted: false,
     tier,
     billingStartDate,
+    freeTrialStartDate,
+    freeTrialEndDate: freeTrialEndDate.toJSON().slice(0, 10),
     scanCount: user?.scanCount || 0,
   });
 
