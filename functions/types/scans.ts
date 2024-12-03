@@ -24,6 +24,7 @@ export interface AIResponse {
     recommendation: {
       description: string;
       code: string;
+      codeExample: string;
     };
     cwe_id?: string;
     reference?: {
@@ -62,6 +63,7 @@ export type IssueType = "vulnerability" | "code_quality" | "best_practice";
 export type Recommendation = {
   description: string;
   code?: string;
+  codeExample?: string;
 };
 
 /**

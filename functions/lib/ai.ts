@@ -130,8 +130,8 @@ Always return findings in this exact JSON format within <findings> tags:
       "impact": string,
       "recommendation": {
         "description": string,  // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches.
-        "codeExample": string,  // Educational code example showing before/after comparison. Add brief comments explaining key changes.
-        "codeCommit": string    // Complete, production-ready code suggestion that fixes and replaces the original code block.
+        "code": string,          // Complete, production-ready code suggestion that fixes and replaces the original code block.
+        "codeExample": string  // Educational code example showing before/after comparison. Add brief comments explaining key changes.
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
       "reference": {
