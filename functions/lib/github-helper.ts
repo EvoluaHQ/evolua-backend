@@ -584,6 +584,7 @@ export function formatIssueComment(issue: CodeIssue, filePath: string): string {
     if (code) {
       comment += `
 <!-- code snippet -->
+### Example\n${issue.recommendation.description}\n
 \`\`\`${getLanguageExtension(filePath)}
 ${code}
 \`\`\`
