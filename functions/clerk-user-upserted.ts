@@ -14,7 +14,7 @@ export const handler = async (event: Event) => {
   const githubAccount = event.detail.data.data.external_accounts.find(
     (x) => x.provider === "oauth_github"
   );
-  const githubHandle = githubAccount?.username;
+  const githubHandle = githubAccount?.username?.toLowerCase() || "";
 
   const user = await Users.findUser(clerkUserId, email, githubHandle);
   const id = user?.id || ulid.ulid();
@@ -38,7 +38,7 @@ export const handler = async (event: Event) => {
     firstName: event.detail.data.data.first_name,
     lastName: event.detail.data.data.last_name,
     imageUrl: event.detail.data.data.image_url,
-    githubHandle,
+    githubHandle: githubHandle || "",
     createdAt: user?.createdAt || now,
     lastUpdatedAt: now,
     deleted: false,
