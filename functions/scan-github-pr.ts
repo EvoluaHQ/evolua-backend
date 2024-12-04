@@ -15,7 +15,6 @@
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
-import { ContentBlock } from "@aws-sdk/client-bedrock-runtime";
 import { Sema } from "async-sema";
 import { ulid } from "ulid";
 import {
