@@ -27,11 +27,11 @@ export const AI_ANALYSIS_CONFIG = {
   fileSize: {
     small: {
       maxSize: 10_000, // 10KB
-      tokens: 2_048,
+      tokens: 8_192,
     },
     medium: {
       maxSize: 30_000, // 30KB
-      tokens: 4_096,
+      tokens: 8_192,
     },
     large: {
       maxSize: 100_000, // 100KB
