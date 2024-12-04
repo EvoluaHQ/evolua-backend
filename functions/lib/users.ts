@@ -82,7 +82,8 @@ export async function findUserByGithubHandle(
       IndexName: "githubHandleIndex",
       KeyConditionExpression: "githubHandle = :githubHandle",
       ExpressionAttributeValues: {
-        ":githubHandle": githubHandle,
+        // github handles are always lowercase
+        ":githubHandle": githubHandle.toLowerCase(),
       },
     })
   );
