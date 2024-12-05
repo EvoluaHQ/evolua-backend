@@ -105,7 +105,7 @@ Guidelines:
   * Medium: Important quality issues (performance, validation, error handling, etc)
   * Low: Minor improvements (style, documentation, optimizations)
 
-Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping (\\n for newlines, \" for quotes, \\ for backslashes, \b for backspace, \f for form feed, \r for carriage return, \t for tabs):
+Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
 {
   "summary": {
     "total_issues": number,   // Count of all identified issues
