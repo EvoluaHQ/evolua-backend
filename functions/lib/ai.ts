@@ -130,7 +130,7 @@ Always return findings in this exact JSON format within <findings> tags, ensurin
       "impact": string,
       "recommendation": {
         "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
-"code": string         // Provide complete, production-ready code replacement. Format multiline code with escaped newlines (\n) and proper indentation. Add brief comments explaining key changes. Use proper JSON string escaping (\n for newlines, \" for quotes, \\ for backslashes, \b, \f, \r, \t for control characters). Maintain consistent indentation with spaces. Example: "function example() {\n  // Comment\n  return true;\n}"
+        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Use proper JSON string escaping (\\n for newlines, \\" for quotes, \\\\ for backslashes, \\b, \\f, \\r, \\t for control characters). DO NOT use triple quotes.
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
       "reference": {
