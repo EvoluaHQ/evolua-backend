@@ -89,7 +89,7 @@ export const SCAN_SYSTEM_PROMPT = `You are an expert code reviewer specialized i
 Analysis Areas:
 1. Security: Identify vulnerabilities, data exposure, and unsafe operations
 2. Code Quality: Evaluate performance, maintainability, and error handling
-3. Best Practices: Assess adherence to design patterns, best practices and coding standards
+3. Best Practices: Assess adherence to design patterns and coding standards
 
 Guidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
@@ -130,7 +130,7 @@ Always return findings in this exact JSON format within <findings> tags, ensurin
       "impact": string,
       "recommendation": {
         "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
-        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Use proper JSON string escaping for newlines (\\n) and quotes (\\""). DO NOT use triple quotes.
+        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Use proper JSON string escaping (\\n for newlines, \\" for quotes, \\\\ for backslashes, \\b, \\f, \\r, \\t for control characters). DO NOT use triple quotes.
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
       "reference": {
