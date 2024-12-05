@@ -16,18 +16,20 @@ import { Logger } from "@aws-lambda-powertools/logger";
 import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import { Sema } from "async-sema";
+import { EventBridgeEvent } from "aws-lambda";
 import { ulid } from "ulid";
 import {
   AI_ANALYSIS_CONFIG,
-  initAnthropic,
+  getPRClosedMessage,
   getScanLimitMessage,
   getStartReviewMessage,
   getSubscriptionLimitMessage,
   getUnregisteredUserMessage,
-  getPRClosedMessage,
+  initAnthropic,
   sendMessage,
 } from "./lib/ai";
 import { SUBSCRIPTION_TIERS } from "./lib/constants";
+import { publishEvent } from "./lib/events";
 import { shouldSkipFile } from "./lib/file-ignore";
 import {
   commentOnPR,
@@ -38,20 +40,18 @@ import {
   processAIResponse,
   submitPRReview,
 } from "./lib/github-helper";
-import { PullRequest, saveScanResults } from "./lib/scans";
 import { updateLastReviewedAt } from "./lib/repos";
-import { publishEvent } from "./lib/events";
+import { PullRequest, saveScanResults } from "./lib/scans";
 import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
 import {
-  EventEnvelope,
   AIResponse,
+  EventEnvelope,
   Findings,
   PRFileChanges,
-  ScanResult,
+  ScanCompletedEventDetail,
   ScanGitHubPrInput,
-  ScanCompletedEventDetail
+  ScanResult,
 } from "./types";
-import { EventBridgeEvent } from 'aws-lambda';
 import { MaxScansExceededError } from "./types/errors";
 
 const { SSM_STAGE_NAME, STAGE_NAME, SERVICE_NAME } = process.env;
@@ -62,7 +62,10 @@ const metrics = new Metrics({
   namespace: "CodeReview",
 });
 
-type Event = EventBridgeEvent<'scan_triggered', EventEnvelope<ScanGitHubPrInput>>;
+type Event = EventBridgeEvent<
+  "scan_triggered",
+  EventEnvelope<ScanGitHubPrInput>
+>;
 
 const _handler = async (event: Event, context: any) => {
   const input = event.detail.data;
@@ -75,8 +78,8 @@ const _handler = async (event: Event, context: any) => {
   try {
     // Initialize observability tools
     logger.addContext(context);
-    tracer.putAnnotation("service", SERVICE_NAME || 'PullRequest Service');
-    metrics.addMetadata("environment", STAGE_NAME || 'dev');
+    tracer.putAnnotation("service", SERVICE_NAME || "PullRequest Service");
+    metrics.addMetadata("environment", STAGE_NAME || "dev");
 
     // Initialize GitHub client
     const installationId = input.installation_id;
@@ -84,8 +87,8 @@ const _handler = async (event: Event, context: any) => {
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
     await init(ghAppId, ghPrivateKey, installationId);
 
-    logger.debug('Fetching PR details from GitHub');
-    
+    logger.debug("Fetching PR details from GitHub");
+
     const ghRepoData = await fetchPRDetails(
       input.repository.owner_login,
       input.repository.name,
@@ -97,9 +100,9 @@ const _handler = async (event: Event, context: any) => {
         getPRClosedMessage(input.sender_login)
       );
 
-      logger.info("PR is closed, skipped...", { 
+      logger.info("PR is closed, skipped...", {
         repoName: input.repository.name,
-        prNumber: input.pull_request_number,        
+        prNumber: input.pull_request_number,
       });
 
       return;
@@ -112,7 +115,7 @@ const _handler = async (event: Event, context: any) => {
       title: ghRepoData.title,
       url: ghRepoData.url,
       created_at: ghRepoData.created_at,
-    }
+    };
 
     const username = input.sender_login;
     const user = await findUserByGithubHandle(username);
@@ -137,10 +140,7 @@ const _handler = async (event: Event, context: any) => {
 
       if (error instanceof MaxScansExceededError) {
         // User reached their scan limit
-        await commentOnPR(
-          pullRequest.node_id,
-          getScanLimitMessage(username)
-        );
+        await commentOnPR(pullRequest.node_id, getScanLimitMessage(username));
 
         return;
       } else {
@@ -244,7 +244,7 @@ const _handler = async (event: Event, context: any) => {
       title: pullRequest.title,
       createdAt: pullRequest.created_at,
     };
-    
+
     const scanSummary = await saveScanResults(repoId, pr, startTime, results);
     await updateLastReviewedAt(repoId, startTime);
 
@@ -255,8 +255,13 @@ const _handler = async (event: Event, context: any) => {
       pullRequest: pr,
       summary: scanSummary,
       reviewedFiles: filesToAnalyze.map((file) => file.path),
-    }
-    await publishEvent(ulid(), 'scan-github-pr-handler', 'scan_completed', scanCompletedEvent);
+    };
+    await publishEvent(
+      ulid(),
+      "scan-github-pr-handler",
+      "scan_completed",
+      scanCompletedEvent
+    );
   } catch (error) {
     const duration = Date.now() - startTime.getTime();
 
@@ -340,7 +345,8 @@ const analyzeFile = async (
       changedLines: file.changes.lineNumbers,
       allIssues: findings.issues.map((issue) => ({
         id: issue.id,
-        line: issue.location.lineStart,
+        lineStart: issue.location.lineStart,
+        lineEnd: issue.location.lineEnd,
         title: issue.title,
         isInChangedLines: file.changes.lineNumbers.includes(
           issue.location.lineStart
@@ -354,7 +360,8 @@ const analyzeFile = async (
         issue.location.lineStart
       );
       logger.info("Filtering issue", {
-        issueLine: issue.location.lineStart,
+        lineStart: issue.location.lineStart,
+        lineEnd: issue.location.lineEnd,
         changedLines: file.changes.lineNumbers,
         included: isIncluded,
         issueTitle: issue.title,
@@ -368,7 +375,8 @@ const analyzeFile = async (
       filteredIssuesCount: filteredIssues.length,
       filteredIssues: filteredIssues.map((issue) => ({
         id: issue.id,
-        line: issue.location.lineStart,
+        lineStart: issue.location.lineStart,
+        lineEnd: issue.location.lineEnd,
         title: issue.title,
       })),
     });
@@ -484,14 +492,15 @@ const ssm = require("@middy/ssm");
  * Export the handler with middleware
  * Adds SSM parameter fetching capability to the base handler
  */
-export const handler = middy(_handler)
-.use(ssm({
-  cache: true,
-  cacheExpiry: 5 * 60 * 1000, // Cache credentials for 5 minutes
-  setToContext: true,
-  fetchData: {
-    GITHUB_APP_ID: `/evolua/${SSM_STAGE_NAME}/github/app-id`,
-    GITHUB_PRIVATE_KEY: `/evolua/${SSM_STAGE_NAME}/github/private-key`,
-    ANTHROPIC_API_KEY: `/evolua/${SSM_STAGE_NAME}/anthropic/api-key`,
-  },
-}));
+export const handler = middy(_handler).use(
+  ssm({
+    cache: true,
+    cacheExpiry: 5 * 60 * 1000, // Cache credentials for 5 minutes
+    setToContext: true,
+    fetchData: {
+      GITHUB_APP_ID: `/evolua/${SSM_STAGE_NAME}/github/app-id`,
+      GITHUB_PRIVATE_KEY: `/evolua/${SSM_STAGE_NAME}/github/private-key`,
+      ANTHROPIC_API_KEY: `/evolua/${SSM_STAGE_NAME}/anthropic/api-key`,
+    },
+  })
+);
