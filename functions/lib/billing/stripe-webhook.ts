@@ -24,7 +24,7 @@ const relevantEvents = new Set([
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
-  "customer.subscription.trial_will_end",
+  "customer.subscription.trial_will_end", // Sent 3 days before trial ends. TODO: How to handle that?
   "invoice.paid",
   "invoice.payment_failed",
   "payment_intent.succeeded",

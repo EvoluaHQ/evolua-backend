@@ -48,7 +48,6 @@ export const dynamodb = new DynamoDB.DocumentClient({
 export const constants = {
   ORGANIZATIONS_TABLE: process.env.ORGANIZATIONS_TABLE!,
   FREE_TIER_USER_LIMIT: 2,
-  TRIAL_DAYS: 14,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
   // Price IDs for different billing intervals
   PRICE_CONFIG: {

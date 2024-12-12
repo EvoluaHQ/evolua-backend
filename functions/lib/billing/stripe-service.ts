@@ -9,7 +9,6 @@ import { BillingInterval, Organization } from "./types";
 
 // Constants
 const FREE_TIER_USER_LIMIT = 1;
-const TRIAL_DAYS = 14;
 
 interface PriceConfig {
   id: string;
@@ -20,6 +19,8 @@ interface PriceConfig {
 }
 
 // Price configuration
+// TODO: Fetch price config from stripe or from our own database?
+// TODO: Should we create prices from our db like the supabase example?
 const PRICE_CONFIG: Record<BillingInterval, PriceConfig> = {
   month: {
     id: process.env.STRIPE_PRICE_ID_MONTHLY!,
@@ -103,7 +104,6 @@ export async function createEmbeddedCheckoutSession({
         },
       ],
       subscription_data: {
-        trial_period_days: TRIAL_DAYS,
         metadata: {
           organizationId,
           clerkOrgId: organization.clerkOrgId,
