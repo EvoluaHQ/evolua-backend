@@ -8,7 +8,7 @@ import { BillingServiceError } from "./errors";
 import { BillingInterval, Organization } from "./types";
 
 // Constants
-const FREE_TIER_USER_LIMIT = 2;
+const FREE_TIER_USER_LIMIT = 1;
 const TRIAL_DAYS = 14;
 
 interface PriceConfig {
