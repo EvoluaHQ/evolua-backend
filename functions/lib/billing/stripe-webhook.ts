@@ -1,42 +1,48 @@
 // src/handlers/stripe-webhook.ts
+
 import { APIGatewayProxyEvent } from "aws-lambda";
 import Stripe from "stripe";
-import { clerk, stripe } from "../config";
-import { getOrganizationByClerkId, updateOrganization } from "../lib/db";
-import { BillingServiceError } from "../lib/errors";
+import { updateClerkOrgLimits, updateClerkUserAccess } from "./clerk-service";
+import { clerk, stripe } from "./config";
 import {
-  updateClerkOrgLimits,
-  updateClerkUserAccess,
-} from "../services/clerk-service";
-import { BillingInterval } from "../types/billing";
+  getOrganization,
+  getOrganizationByClerkId,
+  updateOrganization,
+} from "./db";
+import { BillingServiceError } from "./errors";
+import { BillingInterval } from "./types";
 
+const FREE_TIER_USER_LIMIT = 2;
+
+/**
+ * List of Stripe events we want to handle
+ * Includes both subscription and checkout related events
+ */
 const relevantEvents = new Set([
-  "product.created",
-  "product.updated",
-  "product.deleted",
-  "price.created",
-  "price.updated",
-  "price.deleted",
   "checkout.session.completed",
+  "checkout.session.expired",
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
+  "customer.subscription.trial_will_end",
   "invoice.paid",
   "invoice.payment_failed",
+  "payment_intent.succeeded",
+  "payment_intent.payment_failed",
 ]);
 
 /**
- * Manages subscription changes triggered by Stripe events
+ * Handles subscription status changes and updates related systems
  */
-async function manageSubscriptionChange(
+async function handleSubscriptionChange(
   subscription: Stripe.Subscription,
-  isNewSubscription: boolean
+  isNewSubscription: boolean = false
 ) {
   const { organizationId, clerkOrgId } = subscription.metadata;
 
   if (!organizationId || !clerkOrgId) {
     throw new BillingServiceError(
-      "Missing organization metadata",
+      "Missing required metadata",
       "invalid_metadata",
       400
     );
@@ -62,6 +68,7 @@ async function manageSubscriptionChange(
       billingInterval,
       maxMembers: totalSeats,
       totalSeats,
+      trialEndsAt: subscription.trial_end || undefined,
     });
 
     // Update Clerk organization limits
@@ -88,29 +95,73 @@ async function manageSubscriptionChange(
       }
     }
   } catch (error) {
-    console.error("Failed to manage subscription change:", error);
+    console.error("Failed to handle subscription change:", error);
     throw error;
   }
 }
 
 /**
- * Handles updates to Stripe Product records
+ * Handles completed checkout sessions
  */
-async function upsertProductRecord(product: Stripe.Product) {
-  // Store product data in DynamoDB if needed
-  // Implementation depends on your product management needs
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  if (session.mode !== "subscription") {
+    return; // Only handle subscription checkouts
+  }
+
+  try {
+    // Get the subscription details
+    const subscription = await stripe.subscriptions.retrieve(
+      session.subscription as string,
+      {
+        expand: ["items.data.price"],
+      }
+    );
+
+    // Handle the new subscription
+    await handleSubscriptionChange(subscription, true);
+  } catch (error) {
+    console.error("Failed to handle checkout completion:", error);
+    throw error;
+  }
 }
 
 /**
- * Handles updates to Stripe Price records
+ * Handles invoice payment status changes
  */
-async function upsertPriceRecord(price: Stripe.Price) {
-  // Store price data in DynamoDB if needed
-  // Implementation depends on your price management needs
+async function handleInvoicePayment(
+  invoice: Stripe.Invoice,
+  wasSuccessful: boolean
+) {
+  if (!invoice.subscription) return; // Only handle subscription invoices
+
+  const { organizationId } = invoice.metadata;
+  if (!organizationId) {
+    throw new BillingServiceError(
+      "Missing organizationId in invoice metadata",
+      "invalid_metadata",
+      400
+    );
+  }
+
+  try {
+    // Update organization billing status
+    await updateOrganization(organizationId, {
+      billingStatus: wasSuccessful ? "active" : "past_due",
+    });
+
+    // If payment failed, you might want to notify the user
+    if (!wasSuccessful) {
+      // Implement notification logic here
+      console.log(`Payment failed for organization: ${organizationId}`);
+    }
+  } catch (error) {
+    console.error("Failed to handle invoice payment:", error);
+    throw error;
+  }
 }
 
 /**
- * AWS Lambda handler for Stripe webhooks
+ * Main webhook handler for AWS Lambda
  */
 export async function handler(event: APIGatewayProxyEvent) {
   try {
@@ -125,7 +176,7 @@ export async function handler(event: APIGatewayProxyEvent) {
       };
     }
 
-    // Parse and verify the webhook event
+    // Construct and verify the webhook event
     const stripeEvent = stripe.webhooks.constructEvent(
       event.body!,
       signature,
@@ -145,54 +196,41 @@ export async function handler(event: APIGatewayProxyEvent) {
     }
 
     try {
+      // Handle different event types
       switch (stripeEvent.type) {
-        case "product.created":
-        case "product.updated":
-          await upsertProductRecord(stripeEvent.data.object as Stripe.Product);
-          break;
-
-        case "price.created":
-        case "price.updated":
-          await upsertPriceRecord(stripeEvent.data.object as Stripe.Price);
+        case "checkout.session.completed":
+          await handleCheckoutCompleted(
+            stripeEvent.data.object as Stripe.Checkout.Session
+          );
           break;
 
         case "customer.subscription.created":
         case "customer.subscription.updated":
         case "customer.subscription.deleted":
           const subscription = stripeEvent.data.object as Stripe.Subscription;
-          await manageSubscriptionChange(
+          await handleSubscriptionChange(
             subscription,
             stripeEvent.type === "customer.subscription.created"
           );
           break;
 
-        case "checkout.session.completed":
-          const session = stripeEvent.data.object as Stripe.Checkout.Session;
-          if (session.mode === "subscription" && session.subscription) {
-            const subscription = await stripe.subscriptions.retrieve(
-              session.subscription as string
-            );
-            await manageSubscriptionChange(subscription, true);
-          }
+        case "customer.subscription.trial_will_end":
+          // Implement trial ending notification logic
+          const trialEndingSub = stripeEvent.data.object as Stripe.Subscription;
+          console.log(`Trial ending for subscription: ${trialEndingSub.id}`);
           break;
 
         case "invoice.paid":
         case "invoice.payment_failed":
           const invoice = stripeEvent.data.object as Stripe.Invoice;
-          const { organizationId } = invoice.metadata;
-
-          if (!organizationId) {
-            throw new Error("Missing organizationId in invoice metadata");
-          }
-
-          await updateOrganization(organizationId, {
-            billingStatus:
-              stripeEvent.type === "invoice.paid" ? "active" : "past_due",
-          });
+          await handleInvoicePayment(
+            invoice,
+            stripeEvent.type === "invoice.paid"
+          );
           break;
 
         default:
-          throw new Error("Unhandled relevant event!");
+          console.log(`Unhandled relevant event: ${stripeEvent.type}`);
       }
 
       return {
