@@ -74,6 +74,7 @@ export class DataStack extends cdk.Stack {
 
     this.createClerkUserUpsertedEventHandlerFunction();
     this.createClerkUserDeletedEventHandlerFunction();
+    this.createClerkDisableOrgCreationFunction();
     
     this.createResetScanCountsFunction();
 
@@ -460,6 +461,43 @@ export class DataStack extends cdk.Stack {
     ghWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
     this.reposTable.grantWriteData(handler);
+  }
+
+  private createClerkDisableOrgCreationFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "ClerkDisableOrgCreationFunction",
+      {
+        serviceName: 'clerk-disable-org-creation',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/clerk-disable-org-creation.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/secret-key`
+        ],
+      })
+    );
+
+    const clerkWebhookRule = new events.Rule(this, "ClerkUserUpserted", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["clerk"],
+        detail: {
+          metadata: {
+            type: ["user.created"],
+          },
+        },
+      },
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
   }
 
   private createClerkUserUpsertedEventHandlerFunction() {
