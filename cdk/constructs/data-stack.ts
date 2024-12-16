@@ -486,7 +486,7 @@ export class DataStack extends cdk.Stack {
       })
     );
 
-    const clerkWebhookRule = new events.Rule(this, "ClerkUserUpserted", {
+    const clerkWebhookRule = new events.Rule(this, "ClerkDisableOrgCreation", {
       eventBus: this.eventBus,
       eventPattern: {
         source: ["clerk"],
