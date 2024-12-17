@@ -31,7 +31,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   const subId = data.id;
   const subscription = await getSubscription(subId);
 
-  if (subscription === null) {
+  if (!subscription) {
     throw new Error(`Subscription id not found: [${subId}].`);
   }
 
