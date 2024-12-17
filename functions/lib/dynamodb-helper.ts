@@ -101,3 +101,23 @@ export const usersTableName = () => {
 
   return tableName;
 }
+
+export const organizationsTableName = () => {
+  const tableName = process.env.ORGANIZATIONS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("ORGANIZATIONS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}
+
+export const subscriptionsTableName = () => {
+  const tableName = process.env.STRIPE_SUBSCRIPTIONS_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("STRIPE_SUBSCRIPTIONS_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}

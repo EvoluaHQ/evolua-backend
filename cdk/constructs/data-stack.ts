@@ -12,6 +12,8 @@ import { TypescriptFunction } from "./typescript-function";
 export class DataStack extends cdk.Stack {
   props: EvoluaStackProps;
   usersTable: dynamodb.Table;
+  organizationsTable: dynamodb.Table;
+  stripeSubscriptionsTable: dynamodb.Table;
   eventsTable: dynamodb.Table;
   reposTable: dynamodb.Table;
   tenantReposTable: dynamodb.Table;
@@ -32,6 +34,12 @@ export class DataStack extends cdk.Stack {
 
     this.usersTable = this.createUsersTable();
     this.createTableParameters("UsersTable", this.usersTable, "users-table");
+
+    this.organizationsTable = this.createOrganizationsTable();
+    this.createTableParameters("OrganizationsTable", this.organizationsTable, "organizations-table");
+
+    this.stripeSubscriptionsTable = this.createStripeSubscriptionsTable();
+    this.createTableParameters("StripeSubscriptionsTable", this.stripeSubscriptionsTable, "stripe-subscriptions-table");
 
     this.eventsTable = this.createEventsTable();
     this.createTableParameters("EventsTable", this.eventsTable, "events-table");
@@ -75,6 +83,9 @@ export class DataStack extends cdk.Stack {
     this.createClerkUserUpsertedEventHandlerFunction();
     this.createClerkUserDeletedEventHandlerFunction();
     this.createClerkDisableOrgCreationFunction();
+
+    this.createStripeSubscriptionCreatedHandlerFunction();
+    this.createStripeSubscriptionUpdatedHandlerFunction();
     
     this.createResetScanCountsFunction();
 
@@ -155,6 +166,38 @@ export class DataStack extends cdk.Stack {
         name: "githubHandle",
         type: dynamodb.AttributeType.STRING,
       },
+    });
+
+    return table;
+  }
+
+  private createOrganizationsTable(): dynamodb.Table {
+    const table = new dynamodb.Table(this, "OrganizationsTable", {
+      partitionKey: {
+        name: "orgId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "sk",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy,
+    });
+
+    return table;
+  }
+
+  private createStripeSubscriptionsTable(): dynamodb.Table {
+    const table = new dynamodb.Table(this, "StripeSubscriptionsTable", {
+      partitionKey: {
+        name: "subId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy,
     });
 
     return table;
@@ -564,6 +607,98 @@ export class DataStack extends cdk.Stack {
     clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
 
     this.usersTable.grantReadWriteData(handler);
+  }
+
+  private createStripeSubscriptionCreatedHandlerFunction() {    
+    const handler = new TypescriptFunction(
+      this,
+      "StripeSubscriptionCreatedHandlerFunction",
+      {
+        serviceName: 'stripe-subscription-created-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/stripe-subscription-created.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+        environment: {
+          USERS_TABLE_NAME: this.usersTable.tableName,
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
+          SUBSCRIPTIONS_TABLE_NAME: this.stripeSubscriptionsTable.tableName,
+        },
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/secret-key`
+        ],
+      })
+    );
+
+    const evbRule = new events.Rule(this, "StripeSubscriptionCreatedRule", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["stripe"],
+        detail: {
+          metadata: {
+            type: ["customer.subscription.created"],
+          },
+        },
+      },
+    });
+    evbRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+    this.organizationsTable.grantWriteData(handler);
+    this.stripeSubscriptionsTable.grantWriteData(handler);
+  }
+
+  private createStripeSubscriptionUpdatedHandlerFunction() {    
+    const handler = new TypescriptFunction(
+      this,
+      "StripeSubscriptionUpdatedHandlerFunction",
+      {
+        serviceName: 'stripe-subscription-updated-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/stripe-subscription-updated.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+        environment: {
+          USERS_TABLE_NAME: this.usersTable.tableName,
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
+          SUBSCRIPTIONS_TABLE_NAME: this.stripeSubscriptionsTable.tableName,
+        },
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/secret-key`
+        ],
+      })
+    );
+
+    const evbRule = new events.Rule(this, "StripeSubscriptionUpdatedRule", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["stripe"],
+        detail: {
+          metadata: {
+            type: ["customer.subscription.updated"],
+          },
+        },
+      },
+    });
+    evbRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+    this.organizationsTable.grantReadWriteData(handler);
+    this.stripeSubscriptionsTable.grantReadWriteData(handler);
   }
 
   private createResetScanCountsFunction() {

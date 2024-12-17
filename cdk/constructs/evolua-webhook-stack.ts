@@ -40,6 +40,7 @@ export class EvoluaWebhookStack extends cdk.Stack {
 
     this.createClerkWebhook();
     this.createGitHubWebhook();
+    this.createStripeWebhook();
   }
 
   private createClerkWebhook() {
@@ -105,6 +106,36 @@ export class EvoluaWebhookStack extends cdk.Stack {
     webhookFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ssm:GetParameter*'],
       resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/github/secret`]
+    }))
+  }
+
+  private createStripeWebhook() {
+    const webhookFunction = new TypescriptFunction(this, 'StripeWebhookFunction', {
+      serviceName: this.props.serviceName,
+      stageName: this.props.stageName,
+      ssmStageName: this.props.ssmStageName,
+      entry: 'functions/stripe-webhook.ts',
+      handler: 'handler',
+      environment: {
+        EVENTS_TABLE_NAME: this.eventsTable.tableName,
+        EVENT_BUS_NAME: this.eventBus.eventBusName,
+      }
+    });
+
+    this.eventsTable.grantWriteData(webhookFunction);
+    this.eventBus.grantPutEventsTo(webhookFunction);
+
+    // set up the POST /stripe endpoint
+    const stripeResource = this.api.root.addResource('stripe');
+    stripeResource.addMethod('POST', new apigateway.LambdaIntegration(webhookFunction));
+
+    // we need to validate the webhook with a Stripe webhook secret in SSM parameter store
+    webhookFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter*'],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/stripe/secret-key`,
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/stripe/webhook-secret`
+      ]
     }))
   }
 }
