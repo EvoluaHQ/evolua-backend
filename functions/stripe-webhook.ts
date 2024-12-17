@@ -8,8 +8,6 @@ import Stripe from "stripe";
 const { SSM_STAGE_NAME } = process.env;
 
 const _handler = async (event: APIGatewayEvent, context: any): Promise<APIGatewayProxyResult> => {
-  console.log(JSON.stringify(event));
-
   const signature = event.headers["Stripe-Signature"];
   if (!signature) {
     return {
