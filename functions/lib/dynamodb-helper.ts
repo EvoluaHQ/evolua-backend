@@ -113,10 +113,10 @@ export const organizationsTableName = () => {
 }
 
 export const subscriptionsTableName = () => {
-  const tableName = process.env.STRIPE_SUBSCRIPTIONS_TABLE_NAME || ""
+  const tableName = process.env.SUBSCRIPTIONS_TABLE_NAME || ""
 
   if (!tableName) {
-    throw new Error("STRIPE_SUBSCRIPTIONS_TABLE_NAME env var is missing")
+    throw new Error("SUBSCRIPTIONS_TABLE_NAME env var is missing")
   }
 
   return tableName;
