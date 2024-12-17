@@ -1,6 +1,6 @@
 import { Logger } from '@aws-lambda-powertools/logger';
-import { createClerkClient, ClerkClient } from '@clerk/backend'
-import { BillingStatus, BillingInterval } from '../types/billing'
+import { createClerkClient, ClerkClient } from '@clerk/backend';
+import { BillingStatus, BillingInterval } from '../types/billing';
 
 let clerkClient: ClerkClient
 
@@ -52,10 +52,15 @@ export async function createOrganization(
   name: string,
   metadata: OrgMetadata
 ): Promise<string> {
+  // generate 8 random characters
+  const random = Math.random().toString(36).substring(2, 10);
+  // slugs are unique, so if you try to create an organization with the same slug
+  // as another, then it won't create a new organization
+  const slug = name.toLowerCase() + `-${random}`;
   const organization = await clerkClient.organizations.createOrganization({
     name,
     createdBy: userId,
-    slug: name,
+    slug,
     maxAllowedMemberships: metadata.maxMembers,
     privateMetadata: metadata as any,
   });
