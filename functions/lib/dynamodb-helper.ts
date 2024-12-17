@@ -121,3 +121,13 @@ export const subscriptionsTableName = () => {
 
   return tableName;
 }
+
+export const idempotencyTableName = () => {
+  const tableName = process.env.IDEMPOTENCY_TABLE_NAME || ""
+
+  if (!tableName) {
+    throw new Error("IDEMPOTENCY_TABLE_NAME env var is missing")
+  }
+
+  return tableName;
+}

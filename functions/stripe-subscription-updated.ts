@@ -6,8 +6,10 @@ import { initClerk, updateOrganizationMaxMembers } from "./lib/clerk";
 import { getSubscription, updateSubscriptionLastUpdatedAt } from './lib/subscriptions';
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
-
-const { SSM_STAGE_NAME } = process.env;
+import { IdempotencyConfig } from '@aws-lambda-powertools/idempotency';
+import { DynamoDBPersistenceLayer } from '@aws-lambda-powertools/idempotency/dynamodb';
+import { makeHandlerIdempotent } from '@aws-lambda-powertools/idempotency/middleware';
+import { idempotencyTableName } from './lib/dynamodb-helper';
 
 type EventEnvelope = {
   metadata: Metadata;
@@ -44,6 +46,12 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   await updateSubscriptionLastUpdatedAt(subId, subscriptionStatus, billingInterval, now);  
 };
 
+const { SSM_STAGE_NAME } = process.env;
+
+const persistenceStore = new DynamoDBPersistenceLayer({
+  tableName: idempotencyTableName(),
+});
+
 export const handler = middy(_handler)
   .use(ssm({
     cache: true,
@@ -52,4 +60,11 @@ export const handler = middy(_handler)
     fetchData: {
       CLERK_SECRET_KEY: `/evolua/${SSM_STAGE_NAME}/clerk/secret-key`,
     }
+  }))
+  .use(makeHandlerIdempotent({
+    persistenceStore, 
+    config: new IdempotencyConfig({
+      eventKeyJmesPath: 'detail.metadata.idempotencyKey',
+      throwOnNoIdempotencyKey: true,
+    })
   }));

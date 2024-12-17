@@ -34,9 +34,10 @@ const _handler = async (event: APIGatewayEvent, context: any): Promise<APIGatewa
   const payload = stripeEvent.data.object;
 
   const eventId = ulid();
+  const idempotencyKey = stripeEvent.request?.idempotency_key!;
 
-  await Events.publishEvent(eventId, 'stripe', eventType, payload);
-  await Events.saveEvent(eventId, 'stripe', eventType, payload);
+  await Events.publishEvent(eventId, 'stripe', eventType, payload, idempotencyKey);
+  await Events.saveEvent(eventId, 'stripe', eventType, payload, idempotencyKey);
 
   return {
     statusCode: 200,

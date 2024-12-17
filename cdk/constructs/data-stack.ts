@@ -14,6 +14,7 @@ export class DataStack extends cdk.Stack {
   usersTable: dynamodb.Table;
   organizationsTable: dynamodb.Table;
   stripeSubscriptionsTable: dynamodb.Table;
+  idempotencyTable: dynamodb.Table;
   eventsTable: dynamodb.Table;
   reposTable: dynamodb.Table;
   tenantReposTable: dynamodb.Table;
@@ -40,6 +41,9 @@ export class DataStack extends cdk.Stack {
 
     this.stripeSubscriptionsTable = this.createStripeSubscriptionsTable();
     this.createTableParameters("StripeSubscriptionsTable", this.stripeSubscriptionsTable, "stripe-subscriptions-table");
+
+    this.idempotencyTable = this.createIdempotencyTable();
+    this.createTableParameters("IdempotencyTable", this.idempotencyTable, "idempotency-table");
 
     this.eventsTable = this.createEventsTable();
     this.createTableParameters("EventsTable", this.eventsTable, "events-table");
@@ -198,6 +202,21 @@ export class DataStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: this.dataRemovalPolicy,
+    });
+
+    return table;
+  }
+
+  private createIdempotencyTable(): dynamodb.Table {
+    const table = new dynamodb.Table(this, "IdempotencyTable", {
+      partitionKey: {
+        name: "id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: this.dataRemovalPolicy,
+      timeToLiveAttribute: "expiration",
     });
 
     return table;
@@ -624,6 +643,7 @@ export class DataStack extends cdk.Stack {
           USERS_TABLE_NAME: this.usersTable.tableName,
           ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
           SUBSCRIPTIONS_TABLE_NAME: this.stripeSubscriptionsTable.tableName,
+          IDEMPOTENCY_TABLE_NAME: this.idempotencyTable.tableName,
         },
       }
     );
@@ -653,6 +673,7 @@ export class DataStack extends cdk.Stack {
     this.usersTable.grantReadWriteData(handler);
     this.organizationsTable.grantWriteData(handler);
     this.stripeSubscriptionsTable.grantWriteData(handler);
+    this.idempotencyTable.grantReadWriteData(handler);
   }
 
   private createStripeSubscriptionUpdatedHandlerFunction() {    
@@ -670,6 +691,7 @@ export class DataStack extends cdk.Stack {
           USERS_TABLE_NAME: this.usersTable.tableName,
           ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
           SUBSCRIPTIONS_TABLE_NAME: this.stripeSubscriptionsTable.tableName,
+          IDEMPOTENCY_TABLE_NAME: this.idempotencyTable.tableName,
         },
       }
     );
@@ -699,6 +721,7 @@ export class DataStack extends cdk.Stack {
     this.usersTable.grantReadWriteData(handler);
     this.organizationsTable.grantReadWriteData(handler);
     this.stripeSubscriptionsTable.grantReadWriteData(handler);
+    this.idempotencyTable.grantReadWriteData(handler);
   }
 
   private createResetScanCountsFunction() {

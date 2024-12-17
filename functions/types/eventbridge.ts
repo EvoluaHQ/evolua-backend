@@ -1,9 +1,10 @@
 export interface Metadata {
-  eventId: string,
-  version: string,
-  timestamp: string,
-  source: string,
-  type: string,
+  eventId: string;
+  version: string;
+  timestamp: string;
+  source: string;
+  type: string;
+  idempotencyKey?: string;
 }
 
 export interface EventEnvelope<TData> {
