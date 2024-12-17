@@ -61,7 +61,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
 
     await createSubscription({
       subId: data.id,
-      type: 'organization',
+      type: 'personal',
       userId: user.id,
       status: subscriptionStatus,
       billingInterval,
@@ -114,6 +114,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
     await createSubscription({
       subId: data.id,
       type: 'organization',
+      userId: user.id,
       orgId,
       status: subscriptionStatus,
       billingInterval,
