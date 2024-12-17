@@ -4,6 +4,7 @@ import { Metadata, BillingStatus, BillingInterval } from './types';
 import Stripe from 'stripe';
 import { initClerk, updateOrganizationMaxMembers } from "./lib/clerk";
 import { getSubscription, updateSubscriptionLastUpdatedAt } from './lib/subscriptions';
+import { getOrganizationById } from './lib/organizations';
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
 import { IdempotencyConfig } from '@aws-lambda-powertools/idempotency';
@@ -38,8 +39,13 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   if (subscription.type == 'organization') {
     logger.info('Updating organization max members');
 
+    const org = await getOrganizationById(subscription.orgId!);
+    if (!org) {
+      throw new Error(`Organization id not found: [${subscription.orgId}].`);
+    }
+
     const maxMembers = data.items.data[0].quantity!;
-    await updateOrganizationMaxMembers(subscription.orgId!, maxMembers);
+    await updateOrganizationMaxMembers(org.clerkOrgId, maxMembers);
   }
 
   logger.info('Updating subscription');
