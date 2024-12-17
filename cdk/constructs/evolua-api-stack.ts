@@ -11,6 +11,7 @@ import { STAGE_NAMES } from '../constants';
 export class EvoluaApiStack extends cdk.Stack {
   props: EvoluaServiceStackProps;
   usersTable: dynamodb.ITable;
+  organizationsTable: dynamodb.ITable;
   reposTable: dynamodb.ITable;
   tenantReposTable: dynamodb.ITable;
   scansTable: dynamodb.ITable;
@@ -24,6 +25,10 @@ export class EvoluaApiStack extends cdk.Stack {
     const usersTableArn = ssm.StringParameter.valueForStringParameter(
       this, `/evolua/${props.ssmStageName}/dynamodb/users-table/arn`);
     this.usersTable = dynamodb.Table.fromTableArn(this, 'UsersTable', usersTableArn);
+
+    const organizationsTableArn = ssm.StringParameter.valueForStringParameter(
+      this, `/evolua/${props.ssmStageName}/dynamodb/organizations-table/arn`);
+    this.organizationsTable = dynamodb.Table.fromTableArn(this, 'OrganizationsTable', organizationsTableArn);
 
     const reposTableArn = ssm.StringParameter.valueForStringParameter(
       this, `/evolua/${props.ssmStageName}/dynamodb/repos-table/arn`);
@@ -275,12 +280,16 @@ export class EvoluaApiStack extends cdk.Stack {
       handler: 'handler',
       environment: {
         USERS_TABLE_NAME: this.usersTable.tableName,
+        ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
       }
     });
 
     authorizer.addToRolePolicy(new iam.PolicyStatement({
       actions: ['dynamodb:Query'],
-      resources: [`${this.usersTable.tableArn}/index/clerkUserIdIndex`],
+      resources: [
+        `${this.usersTable.tableArn}/index/clerkUserIdIndex`,
+        `${this.organizationsTable.tableArn}/index/clerkOrgIdIndex`,
+      ],
     }));
 
     authorizer.addToRolePolicy(

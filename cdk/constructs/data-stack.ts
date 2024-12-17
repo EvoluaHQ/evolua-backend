@@ -190,6 +190,18 @@ export class DataStack extends cdk.Stack {
       removalPolicy: this.dataRemovalPolicy,
     });
 
+    table.addGlobalSecondaryIndex({
+      indexName: "clerkOrgIdIndex",
+      partitionKey: {
+        name: "clerkOrgId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "sk",
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
     return table;
   }
 
