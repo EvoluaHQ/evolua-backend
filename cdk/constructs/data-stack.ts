@@ -202,6 +202,18 @@ export class DataStack extends cdk.Stack {
       },
     });
 
+    table.addGlobalSecondaryIndex({
+      indexName: "clerkUserIdIndex",
+      partitionKey: {
+        name: "clerkUserId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "orgId",
+        type: dynamodb.AttributeType.STRING,
+      },
+    });
+
     return table;
   }
 
@@ -383,11 +395,13 @@ export class DataStack extends cdk.Stack {
         handler: "handler",
         timeout: cdk.Duration.minutes(5),
         environment: {
-          SCANS_TABLE_NAME: this.scansTable.tableName,
-          SCAN_RESULTS_TABLE_NAME: this.scanResultsTable.tableName,
           STAGE_NAME: this.props.stageName,
           SSM_STAGE_NAME: this.props.ssmStageName,
+          SCANS_TABLE_NAME: this.scansTable.tableName,
+          SCAN_RESULTS_TABLE_NAME: this.scanResultsTable.tableName,
           USERS_TABLE_NAME: this.usersTable.tableName,
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
+          TENANT_REPOS_TABLE_NAME: this.tenantReposTable.tableName,
           REPOS_TABLE_NAME: this.reposTable.tableName,
           EVENT_BUS_NAME: this.eventBus.eventBusName,
         },
@@ -428,6 +442,8 @@ export class DataStack extends cdk.Stack {
     this.scansTable.grantWriteData(handler);
     this.scanResultsTable.grantWriteData(handler);
     this.usersTable.grantReadWriteData(handler);
+    this.organizationsTable.grantReadData(handler);
+    this.tenantReposTable.grantReadData(handler);
     this.reposTable.grantWriteData(handler);
     this.eventBus.grantPutEventsTo(handler);
 

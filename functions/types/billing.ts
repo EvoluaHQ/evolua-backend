@@ -21,3 +21,9 @@ export type BillingStatus =
   | "past_due"
   | "canceled"
   | "incomplete";
+
+export type SubscriptionTierLimits = {
+  maxScans: number;
+  filesPerScan: number;
+  maxFileSize: number;
+}

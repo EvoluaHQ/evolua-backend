@@ -4,7 +4,7 @@ import {
   QueryCommand,
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { documentClient, organizationsTableName } from './dynamodb-helper';
+import { documentClient, organizationsTableName, executeBatchGetCommand } from './dynamodb-helper';
 
 const ORGANIZATIONS_TABLE_NAME = organizationsTableName();
 
@@ -15,7 +15,7 @@ export interface Organization {
   createdAt: string;
   lastUpdatedAt: string;
   maxMembers: number;
-  deleted: boolean;
+  status: "active" | "inactive" | "suspended";
 }
 
 export interface OrganizationMember {
@@ -62,6 +62,19 @@ export async function getOrganizationById(orgId: string): Promise<Organization |
   return resp.Item as Organization | null;
 }
 
+export async function getOrganizationsByIds(orgIds: string[]): Promise<Organization[]> {
+  const tableName = organizationsTableName();
+
+  const allKeys = orgIds.map(orgId => ({
+    orgId,
+    sk: 'ORGANIZATION'
+  }));
+
+  const resp = await executeBatchGetCommand(tableName, allKeys);
+
+  return resp.map(item => item as Organization)
+}
+
 export async function putOrganization(organization: Organization): Promise<void> {
   await documentClient.send(new PutCommand({
     TableName: ORGANIZATIONS_TABLE_NAME,
@@ -86,4 +99,32 @@ export async function findOrganizationByClerkOrgId(clerkOrgId: string): Promise<
   );
 
   return (Items?.[0] as Organization) || null;
+}
+
+export async function findOrganizationMembershipsByClerkUserId(clerkUserId: string): Promise<OrganizationMember[]> {
+  const tableName = organizationsTableName();
+
+  const params = {
+    TableName: tableName,
+    IndexName: 'clerkUserIdIndex',
+    KeyConditionExpression: "clerkUserId = :clerkUserId",
+      ExpressionAttributeValues: {
+        ":clerkUserId": clerkUserId,
+      },
+  };
+
+  let items: OrganizationMember[] = [];
+  let lastEvaluatedKey: any;
+
+  do {
+    const data = await documentClient.send(new QueryCommand({
+      ...params,
+      ExclusiveStartKey: lastEvaluatedKey
+    }));
+
+    items.push(...data.Items as OrganizationMember[]);
+    lastEvaluatedKey = data.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return items;
 }

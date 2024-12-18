@@ -97,7 +97,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
       createdAt: now,
       lastUpdatedAt: now,
       maxMembers,
-      deleted: false,
+      status: "active",
     };
     const adminMember: OrganizationMember = {
       orgId,

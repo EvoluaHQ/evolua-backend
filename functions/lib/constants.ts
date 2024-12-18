@@ -9,7 +9,7 @@ export const SUBSCRIPTION_TIERS = {
     maxFileSize: 500_000, // 500 KB
   },
   PRO: {
-    maxScans: 1000,
+    maxScans: 9999,
     filesPerScan: 100,
     maxFileSize: 1_000_000, // 1MB
   },
