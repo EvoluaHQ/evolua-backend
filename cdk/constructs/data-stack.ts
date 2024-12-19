@@ -782,7 +782,7 @@ export class DataStack extends cdk.Stack {
       })
     );
 
-    const evbRule = new events.Rule(this, "StripeSubscriptionUpdatedRule", {
+    const evbRule = new events.Rule(this, "StripeSubscriptionPausedRule", {
       eventBus: this.eventBus,
       eventPattern: {
         source: ["stripe"],
