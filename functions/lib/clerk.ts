@@ -52,11 +52,15 @@ export async function createOrganization(
   name: string,
   metadata: OrgMetadata
 ): Promise<string> {
-  // generate 8 random characters
-  const random = Math.random().toString(36).substring(2, 10);
+  // generate 5 random characters
+  const random = Math.random().toString(36).substring(2, 7);
+
+  // normalize name so it's lowercase, digits and '-' only
+  const normalizedName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
   // slugs are unique, so if you try to create an organization with the same slug
   // as another, then it won't create a new organization
-  const slug = name.toLowerCase() + `-${random}`;
+  const slug = normalizedName + `-${random}`;
   const organization = await clerkClient.organizations.createOrganization({
     name,
     createdBy: userId,
