@@ -27,6 +27,12 @@ type Datum = {
 // TODO: refactor this function to use a time series DB such as Timestream.
 export const handler = async (event: AppSyncResolverEvent<Arguments>) => {
   const { tenantRepoId, startDate, endDate } = event.arguments;
+  // end date is exclusive, we want to make it inclusive, so let's add one day to it
+  // end date is in 'YYYY-MM-DD' format, so this needs to stay the same format
+  const endDateInclusive = new Date(endDate);
+  endDateInclusive.setUTCDate(endDateInclusive.getUTCDate() + 1);
+  const formattedEndDate = endDateInclusive.toISOString().slice(0, 10);
+
   const identity = event.identity as AppSyncIdentityLambda;
   const tenantRepo = await getTenantRepo(
     identity.resolverContext.tenantId,
@@ -38,7 +44,7 @@ export const handler = async (event: AppSyncResolverEvent<Arguments>) => {
     return null;
   }
   
-  const allScans = await listScansForRepo(tenantRepo.repoId, startDate, endDate);
+  const allScans = await listScansForRepo(tenantRepo.repoId, startDate, formattedEndDate);
 
   // group scans by date (YYYY-MM-DD)
   const groupByDate = _.groupBy(allScans, (scan) => scan.timestamp.slice(0, 10));
