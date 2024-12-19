@@ -32,6 +32,10 @@ const listScansSema = new Sema(50, {
 // TODO: refactor this function to use a time series DB such as Timestream.
 export const handler = async (event: AppSyncResolverEvent<Arguments>) => {
   const { startDate, endDate } = event.arguments;
+  // end date is exclusive, we want to make it inclusive, so let's add one day to it
+  // end date is in 'YYYY-MM-DD' format, so this needs to stay the same format
+  const endDateInclusive = new Date(new Date(endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
   const identity = event.identity as AppSyncIdentityLambda;
   const tenantRepos = await listReposForTenant(identity.resolverContext.tenantId);
   
@@ -39,7 +43,7 @@ export const handler = async (event: AppSyncResolverEvent<Arguments>) => {
     await listScansSema.acquire();
 
     try {
-      return listScansForRepo(repo.repoId, startDate, endDate);
+      return listScansForRepo(repo.repoId, startDate, endDateInclusive);
     } catch (error) {
       logger.warn('Error listing scans for repo', { 
         repoId: repo.repoId,
