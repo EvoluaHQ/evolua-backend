@@ -24,11 +24,10 @@ export async function createSubscription(subscription: Subscription): Promise<vo
   }));
 }
 
-export async function updateSubscriptionLastUpdatedAt(
+export async function updateSubscriptionBillingInfo(
   subId: string, 
   subscriptionStatus: BillingStatus,
-  billingInterval: BillingInterval,
-  lastUpdatedAt: string
+  billingInterval: BillingInterval
 ): Promise<void> {
   await documentClient.send(new UpdateCommand({
     TableName: subscriptionsTableName(),
@@ -40,7 +39,7 @@ export async function updateSubscriptionLastUpdatedAt(
       '#status': 'status'
     },
     ExpressionAttributeValues: {
-      ':lastUpdatedAt': lastUpdatedAt,
+      ':lastUpdatedAt': new Date().toJSON(),
       ':status': subscriptionStatus,
       ':billingInterval': billingInterval
     }

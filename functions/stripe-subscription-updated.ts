@@ -3,7 +3,7 @@ import { EventBridgeEvent } from 'aws-lambda';
 import { Metadata, BillingStatus, BillingInterval } from './types';
 import Stripe from 'stripe';
 import { initClerk, updateOrganizationMaxMembers } from "./lib/clerk";
-import { getSubscription, updateSubscriptionLastUpdatedAt } from './lib/subscriptions';
+import { getSubscription, updateSubscriptionBillingInfo } from './lib/subscriptions';
 import { getOrganizationById } from './lib/organizations';
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
@@ -21,8 +21,6 @@ type Event = EventBridgeEvent<'customer.subscription.updated', EventEnvelope>;
 const logger = new Logger();
 
 const _handler = async (event: Event, context: any): Promise<void> => {
-  const now = new Date().toISOString();
-
   initClerk(context.CLERK_SECRET_KEY);
 
   const { data } = event.detail;
@@ -49,7 +47,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   }
 
   logger.info('Updating subscription');
-  await updateSubscriptionLastUpdatedAt(subId, subscriptionStatus, billingInterval, now);  
+  await updateSubscriptionBillingInfo(subId, subscriptionStatus, billingInterval);  
 };
 
 const { SSM_STAGE_NAME } = process.env;

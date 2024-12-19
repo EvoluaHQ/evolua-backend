@@ -121,3 +121,12 @@ export async function updateOrganizationMaxMembers(
     },
   });
 }
+
+export async function updateOrganizationMetadata(
+  organizationId: string,
+  metadata: OrgMetadata
+) {
+  await clerkClient.organizations.updateOrganization(organizationId, {
+    privateMetadata: metadata as any,
+  });
+}

@@ -90,6 +90,7 @@ export class DataStack extends cdk.Stack {
 
     this.createStripeSubscriptionCreatedHandlerFunction();
     this.createStripeSubscriptionUpdatedHandlerFunction();
+    this.createStripeSubscriptionPausedHandlerFunction();
     
     this.createResetScanCountsFunction();
 
@@ -740,6 +741,57 @@ export class DataStack extends cdk.Stack {
         detail: {
           metadata: {
             type: ["customer.subscription.updated"],
+          },
+        },
+      },
+    });
+    evbRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+    this.organizationsTable.grantReadWriteData(handler);
+    this.stripeSubscriptionsTable.grantReadWriteData(handler);
+    this.idempotencyTable.grantReadWriteData(handler);
+  }
+
+  private createStripeSubscriptionPausedHandlerFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "StripeSubscriptionPausedHandlerFunction",
+      {
+        serviceName: 'stripe-subscription-paused-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/stripe-subscription-paused.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+        environment: {
+          USERS_TABLE_NAME: this.usersTable.tableName,
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
+          SUBSCRIPTIONS_TABLE_NAME: this.stripeSubscriptionsTable.tableName,
+          IDEMPOTENCY_TABLE_NAME: this.idempotencyTable.tableName,
+        },
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/secret-key`
+        ],
+      })
+    );
+
+    const evbRule = new events.Rule(this, "StripeSubscriptionUpdatedRule", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["stripe"],
+        detail: {
+          metadata: {
+            type: [
+              "customer.subscription.paused",
+              "customer.subscription.deleted",
+            ],
           },
         },
       },
