@@ -91,6 +91,7 @@ export class DataStack extends cdk.Stack {
     this.createStripeSubscriptionCreatedHandlerFunction();
     this.createStripeSubscriptionUpdatedHandlerFunction();
     this.createStripeSubscriptionPausedHandlerFunction();
+    this.createStripeSubscriptionResumedHandlerFunction();
     
     this.createResetScanCountsFunction();
 
@@ -792,6 +793,54 @@ export class DataStack extends cdk.Stack {
               "customer.subscription.paused",
               "customer.subscription.deleted",
             ],
+          },
+        },
+      },
+    });
+    evbRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.usersTable.grantReadWriteData(handler);
+    this.organizationsTable.grantReadWriteData(handler);
+    this.stripeSubscriptionsTable.grantReadWriteData(handler);
+    this.idempotencyTable.grantReadWriteData(handler);
+  }
+
+  private createStripeSubscriptionResumedHandlerFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "StripeSubscriptionResumedHandlerFunction",
+      {
+        serviceName: 'stripe-subscription-resumed-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/stripe-subscription-resumed.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+        environment: {
+          USERS_TABLE_NAME: this.usersTable.tableName,
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
+          SUBSCRIPTIONS_TABLE_NAME: this.stripeSubscriptionsTable.tableName,
+          IDEMPOTENCY_TABLE_NAME: this.idempotencyTable.tableName,
+        },
+      }
+    );
+
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter*"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/evolua/${this.props.ssmStageName}/clerk/secret-key`
+        ],
+      })
+    );
+
+    const evbRule = new events.Rule(this, "StripeSubscriptionResumedRule", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["stripe"],
+        detail: {
+          metadata: {
+            type: ["customer.subscription.resumed"],
           },
         },
       },
