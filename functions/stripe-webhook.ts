@@ -32,7 +32,9 @@ const _handler = async (event: APIGatewayEvent, context: any): Promise<APIGatewa
   const payload = stripeEvent.data.object;
 
   const eventId = ulid();
-  const idempotencyKey = stripeEvent.request?.idempotency_key!;
+
+  // if frontend doesn't provide an idempotency key, use the event id
+  const idempotencyKey = stripeEvent.request?.idempotency_key || stripeEvent.id;
 
   await Events.publishEvent(eventId, 'stripe', eventType, payload, idempotencyKey);
   await Events.saveEvent(eventId, 'stripe', eventType, payload, idempotencyKey);
