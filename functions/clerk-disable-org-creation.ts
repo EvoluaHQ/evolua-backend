@@ -1,12 +1,12 @@
 import { EventBridgeEvent } from "aws-lambda";
-import { ClerkUserUpsertedEventDetail } from "./types/eventbridge";
+import { EventEnvelope, ClerkUserUpsertedEventDetail } from "./types";
 import { initClerk, disableOrgCreation } from "./lib/clerk";
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
 
 const { SSM_STAGE_NAME } = process.env;
 
-type Event = EventBridgeEvent<"user.created", ClerkUserUpsertedEventDetail>;
+type Event = EventBridgeEvent<"user.created", EventEnvelope<ClerkUserUpsertedEventDetail>>;
 
 const _handler = async (event: Event, context: any) => {
   const clerkUserId = event.detail.data.data.id;
@@ -14,10 +14,6 @@ const _handler = async (event: Event, context: any) => {
   initClerk(context.CLERK_SECRET_KEY);
 
   await disableOrgCreation(clerkUserId);
-
-  return {
-    statusCode: 200,
-  };
 };
 
 export const handler = middy(_handler)

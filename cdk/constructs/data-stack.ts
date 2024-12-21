@@ -87,6 +87,8 @@ export class DataStack extends cdk.Stack {
     this.createClerkUserUpsertedEventHandlerFunction();
     this.createClerkUserDeletedEventHandlerFunction();
     this.createClerkDisableOrgCreationFunction();
+    this.createClerkOrgChangedHandlerFunction();
+    this.createClerkOrgMembershipChangedHandlerFunction();
 
     this.createStripeSubscriptionCreatedHandlerFunction();
     this.createStripeSubscriptionUpdatedHandlerFunction();
@@ -590,6 +592,84 @@ export class DataStack extends cdk.Stack {
       },
     });
     clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+  }
+
+  private createClerkOrgChangedHandlerFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "ClerkOrgChangedHandlerFunction",
+      {
+        serviceName: 'clerk-org-changed-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/clerk-org-changed.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+        environment: {
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName
+        },
+      }
+    );
+
+    // no need to subscribe to organization.created events since we are going to
+    // create both the organization in our db as well as in Clerk when a stripe
+    // subscription is created
+    const clerkWebhookRule = new events.Rule(this, "ClerkOrgChanged", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["clerk"],
+        detail: {
+          metadata: {
+            type: [
+              "organization.deleted",
+              "organization.updated",
+            ],
+          },
+        },
+      },
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.organizationsTable.grantReadWriteData(handler);
+  }
+
+  private createClerkOrgMembershipChangedHandlerFunction() {
+    const handler = new TypescriptFunction(
+      this,
+      "ClerkOrgMembershipChangedHandlerFunction",
+      {
+        serviceName: 'clerk-org-membership-changed-handler',
+        stageName: this.props.stageName,
+        ssmStageName: this.props.ssmStageName,
+        entry: "functions/clerk-org-membership-changed.ts",
+        handler: "handler",
+        timeout: cdk.Duration.seconds(6),
+        environment: {
+          ORGANIZATIONS_TABLE_NAME: this.organizationsTable.tableName,
+          USERS_TABLE_NAME: this.usersTable.tableName,
+        },
+      }
+    );
+
+    const clerkWebhookRule = new events.Rule(this, "ClerkOrgMembershipChanged", {
+      eventBus: this.eventBus,
+      eventPattern: {
+        source: ["clerk"],
+        detail: {
+          metadata: {
+            type: [
+              "organizationMembership.created",
+              "organizationMembership.deleted",
+              "organizationMembership.updated",
+            ],
+          },
+        },
+      },
+    });
+    clerkWebhookRule.addTarget(new eventTargets.LambdaFunction(handler));
+
+    this.organizationsTable.grantReadWriteData(handler);
+    this.usersTable.grantReadData(handler);
   }
 
   private createClerkUserUpsertedEventHandlerFunction() {

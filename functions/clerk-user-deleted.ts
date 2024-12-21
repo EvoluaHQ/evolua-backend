@@ -1,19 +1,15 @@
-import { ClerkUserDeletedEventDetail } from './types/eventbridge';
-import { EventBridgeEvent } from 'aws-lambda';
-import * as Users from './lib/users';
+import { EventEnvelope, ClerkUserDeletedEventDetail } from "./types";
+import { EventBridgeEvent } from "aws-lambda";
+import { findUserByClerkUserId, deleteUser } from "./lib/users";
 
-type Event = EventBridgeEvent<'user.deleted', ClerkUserDeletedEventDetail>;
+type Event = EventBridgeEvent<"user.deleted", EventEnvelope<ClerkUserDeletedEventDetail>>;
 
 export const handler = async (event: Event) => {
   const clerkUserId = event.detail.data.data.id;
   
-  const user = await Users.findUserByClerkUserId(clerkUserId);
+  const user = await findUserByClerkUserId(clerkUserId);
 
   if (user) {
-    await Users.deleteUser(user.id);
+    await deleteUser(user.id);
   }
-
-  return {
-    statusCode: 200
-  };
 }

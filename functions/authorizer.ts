@@ -2,7 +2,7 @@ import { verify, TokenExpiredError, JwtPayload } from "jsonwebtoken";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { AppSyncAuthorizerEvent, AppSyncAuthorizerResult } from "aws-lambda";
 import { findUserByClerkUserId } from "./lib/users";
-import { findOrganizationByClerkOrgId } from "./lib/organizations";
+import { getOrganizationByClerkOrgId } from "./lib/organizations";
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
 
@@ -46,7 +46,7 @@ const _handler = async (event: AppSyncAuthorizerEvent, context: any): Promise<Re
 
     if (claims.org_id) {
       logger.debug('User is a member of an organization', { claims });
-      const org = await findOrganizationByClerkOrgId(claims.org_id);
+      const org = await getOrganizationByClerkOrgId(claims.org_id);
 
       if (!org) {
         logger.warn('Organization not found', { clerkOrgId: claims.org_id });
