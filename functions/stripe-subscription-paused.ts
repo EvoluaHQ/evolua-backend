@@ -28,6 +28,9 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   const { data } = event.detail;
   const subscriptionStatus = 'canceled' as BillingStatus;
   const billingInterval = data.items.data[0].plan.interval as BillingInterval;
+  const stripeCustomerId = typeof data.customer === 'string'
+    ? data.customer 
+    : data.customer.id;
 
   const subId = data.id;
   const subscription = await getSubscription(subId);
@@ -51,6 +54,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
     await updateOrganizationMetadata(org.clerkOrgId, {
       maxMembers: org.maxMembers,
       subscriptionId: subId,
+      stripeCustomerId,
       subscriptionStatus,
       billingInterval,
       lastUpdatedAt: new Date().toJSON(),

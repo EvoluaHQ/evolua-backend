@@ -172,7 +172,7 @@ export async function setUserTier(id: string, tier: "FREE" | "PRO", ) {
       Key: {
         id,
       },
-      UpdateExpression: "SET tier = :tier AND lastUpdatedAt = :lastUpdatedAt",
+      UpdateExpression: "SET tier = :tier, lastUpdatedAt = :lastUpdatedAt",
       ExpressionAttributeValues: {
         ":tier": tier,
         ":lastUpdatedAt": new Date().toISOString(),
