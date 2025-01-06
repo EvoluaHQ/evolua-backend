@@ -31,6 +31,9 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   const subscriptionId = data.id;
   const subscriptionStatus = 'active' as BillingStatus;
   const billingInterval = data.items.data[0].plan.interval as BillingInterval;
+  const stripeCustomerId = typeof data.customer === 'string'
+    ? data.customer 
+    : data.customer.id;
   const { type, clerkUserId, organizationId, organizationName } = data.metadata;
 
   if (!clerkUserId) {
@@ -87,6 +90,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
     const maxMembers = data.items.data[0].quantity || 1;
     const orgMetadata = {
       subscriptionId,
+      stripeCustomerId,
       subscriptionStatus,
       billingInterval,
       maxMembers,

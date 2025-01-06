@@ -22,6 +22,7 @@ export type UserMetadata = {
 interface OrgMetadata {
   maxMembers: number;
   subscriptionId: string;
+  stripeCustomerId: string;
   subscriptionStatus: BillingStatus;
   billingInterval: BillingInterval;
   lastUpdatedAt: string;
