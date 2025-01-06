@@ -152,6 +152,20 @@ export async function getTenantRepo(tenantId: string, tenantRepoId: string): Pro
   return queryResp.Items[0] as TenantRepo;
 }
 
+export async function getTenantRepoByRepoId(tenantId: string, repoId: string): Promise<TenantRepo | null> {
+  const tableName = tenantReposTableName();
+
+  const getResp = await documentClient.send(new GetCommand({
+    TableName: tableName,
+    Key: {
+      tenantId,
+      repoId
+    }
+  }));
+
+  return getResp.Item as TenantRepo;
+}
+
 export async function deleteTenantRepo(tenantId: string, repoId: string) {
   const tableName = tenantReposTableName();
 
