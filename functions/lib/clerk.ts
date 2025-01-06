@@ -16,6 +16,7 @@ export type UserMetadata = {
   githubAccessToken?: string
   githubRefreshToken?: string
   githubTokenExpiresAt?: number
+  subscriptionId?: string
 }
 
 interface OrgMetadata {
@@ -29,6 +30,12 @@ interface OrgMetadata {
 export const getUserMetadata = async (clerkUserId: string): Promise<UserMetadata> => {
   const clerkUser = await clerkClient.users.getUser(clerkUserId)
   return clerkUser.privateMetadata as UserMetadata
+}
+
+export const setUserMetadata = async (clerkUserId: string, metadata: any): Promise<void> => {
+  await clerkClient.users.updateUser(clerkUserId, {
+    privateMetadata: metadata
+  });
 }
 
 export async function disableOrgCreation(userId: string): Promise<void> {

@@ -2,7 +2,7 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { EventBridgeEvent } from 'aws-lambda';
 import { Metadata, BillingStatus, BillingInterval } from './types';
 import Stripe from 'stripe';
-import { initClerk, incrOrgCreationCount, createOrganization } from "./lib/clerk";
+import { initClerk, getUserMetadata, setUserMetadata, incrOrgCreationCount, createOrganization } from "./lib/clerk";
 import { findUserByClerkUserId, upsertUser } from './lib/users';
 import { addOrganization, Organization, OrganizationMember } from './lib/organizations';
 import { createSubscription } from './lib/subscriptions';
@@ -28,6 +28,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
   initClerk(context.CLERK_SECRET_KEY);
 
   const { data, metadata } = event.detail;
+  const subscriptionId = data.id;
   const subscriptionStatus = 'active' as BillingStatus;
   const billingInterval = data.items.data[0].plan.interval as BillingInterval;
   const { type, clerkUserId, organizationId, organizationName } = data.metadata;
@@ -57,10 +58,14 @@ const _handler = async (event: Event, context: any): Promise<void> => {
 
     await upsertUser(user);
 
+    const clerkMetadata = await getUserMetadata(clerkUserId);
+    clerkMetadata.subscriptionId = subscriptionId;
+    await setUserMetadata(clerkUserId, clerkMetadata);
+
     logger.info('Creating new subscription');
 
     await createSubscription({
-      subId: data.id,
+      subId: subscriptionId,
       type: 'personal',
       userId: user.id,
       status: subscriptionStatus,
@@ -81,7 +86,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
 
     const maxMembers = data.items.data[0].quantity || 1;
     const orgMetadata = {
-      subscriptionId: data.id,
+      subscriptionId,
       subscriptionStatus,
       billingInterval,
       maxMembers,
@@ -112,7 +117,7 @@ const _handler = async (event: Event, context: any): Promise<void> => {
     logger.info('Creating new subscription');
     
     await createSubscription({
-      subId: data.id,
+      subId: subscriptionId,
       type: 'organization',
       userId: user.id,
       orgId,
