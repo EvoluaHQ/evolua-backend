@@ -641,7 +641,7 @@ export async function createPaginatedPRReview(
       logger.info(
         `List of comments chunk ${index + 1}/${commentChunks.length}`,
         {
-          comments,
+          comments: commentChunk,
         }
       );
       throw error;
