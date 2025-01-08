@@ -1,27 +1,18 @@
 import { AppSyncResolverEvent, AppSyncIdentityLambda } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { getTenantRepo, deleteTenantRepo } from './lib/repos';
-
-const logger = new Logger();
+import { deleteTenantRepo } from './lib/repos';
 
 type Arguments = {
-  tenantRepoId: string
+  provider: 'github';
+  providerRepoId: string;
 }
 
 export const handler = async (event: AppSyncResolverEvent<Arguments>) => {
   const identity = event.identity as AppSyncIdentityLambda;
   const tenantId = identity.resolverContext.tenantId;
 
-  const tenantRepo = await getTenantRepo(tenantId, event.arguments.tenantRepoId);
-  if (!tenantRepo) {
-    logger.warn('Tenant repo not found', { 
-      tenantId, 
-      tenantRepoId: event.arguments.tenantRepoId
-    });
+  const { provider, providerRepoId } = event.arguments;
+  const repoId = `${provider}#${providerRepoId}`;
 
-    return true;
-  }
-
-  await deleteTenantRepo(tenantId, tenantRepo.repoId);
+  await deleteTenantRepo(tenantId, repoId);
   return true;
 }

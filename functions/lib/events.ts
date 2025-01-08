@@ -1,23 +1,16 @@
-import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { documentClient } from '../lib/dynamodb-helper';
+import { Metadata } from '../types/eventbridge';
 
-const dynamodbClient = new DynamoDB({});
-const dynamodb = DynamoDBDocumentClient.from(dynamodbClient);
 const ebClient = new EventBridgeClient({});
 
 interface EventDetail {
-  metadata: {
-    eventId: string;
-    version: string;
-    timestamp: string;
-    source: string;
-    type: string;
-  };
+  metadata: Metadata;
   data: any;
 }
 
-export const publishEvent = async (eventId: string, source: string, eventType: string, data: any): Promise<void> => {
+export const publishEvent = async (eventId: string, source: string, eventType: string, data: any, idempotencyKey?: string): Promise<void> => {
   const detail: EventDetail = {
     metadata: {
       eventId,
@@ -25,6 +18,7 @@ export const publishEvent = async (eventId: string, source: string, eventType: s
       timestamp: new Date().toISOString(),
       source,
       type: eventType,
+      idempotencyKey,
     },
     data
   };
@@ -42,15 +36,16 @@ export const publishEvent = async (eventId: string, source: string, eventType: s
   await ebClient.send(command);
 }
 
-export const saveEvent = async (eventId: string, source: string, eventType: string, data: any): Promise<void> => {
+export const saveEvent = async (eventId: string, source: string, eventType: string, data: any, idempotencyKey?: string): Promise<void> => {
   const command = new PutCommand({
     TableName: process.env.EVENTS_TABLE_NAME,
     Item: {
       eventId,
       source,
       eventType,
+      idempotencyKey,
       data
     }
   });
-  await dynamodb.send(command);
+  await documentClient.send(command);
 }

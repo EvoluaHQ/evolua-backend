@@ -17,7 +17,7 @@ const _handler = async (event: any, context: any) => {
     if (record.eventName === "INSERT" || record.eventName === "MODIFY") {
       const tenantRepo = unmarshall(record.dynamodb.NewImage)
       
-      tenantRepo.objectID = tenantRepo.repoId
+      tenantRepo.objectID = `${tenantRepo.tenantId}-${tenantRepo.repoId}`
 
       requests.push({
         action: "addObject",
@@ -25,11 +25,12 @@ const _handler = async (event: any, context: any) => {
       })
     } else if (record.eventName === "REMOVE") {
       const tenantRepo = unmarshall(record.dynamodb.OldImage)
+      const objectId = `${tenantRepo.tenantId}-${tenantRepo.repoId}`
 
       requests.push({
         action: "deleteObject",
         body: {
-          objectID: tenantRepo.repoId
+          objectID: objectId
         }
       })
     }

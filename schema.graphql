@@ -63,7 +63,8 @@ type Mutation {
   ): Boolean
 
   disconnectRepo(
-    tenantRepoId: String!
+    provider: GitProvider!
+    providerRepoId: String!
   ): Boolean
 }
 

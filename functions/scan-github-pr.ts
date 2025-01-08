@@ -22,6 +22,7 @@ import {
   AI_ANALYSIS_CONFIG,
   getPRClosedMessage,
   getScanLimitMessage,
+  getNoMatchingOrgMessage,
   getStartReviewMessage,
   getSubscriptionLimitMessage,
   getUnregisteredUserMessage,
@@ -40,9 +41,10 @@ import {
   processAIResponse,
   submitPRReview,
 } from "./lib/github-helper";
-import { updateLastReviewedAt } from "./lib/repos";
+import { updateLastReviewedAt, findTenantReposByRepoId } from "./lib/repos";
+import { findOrganizationMembershipsByClerkUserId, getOrganizationsByIds } from "./lib/organizations";
 import { PullRequest, saveScanResults } from "./lib/scans";
-import { findUserByGithubHandle, incrementScanCount } from "./lib/users";
+import { findUserByGithubHandle, incrementScanCount, User } from "./lib/users";
 import {
   AIResponse,
   EventEnvelope,
@@ -51,6 +53,7 @@ import {
   ScanCompletedEventDetail,
   ScanGitHubPrInput,
   ScanResult,
+  SubscriptionTierLimits
 } from "./types";
 import { MaxScansExceededError } from "./types/errors";
 
@@ -62,10 +65,7 @@ const metrics = new Metrics({
   namespace: "CodeReview",
 });
 
-type Event = EventBridgeEvent<
-  "scan_triggered",
-  EventEnvelope<ScanGitHubPrInput>
->;
+type Event = EventBridgeEvent<"scan_triggered", EventEnvelope<ScanGitHubPrInput>>;
 
 const _handler = async (event: Event, context: any) => {
   const input = event.detail.data;
@@ -89,14 +89,14 @@ const _handler = async (event: Event, context: any) => {
 
     logger.debug("Fetching PR details from GitHub");
 
-    const ghRepoData = await fetchPRDetails(
+    const ghPrData = await fetchPRDetails(
       input.repository.owner_login,
       input.repository.name,
       input.pull_request_number
     );
-    if (ghRepoData.state === "closed") {
+    if (ghPrData.state === "closed") {
       await commentOnPR(
-        ghRepoData.node_id,
+        ghPrData.node_id,
         getPRClosedMessage(input.sender_login)
       );
 
@@ -109,12 +109,12 @@ const _handler = async (event: Event, context: any) => {
     }
 
     const pullRequest = {
-      id: ghRepoData.id,
+      id: ghPrData.id,
       number: input.pull_request_number,
-      node_id: ghRepoData.node_id,
-      title: ghRepoData.title,
-      url: ghRepoData.url,
-      created_at: ghRepoData.created_at,
+      node_id: ghPrData.node_id,
+      title: ghPrData.title,
+      url: ghPrData.url,
+      created_at: ghPrData.created_at,
     };
 
     const username = input.sender_login;
@@ -130,24 +130,18 @@ const _handler = async (event: Event, context: any) => {
       return;
     }
 
-    const subscriptionLimits =
-      user.tier === "FREE" ? SUBSCRIPTION_TIERS.FREE : SUBSCRIPTION_TIERS.PRO;
+    const repoId = `github#${input.repository.id}`;
+    const shouldScanPR = await shouldWeScanPR(repoId, user);
 
-    try {
-      await incrementScanCount(user.id, subscriptionLimits.maxScans);
-    } catch (error) {
-      logger.error("Scan increment error", { error, username });
-
-      if (error instanceof MaxScansExceededError) {
-        // User reached their scan limit
-        await commentOnPR(pullRequest.node_id, getScanLimitMessage(username));
-
-        return;
-      } else {
-        logger.error("Unable to comment on PR", error as Error);
-        throw error;
-      }
+    if (shouldScanPR === 'MaxScansExceeded') {
+      await commentOnPR(pullRequest.node_id, getScanLimitMessage(username));
+      return;
+    } else if (shouldScanPR === 'NoMatchingOrg') {
+      await commentOnPR(pullRequest.node_id, getNoMatchingOrgMessage(username));
+      return;
     }
+    
+    const subscriptionLimits: SubscriptionTierLimits = shouldScanPR;
 
     const initCommentId = await commentOnPR(
       pullRequest.node_id,
@@ -236,7 +230,6 @@ const _handler = async (event: Event, context: any) => {
       duration,
     });
 
-    const repoId = `github#${input.repository.id}`;
     const pr: PullRequest = {
       id: pullRequest.id.toString(),
       number: pullRequest.number,
@@ -504,3 +497,85 @@ export const handler = middy(_handler).use(
     },
   })
 );
+
+type NoScanReason = 'NoMatchingOrg' | 'MaxScansExceeded';
+type ShouldScanPR = NoScanReason | SubscriptionTierLimits;
+
+async function shouldWeScanPR(repoId: string, user: User): Promise<ShouldScanPR> {
+  const tenantRepos = await findTenantReposByRepoId(repoId);
+  const tenantIds = tenantRepos.map(x => x.tenantId);
+
+  const shouldScanBasedOnOrg = await (async () => {
+    const organizationMemberships = await findOrganizationMembershipsByClerkUserId(user.clerkUserId);
+    const orgIds = organizationMemberships.map(x => x.orgId);
+    const matchingOrgIds = tenantIds.filter(x => orgIds.includes(x));
+    if (matchingOrgIds.length === 0) {
+      logger.info("User doesn't belong to any matching organization for this repo.", {
+        repoId,
+        repoOwnerIds: tenantIds,
+        userId: user.id,
+        userOrgIds: orgIds,
+      });
+      return false;
+    }
+
+    const matchingOrgs = await getOrganizationsByIds(matchingOrgIds);
+    const activeOrg = matchingOrgs.find(x => x.status === 'active');
+    if (!activeOrg) {
+      logger.info("None of the matching organizations for repo is active.", {
+        repoId,
+        repoOwnerIds: tenantIds,
+        userId: user.id,
+        userOrgIds: orgIds,
+      });
+      return false;
+    }
+
+    return true;
+  })();
+
+  const shouldScanBasedOnPersonal = (() => {
+    const matchingPersonal = tenantIds.includes(user.id);
+    if (!matchingPersonal) {
+      logger.info("User doesn't own the repo.", {
+        repoId,
+        repoOwnerIds: tenantIds,
+        userId: user.id,
+      });
+      return false;
+    }
+
+    return true;
+  })();
+
+  if (!shouldScanBasedOnOrg && !shouldScanBasedOnPersonal) {
+    return 'NoMatchingOrg';
+  } else if (shouldScanBasedOnOrg) {
+    return SUBSCRIPTION_TIERS.PRO;
+  } else {
+    const subscriptionLimits = user.tier === "FREE" 
+      ? SUBSCRIPTION_TIERS.FREE 
+      : SUBSCRIPTION_TIERS.PRO;
+  
+    try {
+      await incrementScanCount(user.id, subscriptionLimits.maxScans);
+    } catch (error) {
+      logger.warn("Scan increment error", { 
+        error, 
+        userId: user.id,
+      });
+  
+      if (error instanceof MaxScansExceededError) {
+        logger.info("Max scans exceeded", {
+          userId: user.id,
+          subscriptionTier: user.tier,
+          maxScans: subscriptionLimits.maxScans,
+        });
+
+        return 'MaxScansExceeded';
+      }
+    }
+  
+    return subscriptionLimits;
+  }
+}

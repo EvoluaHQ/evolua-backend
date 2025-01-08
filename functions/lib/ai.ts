@@ -352,6 +352,19 @@ We love helping you maintain high-quality code with security and best practices 
 Visit ${SITE_URL} to upgrade your account and keep the code reviews coming!`;
 
 /**
+ * Shown when user doesn't belong to a matching org for a repo
+ * @param username
+ * @returns
+ */
+export const getNoMatchingOrgMessage = (
+  username: string
+) => `### Hi @${username}! 👋
+
+Thanks for submitting your PR! I noticed you're not part of the organization that owns this repo.
+
+Please get in touch with the repo owner or maintainers and ask them to add you to their organization in Evolua (${SITE_URL})! 🚀`;
+
+/**
  * Shown when user doesn't have an account
  * @param username
  * @returns
