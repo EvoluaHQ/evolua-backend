@@ -538,6 +538,11 @@ export async function createPRReview(
     return response;
   } catch (error) {
     logger.error("Failed to create PR review", error as Error);
+
+    logger.info("List of comments", {
+      comments,
+    });
+
     throw error;
   }
 }
@@ -628,6 +633,15 @@ export async function createPaginatedPRReview(
         {
           error: error as Error,
           commentCount: commentChunk.length,
+        }
+      );
+
+      // TODO: Adding this only for debugging error: Pull request review thread start line must be part of the same hunk as the line.
+      // Remove asap
+      logger.info(
+        `List of comments chunk ${index + 1}/${commentChunks.length}`,
+        {
+          comments,
         }
       );
       throw error;
