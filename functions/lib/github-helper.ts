@@ -5,11 +5,13 @@ import { Octokit } from "@octokit/core";
  * Fetch all PR files with changes
  */
 import { Sema } from "async-sema";
+import { chunk } from "lodash";
 import {
   AddCommentResponse,
   AddPRReviewResponse,
   AIResponse,
   CodeIssue,
+  CreateReviewResponse,
   DraftPullRequestReviewThread,
   FetchPRFileContentResponse,
   FileChanges,
@@ -536,6 +538,138 @@ export async function createPRReview(
     return response;
   } catch (error) {
     logger.error("Failed to create PR review", error as Error);
+
+    logger.info("List of comments", {
+      comments,
+    });
+
+    throw error;
+  }
+}
+
+export async function createPaginatedPRReview(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  prId: string,
+  commitId: string,
+  comments: DraftPullRequestReviewThread[],
+  results: ScanResult[]
+): Promise<CreateReviewResponse[]> {
+  const CHUNK_SIZE = 50; // Adjust based on GitHub's limits
+  const MAX_CONCURRENT_REQUESTS = 10;
+
+  const mutation = `
+    mutation($input: AddPullRequestReviewInput!) {
+      addPullRequestReview(input: $input) {
+        pullRequestReview {
+          id
+          comments(first: 100) {
+            nodes {
+              id
+              body
+              path
+              line
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  // Create chunks of comments
+  const commentChunks = chunk(comments, CHUNK_SIZE);
+  logger.info(
+    `Split comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
+  );
+
+  // Initialize semaphore for concurrency control
+  const sema = new Sema(MAX_CONCURRENT_REQUESTS, {
+    capacity: commentChunks.length,
+    pauseFn: () =>
+      logger.info("Rate limit reached, pausing PR review creation..."),
+    resumeFn: () => logger.info("Resuming PR review creation..."),
+  });
+
+  // Prepare the summary only once
+  const summary = prepareReviewSummary(results);
+
+  // Process each chunk with semaphore control
+  const reviewPromises = commentChunks.map(async (commentChunk, index) => {
+    await sema.acquire();
+    try {
+      const chunkSummary =
+        index === 0
+          ? summary
+          : `Continued review part ${index + 1}/${commentChunks.length}`;
+
+      const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
+        input: {
+          pullRequestId: prId,
+          commitOID: commitId,
+          body: chunkSummary,
+          threads: commentChunk,
+          event: "COMMENT",
+        },
+      });
+
+      const reviewResponse: CreateReviewResponse = {
+        reviewId: response.addPullRequestReview.pullRequestReview.id,
+        commentsCount:
+          response.addPullRequestReview.pullRequestReview.comments.nodes.length,
+      };
+
+      logger.info(
+        `Created PR review chunk ${index + 1}/${commentChunks.length}`,
+        {
+          reviewResponse,
+        }
+      );
+
+      return reviewResponse;
+    } catch (error) {
+      logger.error(
+        `Failed to create PR review chunk ${index + 1}/${commentChunks.length}`,
+        {
+          error: error as Error,
+          commentCount: commentChunk.length,
+        }
+      );
+
+      // TODO: Adding this only for debugging error: Pull request review thread start line must be part of the same hunk as the line.
+      // Remove asap
+      logger.info(
+        `List of comments chunk ${index + 1}/${commentChunks.length}`,
+        {
+          comments,
+        }
+      );
+      throw error;
+    } finally {
+      sema.release();
+    }
+  });
+
+  try {
+    // Wait for all chunks to be processed
+    const results = await Promise.all(reviewPromises);
+
+    const totalComments = results.reduce(
+      (sum, result) => sum + result.commentsCount,
+      0
+    );
+
+    logger.info("Completed creating all PR reviews", {
+      totalChunks: commentChunks.length,
+      totalCommentsProcessed: totalComments,
+    });
+
+    return results;
+  } catch (error) {
+    logger.error(
+      "Failed to create one or more PR review chunks",
+      error as Error
+    );
     throw error;
   }
 }
@@ -726,7 +860,7 @@ export async function submitPRReview(
       throw new Error("Failed to get pull request information");
     });
 
-    await createPRReview(
+    await createPaginatedPRReview(
       owner,
       repo,
       prNumber,
