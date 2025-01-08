@@ -4,7 +4,7 @@ import { Octokit } from "@octokit/core";
 /**
  * Fetch all PR files with changes
  */
-import { Sema } from "async-sema";
+import { RateLimit, Sema } from "async-sema";
 import { chunk } from "lodash";
 import {
   AddCommentResponse,
@@ -557,7 +557,7 @@ export async function createPaginatedPRReview(
   results: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 50; // Adjust based on GitHub's limits
-  const MAX_CONCURRENT_REQUESTS = 3;
+  const REQUESTS_PER_SECOND = 0.5; // One request every 2 seconds (0.5 RPS)
 
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
@@ -583,20 +583,16 @@ export async function createPaginatedPRReview(
     `Split comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
   );
 
-  // Initialize semaphore for concurrency control
-  const sema = new Sema(MAX_CONCURRENT_REQUESTS, {
-    capacity: commentChunks.length,
-    pauseFn: () =>
-      logger.info("Rate limit reached, pausing PR review creation..."),
-    resumeFn: () => logger.info("Resuming PR review creation..."),
-  });
+  // Initialize rate limiter
+  const rateLimit = RateLimit(REQUESTS_PER_SECOND);
 
   // Prepare the summary only once
   const summary = prepareReviewSummary(results);
 
   // Process each chunk with semaphore control
   const reviewPromises = commentChunks.map(async (commentChunk, index) => {
-    await sema.acquire();
+    await rateLimit(); // Wait for rate limit
+
     try {
       const chunkSummary =
         index === 0
@@ -645,8 +641,6 @@ export async function createPaginatedPRReview(
         }
       );
       throw error;
-    } finally {
-      sema.release();
     }
   });
 
