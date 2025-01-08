@@ -557,7 +557,7 @@ export async function createPaginatedPRReview(
   results: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 50; // Adjust based on GitHub's limits
-  const MAX_CONCURRENT_REQUESTS = 10;
+  const MAX_CONCURRENT_REQUESTS = 3;
 
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
