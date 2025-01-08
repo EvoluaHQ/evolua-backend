@@ -846,7 +846,7 @@ export async function submitPRReview(
       throw new Error("Failed to get pull request information");
     });
 
-    await createPRReview(
+    await createPaginatedPRReview(
       owner,
       repo,
       prNumber,
