@@ -557,7 +557,7 @@ export async function createPaginatedPRReview(
   results: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 50; // Adjust based on GitHub's limits
-  const REQUESTS_PER_SECOND = 0.5; // One request every 2 seconds (0.5 RPS)
+  const REQUESTS_PER_SECOND = 1 / 3; // One request every 3 seconds (~0.333 RPS)
 
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
