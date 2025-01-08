@@ -536,6 +536,9 @@ export async function createPRReview(
     return response;
   } catch (error) {
     logger.error("Failed to create PR review", error as Error);
+    logger.info("List of comments", {
+      comments,
+    });
     throw error;
   }
 }
