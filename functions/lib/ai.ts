@@ -62,7 +62,7 @@ export const AI_ANALYSIS_CONFIG = {
   },
   // Concurrency and processing
   concurrency: {
-    limit: 5, // Maximum parallel processes
+    limit: 10, // Maximum parallel processes
     retryLimit: 3, // Maximum retry attempts
     retryDelay: 1000, // Base delay between retries (ms)
   },

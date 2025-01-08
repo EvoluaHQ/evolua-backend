@@ -397,7 +397,7 @@ export class DataStack extends cdk.Stack {
         ssmStageName: this.props.ssmStageName,
         entry: "functions/scan-github-pr.ts",
         handler: "handler",
-        timeout: cdk.Duration.minutes(5),
+        timeout: cdk.Duration.minutes(15),
         environment: {
           STAGE_NAME: this.props.stageName,
           SSM_STAGE_NAME: this.props.ssmStageName,
