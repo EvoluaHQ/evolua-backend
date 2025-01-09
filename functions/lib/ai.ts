@@ -6,7 +6,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
-import { PRFileChanges } from "../types";
+import { ExtendedFileChanges, PRFileChanges } from "../types";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -94,6 +94,9 @@ Analysis Areas:
 Guidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
+- Lines marked with ⊢ indicate the start of a change hunk, and ⊣ indicates the end of a hunk
+- When reporting multi-line issues, ensure start_line and end_line are within the same hunk (between ⊢ and ⊣ markers)
+- Do not create issues that span across different hunks - each issue must be contained within a single hunk
 - Provide actionable recommendations with code examples
 - Reference relevant standards (CWE, OWASP, Documentations)
 - Keep responses concise and structured. Only report concrete, evidence-based issues.
@@ -123,8 +126,8 @@ Always return findings in this exact JSON format within <findings> tags, ensurin
       "risk_level": "critical" | "high" | "medium" | "low",
       "title": string,          // Clear, specific issue title
       "location": { 
-        "line_start": number,   // Must use the exact line number from the prefix (e.g., 309)
-        "line_end": number      // Must use the exact line number from the prefix
+        "line_start": number,   // Must use the exact line number from the prefix (e.g., 309), must be within the same hunk
+        "line_end": number      // Must use the exact line number from the prefix, must be within the same hunk and >= line_start
       },
       "description": string,    // Clear explanation of the issue
       "impact": string,
@@ -237,9 +240,14 @@ export const sendMessage = async (
 ): Promise<string | undefined> => {
   // Get optimal token limit
   const tokenLimit = getTokenLimit(file.content);
-  const codeWithLines = prepareCodeWithLineNumbers(
+  // const codeWithLines = prepareCodeWithLineNumbers(
+  //   file.content.trim(),
+  //   file.changes.lineNumbers
+  // );
+
+  const codeWithLines = prepareCodeWithLineNumbersAndHunks(
     file.content.trim(),
-    file.changes.lineNumbers
+    file.changes
   );
 
   const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
@@ -315,6 +323,39 @@ function prepareCodeWithLineNumbers(
       const lineNumber = index + 1;
       const prefix = changedLines.includes(lineNumber) ? "→ " : "  ";
       return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`;
+    })
+    .join("\n");
+}
+
+function prepareCodeWithLineNumbersAndHunks(
+  content: string,
+  changes: ExtendedFileChanges
+): string {
+  const lines = content.split("\n");
+  return lines
+    .map((line, index) => {
+      const lineNumber = index + 1;
+
+      // Find which chunk this line belongs to, if any
+      const chunk = changes.chunks.find(
+        (chunk) => lineNumber >= chunk.hunkStart && lineNumber <= chunk.hunkEnd
+      );
+
+      // If line is in a chunk and is changed, mark it
+      const isChanged = chunk?.changedLines.includes(lineNumber);
+
+      // Add hunk boundary markers
+      const hunkMarker = chunk
+        ? lineNumber === chunk.hunkStart
+          ? "⊢" // start of hunk
+          : lineNumber === chunk.hunkEnd
+            ? "⊣" // end of hunk
+            : "┃" // middle of hunk
+        : " ";
+
+      const prefix = isChanged ? "→" : " ";
+
+      return `${lineNumber.toString().padStart(4, " ")}|${hunkMarker}${prefix}${line}`;
     })
     .join("\n");
 }
