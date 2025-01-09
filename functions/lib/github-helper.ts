@@ -1000,6 +1000,11 @@ export async function submitPRReviewTest(
       .filter(({ file }) => hasChanges(file))
       .flatMap(({ file, findings }) =>
         findings.issues
+          // First verify the line was actually changed
+          .filter((issue) =>
+            file.changes.lineNumbers.includes(issue.location.lineStart)
+          )
+          // Then check if start and end lines are in the same chunk
           .map((issue) => {
             const lineStart = issue.location?.lineStart ?? 0;
             const lineEnd = issue.location?.lineEnd ?? lineStart;
