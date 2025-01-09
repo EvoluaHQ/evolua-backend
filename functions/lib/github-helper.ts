@@ -499,7 +499,7 @@ export async function createPaginatedPRReview(
   scanResults: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 30;
-  const REQUESTS_PER_SECOND = 1 / 30; // 30s
+  const REQUESTS_PER_SECOND = 1 / 30;
   const MAX_RETRIES = 3;
 
   const mutation = `
@@ -534,9 +534,9 @@ export async function createPaginatedPRReview(
     return `Still reviewing your PR! 🔍 Processing part ${chunk} of ${total} (${percent}% done). This might take a few minutes since it's a big PR. I'm being careful to respect GitHub's rate limits to ensure all findings get posted properly.`;
   }
 
-  function getRetryMessage(delay: number): string {
+  function getRetryMessage(delay: number, error: Error): string {
     const minutes = Math.round(delay / 60000);
-    return `GitHub needs a short break 😅 I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it!`;
+    return `Encountered an issue while processing the review (${error.message}). I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before trying again. Don't worry, I'll get through all of it! 🚀`;
   }
 
   async function submitReviewWithRetry(
@@ -560,6 +560,10 @@ export async function createPaginatedPRReview(
         },
       });
 
+      if (!response?.addPullRequestReview) {
+        throw new Error("Received invalid response from GitHub API");
+      }
+
       const reviewResponse: CreateReviewResponse = {
         reviewId: response.addPullRequestReview.pullRequestReview.id,
         commentsCount:
@@ -576,17 +580,17 @@ export async function createPaginatedPRReview(
       results.push(reviewResponse);
     } catch (error) {
       const err = error as Error;
-      if (
-        err.message.includes("submitted too quickly") &&
-        retryCount < MAX_RETRIES
-      ) {
+
+      // Retry on any error if we haven't exceeded retry limit
+      if (retryCount < MAX_RETRIES) {
         const delay = Math.pow(2, retryCount) * 30000; // Exponential backoff: 30s, 60s, 120s
-        logger.warn(`Rate limited, retrying after ${delay / 1000}s`, {
+        logger.warn(`GitHub API error, retrying after ${delay / 1000}s`, {
+          error: err.message,
           chunkIndex: chunkIndex + 1,
           retryCount: retryCount + 1,
         });
 
-        // Wait a bit before trying to post the warning message (10s)
+        // Wait a bit before trying to post the warning message
         await new Promise((resolve) => setTimeout(resolve, 10000));
 
         try {
@@ -594,7 +598,7 @@ export async function createPaginatedPRReview(
             input: {
               pullRequestId: prId,
               commitOID: commitId,
-              body: getRetryMessage(delay),
+              body: getRetryMessage(delay, err),
               threads: [],
               event: "COMMENT",
             },
@@ -608,7 +612,13 @@ export async function createPaginatedPRReview(
         await new Promise((resolve) => setTimeout(resolve, delay));
         return submitReviewWithRetry(commentChunk, chunkIndex, retryCount + 1);
       }
-      throw error;
+
+      // If we've exhausted retries, throw the error
+      logger.error("Failed to submit review chunk after all retries", {
+        error: err,
+        chunkIndex: chunkIndex + 1,
+      });
+      throw err;
     }
   }
 
