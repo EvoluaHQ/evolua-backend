@@ -96,11 +96,11 @@ export interface AddCommentResponse {
 }
 
 interface FileChunk {
-  start: number;
-  end: number;
-  content: string;
-  header: string;
-  changedLines: number[];
+  start: number; // Starting line number
+  end: number; // Ending line number
+  content: string; // Changed content
+  header: string; // Chunk header from git diff
+  changedLines: number[]; // Add this to track changed lines per chunk
   hunkStart: number;
   hunkEnd: number;
 }
@@ -110,17 +110,6 @@ interface FileChunk {
  */
 export interface FileChanges {
   lineNumbers: number[];
-  chunks: Array<{
-    start: number; // Starting line number
-    end: number; // Ending line number
-    content: string; // Changed content
-    header: string; // Chunk header from git diff
-    changedLines: number[]; // Add this to track changed lines per chunk
-  }>;
-}
-
-export interface ExtendedFileChanges {
-  lineNumbers: number[];
   chunks: FileChunk[];
 }
 
@@ -129,7 +118,7 @@ export interface ExtendedFileChanges {
  */
 export interface PRFileChanges extends PRFile {
   content: string | null;
-  changes: ExtendedFileChanges; //FileChanges;
+  changes: FileChanges;
 }
 
 export interface GitHubFileResponse {

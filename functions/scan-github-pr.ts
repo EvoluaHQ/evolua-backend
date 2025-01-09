@@ -40,7 +40,6 @@ import {
   init,
   processAIResponse,
   submitPRReview,
-  submitPRReviewTest,
 } from "./lib/github-helper";
 import {
   findOrganizationMembershipsByClerkUserId,
@@ -216,7 +215,7 @@ const _handler = async (event: Event, context: any) => {
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReviewTest(owner, repo, pullNumber, results);
+      await submitPRReview(owner, repo, pullNumber, results);
     }
 
     // Calculate final metrics

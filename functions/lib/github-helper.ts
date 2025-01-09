@@ -13,7 +13,6 @@ import {
   CodeIssue,
   CreateReviewResponse,
   DraftPullRequestReviewThread,
-  ExtendedFileChanges,
   FetchPRFileContentResponse,
   FileChanges,
   FileChangeType,
@@ -57,110 +56,6 @@ export async function init(
 }
 
 /**
- * Parse patch information to get exact line changes
- * Example patch format:
- * @@ -1,4 +1,4 @@ (means: original starts line 1, 4 lines; new starts line 1, 4 lines)
- *  unchanged line
- * -removed line
- * +added line
- *  unchanged line
- */
-function parseFileChanges(patch?: string): FileChanges {
-  const changes = {
-    lineNumbers: [] as number[],
-    chunks: [] as Array<{
-      start: number;
-      end: number;
-      content: string;
-      header: string;
-      changedLines: number[];
-    }>,
-  };
-
-  if (!patch) return changes;
-
-  logger.info("Processing patch", { patch });
-
-  const lines = patch.split("\n");
-  let currentNewLine = 0;
-  let chunkStart = 0;
-  let chunkLines: string[] = [];
-  let chunkHeader = "";
-  let chunkChangedLines: number[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Parse chunk header
-    if (line.startsWith("@@")) {
-      // Save previous chunk if exists
-      if (chunkLines.length > 0) {
-        changes.chunks.push({
-          start: chunkStart,
-          end: currentNewLine,
-          content: chunkLines.join("\n"),
-          header: chunkHeader,
-          changedLines: [...chunkChangedLines],
-        });
-        chunkLines = [];
-        chunkChangedLines = [];
-      }
-
-      const match = line.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/);
-      if (match) {
-        currentNewLine = parseInt(match[2], 10);
-        chunkStart = currentNewLine;
-        chunkHeader = line;
-      }
-      continue;
-    }
-
-    if (line.startsWith("+")) {
-      // Added or modified line
-      chunkChangedLines.push(currentNewLine);
-      if (!changes.lineNumbers.includes(currentNewLine)) {
-        changes.lineNumbers.push(currentNewLine);
-      }
-      chunkLines.push(line.slice(1));
-      currentNewLine++;
-    } else if (line.startsWith("-")) {
-      // Removed line
-      chunkLines.push(line.slice(1));
-    } else if (line.startsWith(" ")) {
-      // Context line
-      chunkLines.push(line.slice(1));
-      currentNewLine++;
-    }
-  }
-
-  // Add the last chunk
-  if (chunkLines.length > 0) {
-    changes.chunks.push({
-      start: chunkStart,
-      end: currentNewLine,
-      content: chunkLines.join("\n"),
-      header: chunkHeader,
-      changedLines: [...chunkChangedLines],
-    });
-  }
-
-  changes.lineNumbers.sort((a, b) => a - b);
-
-  logger.info("Parsed file changes", {
-    totalChangedLines: changes.lineNumbers.length,
-    changedLines: changes.lineNumbers,
-    chunks: changes.chunks.map((chunk) => ({
-      header: chunk.header,
-      start: chunk.start,
-      end: chunk.end,
-      changedLines: chunk.changedLines,
-    })),
-  });
-
-  return changes;
-}
-
-/**
  * Parse patch information to get exact line changes and hunk boundaries
  * Example patch format:
  * @@ -1,4 +1,4 @@ (means: original starts line 1, 4 lines; new starts line 1, 4 lines)
@@ -169,8 +64,8 @@ function parseFileChanges(patch?: string): FileChanges {
  * +added line
  *  unchanged line
  */
-function parseFileChangesTest(patch?: string): ExtendedFileChanges {
-  const changes: ExtendedFileChanges = {
+function parseFileChanges(patch?: string): FileChanges {
+  const changes: FileChanges = {
     lineNumbers: [],
     chunks: [],
   };
@@ -292,7 +187,7 @@ export async function processPRFile(
   file: GitHubFileResponse,
   sha: string
 ): Promise<PRFileChanges> {
-  const changes = parseFileChangesTest(file.patch);
+  const changes = parseFileChanges(file.patch);
 
   logger.info("File changes processed", {
     file: file.filename,
@@ -659,127 +554,6 @@ export async function createPRReview(
   }
 }
 
-export async function createPaginatedPRReview1(
-  owner: string,
-  repo: string,
-  prNumber: number,
-  prId: string,
-  commitId: string,
-  comments: DraftPullRequestReviewThread[],
-  results: ScanResult[]
-): Promise<CreateReviewResponse[]> {
-  const CHUNK_SIZE = 50; // Adjust based on GitHub's limits
-  const REQUESTS_PER_SECOND = 1 / 3; // One request every 3 seconds (~0.333 RPS)
-
-  const mutation = `
-    mutation($input: AddPullRequestReviewInput!) {
-      addPullRequestReview(input: $input) {
-        pullRequestReview {
-          id
-          comments(first: 100) {
-            nodes {
-              id
-              body
-              path
-              line
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  // Create chunks of comments
-  const commentChunks = chunk(comments, CHUNK_SIZE);
-  logger.info(
-    `Split comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
-  );
-
-  // Initialize rate limiter
-  const rateLimit = RateLimit(REQUESTS_PER_SECOND);
-
-  // Prepare the summary only once
-  const summary = prepareReviewSummary(results);
-
-  // Process each chunk with semaphore control
-  const reviewPromises = commentChunks.map(async (commentChunk, index) => {
-    await rateLimit(); // Wait for rate limit
-
-    try {
-      const chunkSummary =
-        index === 0
-          ? summary
-          : `Continued review part ${index + 1}/${commentChunks.length}`;
-
-      const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
-        input: {
-          pullRequestId: prId,
-          commitOID: commitId,
-          body: chunkSummary,
-          threads: commentChunk,
-          event: "COMMENT",
-        },
-      });
-
-      const reviewResponse: CreateReviewResponse = {
-        reviewId: response.addPullRequestReview.pullRequestReview.id,
-        commentsCount:
-          response.addPullRequestReview.pullRequestReview.comments.nodes.length,
-      };
-
-      logger.info(
-        `Created PR review chunk ${index + 1}/${commentChunks.length}`,
-        {
-          reviewResponse,
-        }
-      );
-
-      return reviewResponse;
-    } catch (error) {
-      logger.error(
-        `Failed to create PR review chunk ${index + 1}/${commentChunks.length}`,
-        {
-          error: error as Error,
-          commentCount: commentChunk.length,
-        }
-      );
-
-      // TODO: Adding this only for debugging error: Pull request review thread start line must be part of the same hunk as the line.
-      // Remove asap
-      logger.info(
-        `List of comments chunk ${index + 1}/${commentChunks.length}`,
-        {
-          comments: commentChunk,
-        }
-      );
-      throw error;
-    }
-  });
-
-  try {
-    // Wait for all chunks to be processed
-    const results = await Promise.all(reviewPromises);
-
-    const totalComments = results.reduce(
-      (sum, result) => sum + result.commentsCount,
-      0
-    );
-
-    logger.info("Completed creating all PR reviews", {
-      totalChunks: commentChunks.length,
-      totalCommentsProcessed: totalComments,
-    });
-
-    return results;
-  } catch (error) {
-    logger.error(
-      "Failed to create one or more PR review chunks",
-      error as Error
-    );
-    throw error;
-  }
-}
-
 export async function createPaginatedPRReview(
   owner: string,
   repo: string,
@@ -877,8 +651,8 @@ export async function createPaginatedPRReview(
           retryCount: retryCount + 1,
         });
 
-        // Wait a bit before trying to post the warning message
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        // Wait a bit before trying to post the warning message (10s)
+        await new Promise((resolve) => setTimeout(resolve, 10000));
 
         try {
           await octokit.graphql(mutation, {
@@ -1036,97 +810,6 @@ async function getPullRequestInfo(
  * Submit a complete review for multiple files
  */
 export async function submitPRReview(
-  owner: string,
-  repo: string,
-  prNumber: number,
-  results: ScanResult[]
-) {
-  try {
-    // Use flatMap to transform and flatten in one operation
-    const comments: DraftPullRequestReviewThread[] = results
-      .filter(({ file }) => hasChanges(file))
-      .flatMap(({ file, findings }) =>
-        findings.issues
-          .filter((issue) =>
-            file.changes.lineNumbers.includes(issue.location.lineStart)
-          )
-          .map((issue) => {
-            const lineStart = issue.location?.lineStart ?? 0;
-            const lineEnd = issue.location?.lineEnd ?? lineStart;
-            const isSameLine = lineStart === lineEnd;
-            const comment = {
-              path: file.path,
-              body: formatIssueComment(issue, file.path),
-            };
-
-            return isSameLine
-              ? {
-                  ...comment,
-                  line: lineStart,
-                }
-              : {
-                  ...comment,
-                  startLine: lineStart,
-                  line: lineEnd,
-                };
-          })
-          .filter(
-            (comment): comment is DraftPullRequestReviewThread =>
-              comment !== null &&
-              !!comment.path &&
-              !!comment.line &&
-              !!comment.body
-          )
-      );
-
-    if (comments.length === 0) {
-      logger.info("No valid issues found in changed lines");
-      return;
-    }
-
-    logger.info("Prepared PR review comments", {
-      totalComments: comments.length,
-      commentsByFile: comments.reduce(
-        (acc, comment) => {
-          acc[comment.path] = (acc[comment.path] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
-    });
-
-    const { id: prId, sha: commitId } = await getPullRequestInfo(
-      owner,
-      repo,
-      prNumber
-    ).catch((error) => {
-      logger.error("Failed to get PR info", { error, owner, repo, prNumber });
-      throw new Error("Failed to get pull request information");
-    });
-
-    await createPaginatedPRReview(
-      owner,
-      repo,
-      prNumber,
-      prId,
-      commitId,
-      comments,
-      results
-    );
-
-    logger.info("Successfully submitted PR review", {
-      totalComments: comments.length,
-    });
-  } catch (error) {
-    logger.error("Failed to submit PR review", error as Error);
-    throw error;
-  }
-}
-
-/**
- * Submit a complete review for multiple files
- */
-export async function submitPRReviewTest(
   owner: string,
   repo: string,
   prNumber: number,
