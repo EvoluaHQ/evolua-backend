@@ -659,7 +659,7 @@ export async function createPRReview(
   }
 }
 
-export async function createPaginatedPRReview(
+export async function createPaginatedPRReview1(
   owner: string,
   repo: string,
   prNumber: number,
@@ -778,6 +778,102 @@ export async function createPaginatedPRReview(
     );
     throw error;
   }
+}
+
+export async function createPaginatedPRReview(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  prId: string,
+  commitId: string,
+  comments: DraftPullRequestReviewThread[],
+  results: ScanResult[]
+): Promise<CreateReviewResponse[]> {
+  const CHUNK_SIZE = 30; // Reduced from 50 to avoid overwhelming GitHub
+  const REQUESTS_PER_SECOND = 1 / 15; // One request every 15 seconds
+
+  const mutation = `
+    mutation($input: AddPullRequestReviewInput!) {
+      addPullRequestReview(input: $input) {
+        pullRequestReview {
+          id
+          comments(first: 100) {
+            nodes {
+              id
+              body
+              path
+              line
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const commentChunks = chunk(comments, CHUNK_SIZE);
+  logger.info(
+    `Split comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
+  );
+
+  const rateLimit = RateLimit(REQUESTS_PER_SECOND);
+  const summary = prepareReviewSummary(results);
+
+  // Process chunks sequentially instead of in parallel
+  const chunkResults: CreateReviewResponse[] = [];
+
+  for (let i = 0; i < commentChunks.length; i++) {
+    const commentChunk = commentChunks[i];
+    await rateLimit();
+
+    try {
+      const chunkSummary =
+        i === 0
+          ? summary
+          : `Continued review part ${i + 1}/${commentChunks.length}`;
+
+      const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
+        input: {
+          pullRequestId: prId,
+          commitOID: commitId,
+          body: chunkSummary,
+          threads: commentChunk,
+          event: "COMMENT",
+        },
+      });
+
+      const reviewResponse: CreateReviewResponse = {
+        reviewId: response.addPullRequestReview.pullRequestReview.id,
+        commentsCount:
+          response.addPullRequestReview.pullRequestReview.comments.nodes.length,
+      };
+
+      logger.info(`Created PR review chunk ${i + 1}/${commentChunks.length}`, {
+        reviewResponse,
+      });
+
+      chunkResults.push(reviewResponse);
+    } catch (error) {
+      logger.error(
+        `Failed to create PR review chunk ${i + 1}/${commentChunks.length}`,
+        {
+          error: error as Error,
+          commentCount: commentChunk.length,
+        }
+      );
+      throw error;
+    }
+  }
+
+  const totalComments = chunkResults.reduce(
+    (sum, result) => sum + result.commentsCount,
+    0
+  );
+  logger.info("Completed creating all PR reviews", {
+    totalChunks: commentChunks.length,
+    totalCommentsProcessed: totalComments,
+  });
+
+  return chunkResults;
 }
 
 /**
