@@ -776,22 +776,17 @@ export async function submitPRReview(
             const lineStart = issue.location?.lineStart ?? 0;
             const lineEnd = issue.location?.lineEnd ?? lineStart;
 
-            // Additional validation
-            if (lineStart === 0) {
-              logger.info("Skipping comment - invalid line start", {
-                path: file.path,
-                issue: issue.title,
-              });
-              return null;
-            }
-
-            // Ensure line end is not less than line start
-            if (lineEnd < lineStart) {
-              logger.info("Skipping comment - line end before line start", {
+            // Validate line numbers
+            if (lineStart === 0 || lineEnd < lineStart) {
+              logger.info("Skipping comment - invalid line numbers", {
                 path: file.path,
                 lineStart,
                 lineEnd,
                 issue: issue.title,
+                reason:
+                  lineStart === 0
+                    ? "invalid line start"
+                    : "line end before line start",
               });
               return null;
             }
