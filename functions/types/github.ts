@@ -95,6 +95,16 @@ export interface AddCommentResponse {
   };
 }
 
+interface FileChunk {
+  start: number;
+  end: number;
+  content: string;
+  header: string;
+  changedLines: number[];
+  hunkStart: number;
+  hunkEnd: number;
+}
+
 /**
  * Interface for changed lines information
  */
@@ -109,12 +119,17 @@ export interface FileChanges {
   }>;
 }
 
+export interface ExtendedFileChanges {
+  lineNumbers: number[];
+  chunks: FileChunk[];
+}
+
 /**
  * Extended PR file interface with change tracking
  */
 export interface PRFileChanges extends PRFile {
   content: string | null;
-  changes: FileChanges;
+  changes: ExtendedFileChanges; //FileChanges;
 }
 
 export interface GitHubFileResponse {
@@ -175,7 +190,7 @@ export interface ScanGitHubPrInput {
   reason: string;
   installation_id: number;
   sender_login: string; // the event sender: the PR creator or commenter
-  pull_request_number: number,
+  pull_request_number: number;
   pull_request?: {
     id: number;
     node_id: string;
@@ -183,17 +198,17 @@ export interface ScanGitHubPrInput {
     title: string;
     url: string;
     created_at: string;
-  },
+  };
   repository: {
     id: number;
     name: string;
     full_name: string;
     owner_login: string;
-  }
+  };
 }
 
 export interface ReposChangedInput {
-  action: 'added' | 'removed';
+  action: "added" | "removed";
   sender_login: string;
   repositories: {
     id: number;

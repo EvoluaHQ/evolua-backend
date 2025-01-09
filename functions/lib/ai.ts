@@ -6,7 +6,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
-import { PRFileChanges } from "../types";
+import { ExtendedFileChanges, PRFileChanges } from "../types";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -141,6 +141,66 @@ Always return findings in this exact JSON format within <findings> tags, ensurin
   ]
 }`;
 
+export const SCAN_SYSTEM_PROMPT_TEST = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices. 
+
+Analysis Areas:
+1. Security: Identify vulnerabilities, data exposure, and unsafe operations
+2. Code Quality: Evaluate performance, maintainability, and error handling
+3. Best Practices: Assess adherence to design patterns and coding standards
+
+Guidelines:
+- Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
+- Use exact line numbers from the prefix
+- Lines marked with ⊢ indicate the start of a change hunk, and ⊣ indicates the end of a hunk
+- When reporting multi-line issues, ensure start_line and end_line are within the same hunk (between ⊢ and ⊣ markers)
+- Do not create issues that span across different hunks - each issue must be contained within a single hunk
+- Provide actionable recommendations with code examples
+- Reference relevant standards (CWE, OWASP, Documentations)
+- Keep responses concise and structured. Only report concrete, evidence-based issues.
+- Never include opinions, style preferences, or speculative issues.
+- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.
+- Assign risk levels based on severity:
+  * Critical: Direct security risks (RCE, credentials exposure, etc)
+  * High: Significant vulnerabilities (XSS, unsafe operations, etc)
+  * Medium: Important quality issues (performance, validation, error handling, etc)
+  * Low: Minor improvements (style, documentation, optimizations)
+
+Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
+{
+  "summary": {
+    "total_issues": number,   // Count of all identified issues
+    "risk_levels": {
+      "critical": number,     // Count per severity
+      "high": number,
+      "medium": number,
+      "low": number
+    }
+  },
+  "issues": [
+    {
+      "id": string,             // e.g., "VULN-001", "SEC-001", "QUAL-002"
+      "type": "vulnerability" | "code_quality" | "best_practice",
+      "risk_level": "critical" | "high" | "medium" | "low",
+      "title": string,          // Clear, specific issue title
+      "location": { 
+        "line_start": number,   // Must use the exact line number from the prefix (e.g., 309), must be within the same hunk
+        "line_end": number      // Must use the exact line number from the prefix, must be within the same hunk and >= line_start
+      },
+      "description": string,    // Clear explanation of the issue
+      "impact": string,
+      "recommendation": {
+        "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
+        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Use proper JSON string escaping (\\n for newlines, \\" for quotes, \\\\ for backslashes, \\b, \\f, \\r, \\t for control characters). DO NOT use triple quotes.
+      },
+      "cwe_id": string | null,        // e.g., "CWE-287".
+      "reference": {
+        "name": string | null,    // Reference to help users understand the issue (e.g., "OWASP", "CERT", "ISO-27001", "ESLint")
+        "url": string | null      // Official documentation links, etc
+      }
+    }
+  ]
+}`;
+
 const useBedrock = async (
   modelId: string,
   userPrompt: string,
@@ -151,7 +211,7 @@ const useBedrock = async (
   const resp = await bedrockClient.send(
     new ConverseCommand({
       modelId: modelId,
-      system: [{ text: SCAN_SYSTEM_PROMPT }],
+      system: [{ text: SCAN_SYSTEM_PROMPT_TEST }],
       messages: [
         {
           role: "user",
@@ -237,9 +297,14 @@ export const sendMessage = async (
 ): Promise<string | undefined> => {
   // Get optimal token limit
   const tokenLimit = getTokenLimit(file.content);
-  const codeWithLines = prepareCodeWithLineNumbers(
+  // const codeWithLines = prepareCodeWithLineNumbers(
+  //   file.content.trim(),
+  //   file.changes.lineNumbers
+  // );
+
+  const codeWithLines = prepareCodeWithLineNumbersAndHunks(
     file.content.trim(),
-    file.changes.lineNumbers
+    file.changes
   );
 
   const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
@@ -315,6 +380,39 @@ function prepareCodeWithLineNumbers(
       const lineNumber = index + 1;
       const prefix = changedLines.includes(lineNumber) ? "→ " : "  ";
       return `${lineNumber.toString().padStart(4, " ")}|${prefix}${line}`;
+    })
+    .join("\n");
+}
+
+function prepareCodeWithLineNumbersAndHunks(
+  content: string,
+  changes: ExtendedFileChanges
+): string {
+  const lines = content.split("\n");
+  return lines
+    .map((line, index) => {
+      const lineNumber = index + 1;
+
+      // Find which chunk this line belongs to, if any
+      const chunk = changes.chunks.find(
+        (chunk) => lineNumber >= chunk.hunkStart && lineNumber <= chunk.hunkEnd
+      );
+
+      // If line is in a chunk and is changed, mark it
+      const isChanged = chunk?.changedLines.includes(lineNumber);
+
+      // Add hunk boundary markers
+      const hunkMarker = chunk
+        ? lineNumber === chunk.hunkStart
+          ? "⊢" // start of hunk
+          : lineNumber === chunk.hunkEnd
+            ? "⊣" // end of hunk
+            : "┃" // middle of hunk
+        : " ";
+
+      const prefix = isChanged ? "→" : " ";
+
+      return `${lineNumber.toString().padStart(4, " ")}|${hunkMarker}${prefix}${line}`;
     })
     .join("\n");
 }

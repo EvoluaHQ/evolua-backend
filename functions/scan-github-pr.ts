@@ -20,9 +20,9 @@ import { EventBridgeEvent } from "aws-lambda";
 import { ulid } from "ulid";
 import {
   AI_ANALYSIS_CONFIG,
+  getNoMatchingOrgMessage,
   getPRClosedMessage,
   getScanLimitMessage,
-  getNoMatchingOrgMessage,
   getStartReviewMessage,
   getSubscriptionLimitMessage,
   getUnregisteredUserMessage,
@@ -40,9 +40,13 @@ import {
   init,
   processAIResponse,
   submitPRReview,
+  submitPRReviewTest,
 } from "./lib/github-helper";
-import { updateLastReviewedAt, findTenantReposByRepoId } from "./lib/repos";
-import { findOrganizationMembershipsByClerkUserId, getOrganizationsByIds } from "./lib/organizations";
+import {
+  findOrganizationMembershipsByClerkUserId,
+  getOrganizationsByIds,
+} from "./lib/organizations";
+import { findTenantReposByRepoId, updateLastReviewedAt } from "./lib/repos";
 import { PullRequest, saveScanResults } from "./lib/scans";
 import { findUserByGithubHandle, incrementScanCount, User } from "./lib/users";
 import {
@@ -53,7 +57,7 @@ import {
   ScanCompletedEventDetail,
   ScanGitHubPrInput,
   ScanResult,
-  SubscriptionTierLimits
+  SubscriptionTierLimits,
 } from "./types";
 import { MaxScansExceededError } from "./types/errors";
 
@@ -65,7 +69,10 @@ const metrics = new Metrics({
   namespace: "CodeReview",
 });
 
-type Event = EventBridgeEvent<"scan_triggered", EventEnvelope<ScanGitHubPrInput>>;
+type Event = EventBridgeEvent<
+  "scan_triggered",
+  EventEnvelope<ScanGitHubPrInput>
+>;
 
 const _handler = async (event: Event, context: any) => {
   const input = event.detail.data;
@@ -133,14 +140,14 @@ const _handler = async (event: Event, context: any) => {
     const repoId = `github#${input.repository.id}`;
     const shouldScanPR = await shouldWeScanPR(repoId, user);
 
-    if (shouldScanPR === 'MaxScansExceeded') {
+    if (shouldScanPR === "MaxScansExceeded") {
       await commentOnPR(pullRequest.node_id, getScanLimitMessage(username));
       return;
-    } else if (shouldScanPR === 'NoMatchingOrg') {
+    } else if (shouldScanPR === "NoMatchingOrg") {
       await commentOnPR(pullRequest.node_id, getNoMatchingOrgMessage(username));
       return;
     }
-    
+
     const subscriptionLimits: SubscriptionTierLimits = shouldScanPR;
 
     const initCommentId = await commentOnPR(
@@ -209,7 +216,7 @@ const _handler = async (event: Event, context: any) => {
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReview(owner, repo, pullNumber, results);
+      await submitPRReviewTest(owner, repo, pullNumber, results);
     }
 
     // Calculate final metrics
@@ -498,29 +505,36 @@ export const handler = middy(_handler).use(
   })
 );
 
-type NoScanReason = 'NoMatchingOrg' | 'MaxScansExceeded';
+type NoScanReason = "NoMatchingOrg" | "MaxScansExceeded";
 type ShouldScanPR = NoScanReason | SubscriptionTierLimits;
 
-async function shouldWeScanPR(repoId: string, user: User): Promise<ShouldScanPR> {
+async function shouldWeScanPR(
+  repoId: string,
+  user: User
+): Promise<ShouldScanPR> {
   const tenantRepos = await findTenantReposByRepoId(repoId);
-  const tenantIds = tenantRepos.map(x => x.tenantId);
+  const tenantIds = tenantRepos.map((x) => x.tenantId);
 
   const shouldScanBasedOnOrg = await (async () => {
-    const organizationMemberships = await findOrganizationMembershipsByClerkUserId(user.clerkUserId);
-    const orgIds = organizationMemberships.map(x => x.orgId);
-    const matchingOrgIds = tenantIds.filter(x => orgIds.includes(x));
+    const organizationMemberships =
+      await findOrganizationMembershipsByClerkUserId(user.clerkUserId);
+    const orgIds = organizationMemberships.map((x) => x.orgId);
+    const matchingOrgIds = tenantIds.filter((x) => orgIds.includes(x));
     if (matchingOrgIds.length === 0) {
-      logger.info("User doesn't belong to any matching organization for this repo.", {
-        repoId,
-        repoOwnerIds: tenantIds,
-        userId: user.id,
-        userOrgIds: orgIds,
-      });
+      logger.info(
+        "User doesn't belong to any matching organization for this repo.",
+        {
+          repoId,
+          repoOwnerIds: tenantIds,
+          userId: user.id,
+          userOrgIds: orgIds,
+        }
+      );
       return false;
     }
 
     const matchingOrgs = await getOrganizationsByIds(matchingOrgIds);
-    const activeOrg = matchingOrgs.find(x => x.status === 'active');
+    const activeOrg = matchingOrgs.find((x) => x.status === "active");
     if (!activeOrg) {
       logger.info("None of the matching organizations for repo is active.", {
         repoId,
@@ -549,22 +563,21 @@ async function shouldWeScanPR(repoId: string, user: User): Promise<ShouldScanPR>
   })();
 
   if (!shouldScanBasedOnOrg && !shouldScanBasedOnPersonal) {
-    return 'NoMatchingOrg';
+    return "NoMatchingOrg";
   } else if (shouldScanBasedOnOrg) {
     return SUBSCRIPTION_TIERS.PRO;
   } else {
-    const subscriptionLimits = user.tier === "FREE" 
-      ? SUBSCRIPTION_TIERS.FREE 
-      : SUBSCRIPTION_TIERS.PRO;
-  
+    const subscriptionLimits =
+      user.tier === "FREE" ? SUBSCRIPTION_TIERS.FREE : SUBSCRIPTION_TIERS.PRO;
+
     try {
       await incrementScanCount(user.id, subscriptionLimits.maxScans);
     } catch (error) {
-      logger.warn("Scan increment error", { 
-        error, 
+      logger.warn("Scan increment error", {
+        error,
         userId: user.id,
       });
-  
+
       if (error instanceof MaxScansExceededError) {
         logger.info("Max scans exceeded", {
           userId: user.id,
@@ -572,10 +585,10 @@ async function shouldWeScanPR(repoId: string, user: User): Promise<ShouldScanPR>
           maxScans: subscriptionLimits.maxScans,
         });
 
-        return 'MaxScansExceeded';
+        return "MaxScansExceeded";
       }
     }
-  
+
     return subscriptionLimits;
   }
 }

@@ -13,6 +13,7 @@ import {
   CodeIssue,
   CreateReviewResponse,
   DraftPullRequestReviewThread,
+  ExtendedFileChanges,
   FetchPRFileContentResponse,
   FileChanges,
   FileChangeType,
@@ -159,6 +160,117 @@ function parseFileChanges(patch?: string): FileChanges {
   return changes;
 }
 
+/**
+ * Parse patch information to get exact line changes and hunk boundaries
+ * Example patch format:
+ * @@ -1,4 +1,4 @@ (means: original starts line 1, 4 lines; new starts line 1, 4 lines)
+ *  unchanged line
+ * -removed line
+ * +added line
+ *  unchanged line
+ */
+function parseFileChangesTest(patch?: string): ExtendedFileChanges {
+  const changes: ExtendedFileChanges = {
+    lineNumbers: [],
+    chunks: [],
+  };
+
+  if (!patch) return changes;
+
+  logger.info("Processing patch", { patch });
+
+  const lines = patch.split("\n");
+  let currentNewLine = 0;
+  let chunkStart = 0;
+  let hunkStart = 0;
+  let hunkEnd = 0;
+  let chunkLines: string[] = [];
+  let chunkHeader = "";
+  let chunkChangedLines: number[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Parse chunk header
+    if (line.startsWith("@@")) {
+      // Save previous chunk if exists
+      if (chunkLines.length > 0) {
+        changes.chunks.push({
+          start: chunkStart,
+          end: currentNewLine,
+          content: chunkLines.join("\n"),
+          header: chunkHeader,
+          changedLines: [...chunkChangedLines],
+          hunkStart,
+          hunkEnd,
+        });
+        chunkLines = [];
+        chunkChangedLines = [];
+      }
+
+      // Parse the hunk header: @@ -a,b +c,d @@
+      const match = line.match(/@@ -\d+,\d+ \+(\d+),(\d+) @@/);
+      if (match) {
+        const newLineStart = parseInt(match[1], 10);
+        const newLineCount = parseInt(match[2], 10);
+        currentNewLine = newLineStart;
+        chunkStart = currentNewLine;
+        chunkHeader = line;
+        hunkStart = newLineStart;
+        hunkEnd = newLineStart + newLineCount - 1;
+      }
+      continue;
+    }
+
+    if (line.startsWith("+")) {
+      // Added or modified line
+      chunkChangedLines.push(currentNewLine);
+      if (!changes.lineNumbers.includes(currentNewLine)) {
+        changes.lineNumbers.push(currentNewLine);
+      }
+      chunkLines.push(line.slice(1));
+      currentNewLine++;
+    } else if (line.startsWith("-")) {
+      // Removed line
+      chunkLines.push(line.slice(1));
+    } else if (line.startsWith(" ")) {
+      // Context line
+      chunkLines.push(line.slice(1));
+      currentNewLine++;
+    }
+  }
+
+  // Add the last chunk
+  if (chunkLines.length > 0) {
+    changes.chunks.push({
+      start: chunkStart,
+      end: currentNewLine,
+      content: chunkLines.join("\n"),
+      header: chunkHeader,
+      changedLines: [...chunkChangedLines],
+      hunkStart,
+      hunkEnd,
+    });
+  }
+
+  changes.lineNumbers.sort((a, b) => a - b);
+
+  logger.info("Parsed file changes", {
+    totalChangedLines: changes.lineNumbers.length,
+    changedLines: changes.lineNumbers,
+    chunks: changes.chunks.map((chunk) => ({
+      header: chunk.header,
+      start: chunk.start,
+      end: chunk.end,
+      changedLines: chunk.changedLines,
+      hunkStart: chunk.hunkStart,
+      hunkEnd: chunk.hunkEnd,
+    })),
+  });
+
+  return changes;
+}
+
 function mapChangeType(status: string): FileChangeType {
   const statusMap: Record<string, FileChangeType> = {
     added: "ADDED",
@@ -180,7 +292,7 @@ export async function processPRFile(
   file: GitHubFileResponse,
   sha: string
 ): Promise<PRFileChanges> {
-  const changes = parseFileChanges(file.patch);
+  const changes = parseFileChangesTest(file.patch);
 
   logger.info("File changes processed", {
     file: file.filename,
@@ -810,6 +922,119 @@ export async function submitPRReview(
             };
 
             return isSameLine
+              ? {
+                  ...comment,
+                  line: lineStart,
+                }
+              : {
+                  ...comment,
+                  startLine: lineStart,
+                  line: lineEnd,
+                };
+          })
+          .filter(
+            (comment): comment is DraftPullRequestReviewThread =>
+              comment !== null &&
+              !!comment.path &&
+              !!comment.line &&
+              !!comment.body
+          )
+      );
+
+    if (comments.length === 0) {
+      logger.info("No valid issues found in changed lines");
+      return;
+    }
+
+    logger.info("Prepared PR review comments", {
+      totalComments: comments.length,
+      commentsByFile: comments.reduce(
+        (acc, comment) => {
+          acc[comment.path] = (acc[comment.path] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
+    });
+
+    const { id: prId, sha: commitId } = await getPullRequestInfo(
+      owner,
+      repo,
+      prNumber
+    ).catch((error) => {
+      logger.error("Failed to get PR info", { error, owner, repo, prNumber });
+      throw new Error("Failed to get pull request information");
+    });
+
+    await createPaginatedPRReview(
+      owner,
+      repo,
+      prNumber,
+      prId,
+      commitId,
+      comments,
+      results
+    );
+
+    logger.info("Successfully submitted PR review", {
+      totalComments: comments.length,
+    });
+  } catch (error) {
+    logger.error("Failed to submit PR review", error as Error);
+    throw error;
+  }
+}
+
+/**
+ * Submit a complete review for multiple files
+ */
+export async function submitPRReviewTest(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  results: ScanResult[]
+) {
+  try {
+    // Transform and filter comments ensuring they're within valid hunks
+    const comments: DraftPullRequestReviewThread[] = results
+      .filter(({ file }) => hasChanges(file))
+      .flatMap(({ file, findings }) =>
+        findings.issues
+          // First verify the line was actually changed
+          .filter((issue) =>
+            file.changes.lineNumbers.includes(issue.location.lineStart)
+          )
+          // Then check if start and end lines are in the same chunk
+          .map((issue) => {
+            const lineStart = issue.location?.lineStart ?? 0;
+            const lineEnd = issue.location?.lineEnd ?? lineStart;
+
+            // Find chunk that contains both start and end lines
+            const validChunk = file.changes.chunks.find(
+              (chunk) =>
+                lineStart >= chunk.hunkStart &&
+                lineStart <= chunk.hunkEnd &&
+                lineEnd >= chunk.hunkStart &&
+                lineEnd <= chunk.hunkEnd
+            );
+
+            // Skip if no valid chunk found
+            if (!validChunk) {
+              logger.info("Skipping comment - lines not in same hunk", {
+                path: file.path,
+                lineStart,
+                lineEnd,
+                issue: issue.title,
+              });
+              return null;
+            }
+
+            const comment = {
+              path: file.path,
+              body: formatIssueComment(issue, file.path),
+            };
+
+            return lineStart === lineEnd
               ? {
                   ...comment,
                   line: lineStart,
