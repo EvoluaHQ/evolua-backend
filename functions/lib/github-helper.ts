@@ -487,73 +487,8 @@ function hasChanges(file: PRFileChanges): boolean {
 }
 
 /**
- * Helper function to get total changed lines
- */
-function getChangedLinesCount(file: PRFileChanges): number {
-  return file.changes.lineNumbers.length;
-}
-
-/**
  * Create a pull request review with multiple comments using GraphQL
  */
-export async function createPRReview(
-  owner: string,
-  repo: string,
-  prNumber: number,
-  prId: string,
-  commitId: string,
-  comments: DraftPullRequestReviewThread[],
-  results: ScanResult[]
-) {
-  const mutation = `
-    mutation($input: AddPullRequestReviewInput!) {
-      addPullRequestReview(input: $input) {
-        pullRequestReview {
-          id
-          comments(first: 100) {
-            nodes {
-              id
-              body
-              path
-              line
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  try {
-    const summary = prepareReviewSummary(results);
-
-    const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
-      input: {
-        pullRequestId: prId,
-        commitOID: commitId,
-        body: summary,
-        threads: comments,
-        event: "COMMENT",
-      },
-    });
-
-    logger.info("Created PR review with comments", {
-      reviewId: response.addPullRequestReview.pullRequestReview.id,
-      commentsCount:
-        response.addPullRequestReview.pullRequestReview.comments.nodes.length,
-    });
-
-    return response;
-  } catch (error) {
-    logger.error("Failed to create PR review", error as Error);
-
-    logger.info("List of comments", {
-      comments,
-    });
-
-    throw error;
-  }
-}
-
 export async function createPaginatedPRReview(
   owner: string,
   repo: string,
