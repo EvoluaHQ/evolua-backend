@@ -500,7 +500,7 @@ export async function createPaginatedPRReview(
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 30;
   const REQUESTS_PER_SECOND = 1 / 30; // One request per 30 seconds
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 5;
 
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
@@ -580,18 +580,19 @@ export async function createPaginatedPRReview(
       results.push(reviewResponse);
     } catch (error) {
       const err = error as Error;
+      logger.error(`GitHub API error details`, {
+        error: err.message,
+        chunkIndex: chunkIndex + 1,
+        retryCount: retryCount + 1,
+      });
 
       // Retry on any error if we haven't exceeded retry limit
       if (retryCount < MAX_RETRIES) {
         const delay = Math.pow(2, retryCount) * 30000; // Exponential backoff: 30s, 60s, 120s
-        logger.error(`GitHub API error, retrying after ${delay / 1000}s`, {
-          error: err.message,
-          chunkIndex: chunkIndex + 1,
-          retryCount: retryCount + 1,
-        });
+        logger.warn(`Retrying after ${delay / 1000}s`);
 
         // Wait a bit before trying to post the warning message
-        await new Promise((resolve) => setTimeout(resolve, 10000));
+        await new Promise((resolve) => setTimeout(resolve, 20000));
 
         try {
           await octokit.graphql(mutation, {
@@ -774,6 +775,21 @@ export async function submitPRReview(
           .map((issue) => {
             const lineStart = issue.location?.lineStart ?? 0;
             const lineEnd = issue.location?.lineEnd ?? lineStart;
+
+            // Validate line numbers
+            if (lineStart === 0 || lineEnd < lineStart) {
+              logger.info("Skipping comment - invalid line numbers", {
+                path: file.path,
+                lineStart,
+                lineEnd,
+                issue: issue.title,
+                reason:
+                  lineStart === 0
+                    ? "invalid line start"
+                    : "line end before line start",
+              });
+              return null;
+            }
 
             // Find chunk that contains both start and end lines
             const validChunk = file.changes.chunks.find(
