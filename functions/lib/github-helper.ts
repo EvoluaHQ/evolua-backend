@@ -487,73 +487,8 @@ function hasChanges(file: PRFileChanges): boolean {
 }
 
 /**
- * Helper function to get total changed lines
- */
-function getChangedLinesCount(file: PRFileChanges): number {
-  return file.changes.lineNumbers.length;
-}
-
-/**
  * Create a pull request review with multiple comments using GraphQL
  */
-export async function createPRReview(
-  owner: string,
-  repo: string,
-  prNumber: number,
-  prId: string,
-  commitId: string,
-  comments: DraftPullRequestReviewThread[],
-  results: ScanResult[]
-) {
-  const mutation = `
-    mutation($input: AddPullRequestReviewInput!) {
-      addPullRequestReview(input: $input) {
-        pullRequestReview {
-          id
-          comments(first: 100) {
-            nodes {
-              id
-              body
-              path
-              line
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  try {
-    const summary = prepareReviewSummary(results);
-
-    const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
-      input: {
-        pullRequestId: prId,
-        commitOID: commitId,
-        body: summary,
-        threads: comments,
-        event: "COMMENT",
-      },
-    });
-
-    logger.info("Created PR review with comments", {
-      reviewId: response.addPullRequestReview.pullRequestReview.id,
-      commentsCount:
-        response.addPullRequestReview.pullRequestReview.comments.nodes.length,
-    });
-
-    return response;
-  } catch (error) {
-    logger.error("Failed to create PR review", error as Error);
-
-    logger.info("List of comments", {
-      comments,
-    });
-
-    throw error;
-  }
-}
-
 export async function createPaginatedPRReview(
   owner: string,
   repo: string,
@@ -564,7 +499,7 @@ export async function createPaginatedPRReview(
   scanResults: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 30;
-  const REQUESTS_PER_SECOND = 1 / 30; // 30s
+  const REQUESTS_PER_SECOND = 1 / 30;
   const MAX_RETRIES = 3;
 
   const mutation = `
@@ -601,7 +536,7 @@ export async function createPaginatedPRReview(
 
   function getRetryMessage(delay: number): string {
     const minutes = Math.round(delay / 60000);
-    return `GitHub needs a short break 😅 I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it!`;
+    return `GitHub needs a short break 😅. I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it! 🚀`;
   }
 
   async function submitReviewWithRetry(
@@ -625,6 +560,10 @@ export async function createPaginatedPRReview(
         },
       });
 
+      if (!response?.addPullRequestReview) {
+        throw new Error("Received invalid response from GitHub API");
+      }
+
       const reviewResponse: CreateReviewResponse = {
         reviewId: response.addPullRequestReview.pullRequestReview.id,
         commentsCount:
@@ -641,17 +580,17 @@ export async function createPaginatedPRReview(
       results.push(reviewResponse);
     } catch (error) {
       const err = error as Error;
-      if (
-        err.message.includes("submitted too quickly") &&
-        retryCount < MAX_RETRIES
-      ) {
+
+      // Retry on any error if we haven't exceeded retry limit
+      if (retryCount < MAX_RETRIES) {
         const delay = Math.pow(2, retryCount) * 30000; // Exponential backoff: 30s, 60s, 120s
-        logger.warn(`Rate limited, retrying after ${delay / 1000}s`, {
+        logger.warn(`GitHub API error, retrying after ${delay / 1000}s`, {
+          error: err.message,
           chunkIndex: chunkIndex + 1,
           retryCount: retryCount + 1,
         });
 
-        // Wait a bit before trying to post the warning message (10s)
+        // Wait a bit before trying to post the warning message
         await new Promise((resolve) => setTimeout(resolve, 10000));
 
         try {
@@ -673,7 +612,13 @@ export async function createPaginatedPRReview(
         await new Promise((resolve) => setTimeout(resolve, delay));
         return submitReviewWithRetry(commentChunk, chunkIndex, retryCount + 1);
       }
-      throw error;
+
+      // If we've exhausted retries, throw the error
+      logger.error("Failed to submit review chunk after all retries", {
+        error: err,
+        chunkIndex: chunkIndex + 1,
+      });
+      throw err;
     }
   }
 
