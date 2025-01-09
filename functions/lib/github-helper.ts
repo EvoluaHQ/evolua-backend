@@ -871,21 +871,30 @@ export async function createPaginatedPRReview(
         err.message.includes("submitted too quickly") &&
         retryCount < MAX_RETRIES
       ) {
-        const delay = Math.pow(2, retryCount) * 30000;
+        const delay = Math.pow(2, retryCount) * 30000; // Exponential backoff: 30s, 60s, 120s
         logger.warn(`Rate limited, retrying after ${delay / 1000}s`, {
           chunkIndex: chunkIndex + 1,
           retryCount: retryCount + 1,
         });
 
-        await octokit.graphql(mutation, {
-          input: {
-            pullRequestId: prId,
-            commitOID: commitId,
-            body: getRetryMessage(delay),
-            threads: [],
-            event: "COMMENT",
-          },
-        });
+        // Wait a bit before trying to post the warning message
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        try {
+          await octokit.graphql(mutation, {
+            input: {
+              pullRequestId: prId,
+              commitOID: commitId,
+              body: getRetryMessage(delay),
+              threads: [],
+              event: "COMMENT",
+            },
+          });
+        } catch (warningError) {
+          logger.warn("Failed to post warning message", {
+            error: warningError,
+          });
+        }
 
         await new Promise((resolve) => setTimeout(resolve, delay));
         return submitReviewWithRetry(commentChunk, chunkIndex, retryCount + 1);
