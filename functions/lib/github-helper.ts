@@ -787,10 +787,11 @@ export async function createPaginatedPRReview(
   prId: string,
   commitId: string,
   comments: DraftPullRequestReviewThread[],
-  results: ScanResult[]
+  scanResults: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
-  const CHUNK_SIZE = 30; // Reduced from 50 to avoid overwhelming GitHub
-  const REQUESTS_PER_SECOND = 1 / 15; // One request every 15 seconds
+  const CHUNK_SIZE = 30;
+  const REQUESTS_PER_SECOND = 1 / 30; // 30s
+  const MAX_RETRIES = 3;
 
   const mutation = `
     mutation($input: AddPullRequestReviewInput!) {
@@ -811,31 +812,40 @@ export async function createPaginatedPRReview(
   `;
 
   const commentChunks = chunk(comments, CHUNK_SIZE);
+  const rateLimit = RateLimit(REQUESTS_PER_SECOND);
+  const summary = prepareReviewSummary(scanResults);
+  const results: CreateReviewResponse[] = [];
+
   logger.info(
     `Split comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
   );
 
-  const rateLimit = RateLimit(REQUESTS_PER_SECOND);
-  const summary = prepareReviewSummary(results);
+  function getProgressMessage(chunk: number, total: number): string {
+    const percent = Math.round((chunk / total) * 100);
+    return `Still reviewing your PR! 🔍 Processing part ${chunk} of ${total} (${percent}% done). This might take a few minutes since it's a big PR. I'm being careful to respect GitHub's rate limits to ensure all findings get posted properly.`;
+  }
 
-  // Process chunks sequentially instead of in parallel
-  const chunkResults: CreateReviewResponse[] = [];
+  function getRetryMessage(delay: number): string {
+    const minutes = Math.round(delay / 60000);
+    return `GitHub needs a short break 😅 I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it!`;
+  }
 
-  for (let i = 0; i < commentChunks.length; i++) {
-    const commentChunk = commentChunks[i];
-    await rateLimit();
-
+  async function submitReviewWithRetry(
+    commentChunk: DraftPullRequestReviewThread[],
+    chunkIndex: number,
+    retryCount = 0
+  ): Promise<void> {
     try {
-      const chunkSummary =
-        i === 0
-          ? summary
-          : `Continued review part ${i + 1}/${commentChunks.length}`;
+      await rateLimit();
 
       const response = await octokit.graphql<AddPRReviewResponse>(mutation, {
         input: {
           pullRequestId: prId,
           commitOID: commitId,
-          body: chunkSummary,
+          body:
+            chunkIndex === 0
+              ? summary
+              : getProgressMessage(chunkIndex + 1, commentChunks.length),
           threads: commentChunk,
           event: "COMMENT",
         },
@@ -847,33 +857,56 @@ export async function createPaginatedPRReview(
           response.addPullRequestReview.pullRequestReview.comments.nodes.length,
       };
 
-      logger.info(`Created PR review chunk ${i + 1}/${commentChunks.length}`, {
-        reviewResponse,
-      });
-
-      chunkResults.push(reviewResponse);
-    } catch (error) {
-      logger.error(
-        `Failed to create PR review chunk ${i + 1}/${commentChunks.length}`,
+      logger.info(
+        `Created PR review chunk ${chunkIndex + 1}/${commentChunks.length}`,
         {
-          error: error as Error,
-          commentCount: commentChunk.length,
+          reviewResponse,
         }
       );
+
+      results.push(reviewResponse);
+    } catch (error) {
+      const err = error as Error;
+      if (
+        err.message.includes("submitted too quickly") &&
+        retryCount < MAX_RETRIES
+      ) {
+        const delay = Math.pow(2, retryCount) * 30000;
+        logger.warn(`Rate limited, retrying after ${delay / 1000}s`, {
+          chunkIndex: chunkIndex + 1,
+          retryCount: retryCount + 1,
+        });
+
+        await octokit.graphql(mutation, {
+          input: {
+            pullRequestId: prId,
+            commitOID: commitId,
+            body: getRetryMessage(delay),
+            threads: [],
+            event: "COMMENT",
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return submitReviewWithRetry(commentChunk, chunkIndex, retryCount + 1);
+      }
       throw error;
     }
   }
 
-  const totalComments = chunkResults.reduce(
-    (sum, result) => sum + result.commentsCount,
-    0
-  );
+  for (let i = 0; i < commentChunks.length; i++) {
+    await submitReviewWithRetry(commentChunks[i], i);
+  }
+
   logger.info("Completed creating all PR reviews", {
     totalChunks: commentChunks.length,
-    totalCommentsProcessed: totalComments,
+    totalCommentsProcessed: results.reduce(
+      (sum, r) => sum + r.commentsCount,
+      0
+    ),
   });
 
-  return chunkResults;
+  return results;
 }
 
 /**
