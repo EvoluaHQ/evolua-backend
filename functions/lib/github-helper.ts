@@ -811,14 +811,6 @@ export async function submitPRReview(
               return null;
             }
 
-            // Verify the path exists in the PR changes
-            if (!file.path) {
-              logger.info("Skipping comment - invalid file path", {
-                issue: issue.title,
-              });
-              return null;
-            }
-
             const comment = {
               path: file.path,
               body: formatIssueComment(issue, file.path),
