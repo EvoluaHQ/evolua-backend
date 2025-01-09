@@ -499,7 +499,7 @@ export async function createPaginatedPRReview(
   scanResults: ScanResult[]
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 30;
-  const REQUESTS_PER_SECOND = 1 / 30;
+  const REQUESTS_PER_SECOND = 1 / 30; // One request per 30 seconds
   const MAX_RETRIES = 3;
 
   const mutation = `
@@ -536,7 +536,7 @@ export async function createPaginatedPRReview(
 
   function getRetryMessage(delay: number): string {
     const minutes = Math.round(delay / 60000);
-    return `GitHub needs a short break 😅. I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it! 🚀`;
+    return `I need a short break 😅. I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it! 🚀`;
   }
 
   async function submitReviewWithRetry(
@@ -584,7 +584,7 @@ export async function createPaginatedPRReview(
       // Retry on any error if we haven't exceeded retry limit
       if (retryCount < MAX_RETRIES) {
         const delay = Math.pow(2, retryCount) * 30000; // Exponential backoff: 30s, 60s, 120s
-        logger.warn(`GitHub API error, retrying after ${delay / 1000}s`, {
+        logger.error(`GitHub API error, retrying after ${delay / 1000}s`, {
           error: err.message,
           chunkIndex: chunkIndex + 1,
           retryCount: retryCount + 1,
@@ -604,7 +604,7 @@ export async function createPaginatedPRReview(
             },
           });
         } catch (warningError) {
-          logger.warn("Failed to post warning message", {
+          logger.error("Failed to post warning message", {
             error: warningError,
           });
         }
