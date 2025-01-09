@@ -534,9 +534,9 @@ export async function createPaginatedPRReview(
     return `Still reviewing your PR! 🔍 Processing part ${chunk} of ${total} (${percent}% done). This might take a few minutes since it's a big PR. I'm being careful to respect GitHub's rate limits to ensure all findings get posted properly.`;
   }
 
-  function getRetryMessage(delay: number, error: Error): string {
+  function getRetryMessage(delay: number): string {
     const minutes = Math.round(delay / 60000);
-    return `Encountered an issue while processing the review (${error.message}). I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before trying again. Don't worry, I'll get through all of it! 🚀`;
+    return `GitHub needs a short break 😅. I'll wait ${minutes} ${minutes === 1 ? "minute" : "minutes"} before continuing with the review. Don't worry, I'll get through all of it! 🚀`;
   }
 
   async function submitReviewWithRetry(
@@ -598,7 +598,7 @@ export async function createPaginatedPRReview(
             input: {
               pullRequestId: prId,
               commitOID: commitId,
-              body: getRetryMessage(delay, err),
+              body: getRetryMessage(delay),
               threads: [],
               event: "COMMENT",
             },
