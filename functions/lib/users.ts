@@ -165,6 +165,23 @@ export async function incrementScanCount(id: string, maxScans: number) {
   }
 }
 
+export async function setUserTier(id: string, tier: "FREE" | "PRO", ) {
+  await documentClient.send(
+    new UpdateCommand({
+      TableName: USERS_TABLE_NAME,
+      Key: {
+        id,
+      },
+      UpdateExpression: "SET tier = :tier, lastUpdatedAt = :lastUpdatedAt",
+      ExpressionAttributeValues: {
+        ":tier": tier,
+        ":lastUpdatedAt": new Date().toISOString(),
+      },
+      ConditionExpression: "attribute_exists(id)",
+    })
+  );
+}
+
 export async function resetScanCount(id: string) {
   await documentClient.send(
     new UpdateCommand({

@@ -110,3 +110,8 @@ export interface ReviewSummary extends Summary {
   files: ReviewStats[];
   keyFindings: string[];
 }
+
+export interface CreateReviewResponse {
+  reviewId: string;
+  commentsCount: number;
+}

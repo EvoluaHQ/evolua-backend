@@ -1,12 +1,10 @@
 import { EventBridgeEvent } from "aws-lambda";
-import * as ulid from "ulid";
-import * as Users from "./lib/users";
-import { ClerkUserUpsertedEventDetail } from "./types/eventbridge";
+import { ulid } from "ulid";
+import { findUser, upsertUser } from "./lib/users";
+import { EventEnvelope, ClerkUserUpsertedEventDetail } from "./types";
 
-type Event = EventBridgeEvent<
-  "user.created" | "user.updated",
-  ClerkUserUpsertedEventDetail
->;
+type ClerkEvent = "user.created" | "user.updated";
+type Event = EventBridgeEvent<ClerkEvent, EventEnvelope<ClerkUserUpsertedEventDetail>>;
 
 export const handler = async (event: Event) => {
   const email = event.detail.data.data.email_addresses?.[0]?.email_address;
@@ -16,8 +14,8 @@ export const handler = async (event: Event) => {
   );
   const githubHandle = githubAccount?.username?.toLowerCase();
 
-  const user = await Users.findUser(clerkUserId, email, githubHandle);
-  const id = user?.id || ulid.ulid();
+  const user = await findUser(clerkUserId, email, githubHandle);
+  const id = user?.id || ulid();
   const now = new Date().toJSON();
 
   const tier = user?.tier || "FREE";
@@ -30,7 +28,7 @@ export const handler = async (event: Event) => {
   const freeTrialEndDate = new Date(billingStartDate);
   freeTrialEndDate.setMonth(freeTrialEndDate.getMonth() + 1);
 
-  await Users.upsertUser({
+  await upsertUser({
     id,
     email,
     username: event.detail.data.data.username,
@@ -48,8 +46,4 @@ export const handler = async (event: Event) => {
     freeTrialEndDate: freeTrialEndDate.toJSON().slice(0, 10),
     scanCount: user?.scanCount || 0,
   });
-
-  return {
-    statusCode: 200,
-  };
 };

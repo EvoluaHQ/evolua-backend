@@ -95,18 +95,22 @@ export interface AddCommentResponse {
   };
 }
 
+interface FileChunk {
+  start: number; // Starting line number
+  end: number; // Ending line number
+  content: string; // Changed content
+  header: string; // Chunk header from git diff
+  changedLines: number[]; // Add this to track changed lines per chunk
+  hunkStart: number;
+  hunkEnd: number;
+}
+
 /**
  * Interface for changed lines information
  */
 export interface FileChanges {
   lineNumbers: number[];
-  chunks: Array<{
-    start: number; // Starting line number
-    end: number; // Ending line number
-    content: string; // Changed content
-    header: string; // Chunk header from git diff
-    changedLines: number[]; // Add this to track changed lines per chunk
-  }>;
+  chunks: FileChunk[];
 }
 
 /**
@@ -175,7 +179,7 @@ export interface ScanGitHubPrInput {
   reason: string;
   installation_id: number;
   sender_login: string; // the event sender: the PR creator or commenter
-  pull_request_number: number,
+  pull_request_number: number;
   pull_request?: {
     id: number;
     node_id: string;
@@ -183,17 +187,17 @@ export interface ScanGitHubPrInput {
     title: string;
     url: string;
     created_at: string;
-  },
+  };
   repository: {
     id: number;
     name: string;
     full_name: string;
     owner_login: string;
-  }
+  };
 }
 
 export interface ReposChangedInput {
-  action: 'added' | 'removed';
+  action: "added" | "removed";
   sender_login: string;
   repositories: {
     id: number;

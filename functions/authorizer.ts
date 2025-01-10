@@ -2,6 +2,7 @@ import { verify, TokenExpiredError, JwtPayload } from "jsonwebtoken";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { AppSyncAuthorizerEvent, AppSyncAuthorizerResult } from "aws-lambda";
 import { findUserByClerkUserId } from "./lib/users";
+import { getOrganizationByClerkOrgId } from "./lib/organizations";
 import middy from '@middy/core';
 import ssm from '@middy/ssm';
 
@@ -11,6 +12,7 @@ const { SSM_STAGE_NAME } = process.env;
 
 type ResolverContext = {
   clerkUserId: string
+  clerkOrgId?: string
   tenantId: string
 }
 
@@ -39,6 +41,28 @@ const _handler = async (event: AppSyncAuthorizerEvent, context: any): Promise<Re
       
       return {
         isAuthorized: false
+      }
+    }
+
+    if (claims.org_id) {
+      logger.debug('User is a member of an organization', { claims });
+      const org = await getOrganizationByClerkOrgId(claims.org_id);
+
+      if (!org) {
+        logger.warn('Organization not found', { clerkOrgId: claims.org_id });
+
+        return {
+          isAuthorized: false
+        }
+      }
+
+      return {
+        isAuthorized: true,
+        resolverContext: {
+          clerkUserId,
+          clerkOrgId: org.clerkOrgId,
+          tenantId: org.orgId,
+        }
       }
     }
 
