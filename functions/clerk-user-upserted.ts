@@ -36,7 +36,7 @@ export const handler = async (event: Event) => {
     firstName: event.detail.data.data.first_name,
     lastName: event.detail.data.data.last_name,
     imageUrl: event.detail.data.data.image_url,
-    githubHandle: githubHandle || "",
+    githubHandle: githubHandle || " ", // DynamoDB doesn't allow empty string here because githubHandle is part of an index
     createdAt: user?.createdAt || now,
     lastUpdatedAt: now,
     deleted: false,
