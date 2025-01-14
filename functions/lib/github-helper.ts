@@ -25,6 +25,7 @@ import {
   ScanResult,
 } from "../types";
 import { getLanguageExtension } from "./utils";
+import { executeIdempotently } from "./idempotency";
 
 const logger = new Logger();
 
@@ -490,13 +491,11 @@ function hasChanges(file: PRFileChanges): boolean {
  * Create a pull request review with multiple comments using GraphQL
  */
 export async function createPaginatedPRReview(
-  owner: string,
-  repo: string,
-  prNumber: number,
   prId: string,
   commitId: string,
   comments: DraftPullRequestReviewThread[],
-  scanResults: ScanResult[]
+  scanResults: ScanResult[],
+  idempotencyKeyPrefix: string
 ): Promise<CreateReviewResponse[]> {
   const CHUNK_SIZE = 30;
   const REQUESTS_PER_SECOND = 1 / 30; // One request per 30 seconds
@@ -624,7 +623,10 @@ export async function createPaginatedPRReview(
   }
 
   for (let i = 0; i < commentChunks.length; i++) {
-    await submitReviewWithRetry(commentChunks[i], i);
+    await executeIdempotently(
+      `${idempotencyKeyPrefix}-chunk${i}`,
+      () => submitReviewWithRetry(commentChunks[i], i)
+    );
   }
 
   logger.info("Completed creating all PR reviews", {
@@ -759,7 +761,8 @@ export async function submitPRReview(
   owner: string,
   repo: string,
   prNumber: number,
-  results: ScanResult[]
+  results: ScanResult[],
+  idempotencyKeyPrefix: string
 ) {
   try {
     // Transform and filter comments ensuring they're within valid hunks
@@ -862,13 +865,11 @@ export async function submitPRReview(
     });
 
     await createPaginatedPRReview(
-      owner,
-      repo,
-      prNumber,
       prId,
       commitId,
       comments,
-      results
+      results,
+      idempotencyKeyPrefix
     );
 
     logger.info("Successfully submitted PR review", {

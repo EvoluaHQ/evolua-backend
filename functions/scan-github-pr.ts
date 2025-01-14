@@ -59,6 +59,7 @@ import {
   SubscriptionTierLimits,
 } from "./types";
 import { MaxScansExceededError } from "./types/errors";
+import { executeIdempotently } from './lib/idempotency';
 
 const { SSM_STAGE_NAME, STAGE_NAME, SERVICE_NAME } = process.env;
 
@@ -94,6 +95,8 @@ const _handler = async (event: Event, context: any) => {
     await init(ghAppId, ghPrivateKey, installationId);
 
     logger.debug("Fetching PR details from GitHub");
+
+    const IDEMPOTENCY_PREFIX = `ScanGithubPR-${event.detail.metadata.eventId}`;
 
     const ghPrData = await fetchPRDetails(
       input.repository.owner_login,
@@ -137,7 +140,13 @@ const _handler = async (event: Event, context: any) => {
     }
 
     const repoId = `github#${input.repository.id}`;
-    const shouldScanPR = await shouldWeScanPR(repoId, user);
+
+    // execute idempotently so we don't increment a user's scan count multiple times
+    // for the same incoming event id
+    const shouldScanPR = await executeIdempotently(
+      `${IDEMPOTENCY_PREFIX}-shouldWeScanPR`,
+      () => shouldWeScanPR(repoId, user)
+    );
 
     if (shouldScanPR === "MaxScansExceeded") {
       await commentOnPR(pullRequest.node_id, getScanLimitMessage(username));
@@ -149,9 +158,9 @@ const _handler = async (event: Event, context: any) => {
 
     const subscriptionLimits: SubscriptionTierLimits = shouldScanPR;
 
-    const initCommentId = await commentOnPR(
-      pullRequest.node_id,
-      getStartReviewMessage(username)
+    const initCommentId = await executeIdempotently(
+      `${IDEMPOTENCY_PREFIX}-sendStartReviewMessage`,
+      () => commentOnPR(pullRequest.node_id, getStartReviewMessage(username))
     );
 
     const owner = input.repository.owner_login;
@@ -206,16 +215,22 @@ const _handler = async (event: Event, context: any) => {
         maxFilesPerScan
       );
 
-      await commentOnPR(pullRequest.node_id, maxFilesMessage);
+      await executeIdempotently(
+        `${IDEMPOTENCY_PREFIX}-sendMaxFilesLimitMessage`,
+        () => commentOnPR(pullRequest.node_id, maxFilesMessage)
+      );
     }
 
     const results = await processFiles(filesToAnalyze);
 
-    await deleteCommentOnPR(initCommentId);
+    await executeIdempotently(
+      `${IDEMPOTENCY_PREFIX}-deleteInitComment`,
+      () => deleteCommentOnPR(initCommentId)
+    );
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReview(owner, repo, pullNumber, results);
+      await submitPRReview(owner, repo, pullNumber, results, `${IDEMPOTENCY_PREFIX}-submitPRReview`);
     }
 
     // Calculate final metrics
