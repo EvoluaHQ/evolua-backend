@@ -128,7 +128,7 @@ export async function deleteUser(id: string) {
         "SET deleted = :deleted, lastUpdatedAt = :lastUpdatedAt",
       ExpressionAttributeValues: {
         ":deleted": true,
-        lastUpdatedAt: new Date().toISOString(),
+        ":lastUpdatedAt": new Date().toISOString(),
       },
     })
   );
