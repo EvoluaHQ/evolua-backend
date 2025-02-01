@@ -216,6 +216,13 @@ const _handler = async (event: Event, context: any) => {
     // Submit review with all comments
     if (results.length > 0) {
       await submitPRReview(owner, repo, pullNumber, results);
+    } else {
+      logger.info("No issues found, skipping review submission");
+    
+      await commentOnPR(
+        pullRequest.node_id,
+        "No issues found, good job! 👍"
+      );
     }
 
     // Calculate final metrics
