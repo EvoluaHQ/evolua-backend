@@ -230,7 +230,7 @@ const _handler = async (event: Event, context: any) => {
 
     // Submit review with all comments
     if (results.length > 0) {
-      await submitPRReview(owner, repo, pullNumber, results, , `${IDEMPOTENCY_PREFIX}-submitPRReview`);
+      await submitPRReview(owner, repo, pullNumber, results, `${IDEMPOTENCY_PREFIX}-submitPRReview`);
     } else {
       logger.info("No issues found, skipping review submission");
     
@@ -460,8 +460,8 @@ const processFiles = async (
   // Initialize semaphore for concurrency control
   const sema = new Sema(AI_ANALYSIS_CONFIG.concurrency.limit, {
     capacity: files.length,
-    pauseFn: () => logger.info("Rate limit reached, pausing..."),
-    resumeFn: () => logger.info("Resuming analysis..."),
+    pauseFn: () => logger.debug("Rate limit reached, pausing..."),
+    resumeFn: () => logger.debug("Resuming analysis..."),
   });
 
   // Process each file with semaphore control
@@ -470,14 +470,14 @@ const processFiles = async (
     try {
       const findings = await analyzeFile(file);
 
-      logger.info("File analysis result", {
+      logger.debug("File analysis result", {
         path: file.path,
         hasFindings: !!findings,
         issuesCount: findings?.issues?.length ?? 0,
       });
 
       if (findings && findings?.issues.length > 0) {
-        logger.info(
+        logger.debug(
           `Found ${findings.issues.length} issues in changed lines of ${file.path}`
         );
         return { file, findings };

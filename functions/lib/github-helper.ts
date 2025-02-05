@@ -525,7 +525,7 @@ export async function createPaginatedPRReview(
   const results: CreateReviewResponse[] = [];
 
   logger.info(
-    `Split comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
+    `Split ${comments.length} comments into ${commentChunks.length} chunks of size ${CHUNK_SIZE}`
   );
 
   function getProgressMessage(chunk: number, total: number): string {
@@ -781,7 +781,7 @@ export async function submitPRReview(
 
             // Validate line numbers
             if (lineStart === 0 || lineEnd < lineStart) {
-              logger.info("Skipping comment - invalid line numbers", {
+              logger.warn("Skipping comment - invalid line numbers", {
                 path: file.path,
                 lineStart,
                 lineEnd,
@@ -805,7 +805,7 @@ export async function submitPRReview(
 
             // Skip if no valid chunk found
             if (!validChunk) {
-              logger.info("Skipping comment - lines not in same hunk", {
+              logger.warn("Skipping comment - lines not in same hunk", {
                 path: file.path,
                 lineStart,
                 lineEnd,
@@ -840,7 +840,7 @@ export async function submitPRReview(
       );
 
     if (comments.length === 0) {
-      logger.info("No valid issues found in changed lines");
+      logger.info("Skipping PR review - no valid issues found in changed lines");
       return;
     }
 
