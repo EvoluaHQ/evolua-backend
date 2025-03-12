@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for TypeScript projects
+
+review:
+  # Use standard profile for regular development, or strict for critical components
+  profile: standard
+
+  # Language for code review comments
+  language: en
+
+  # Custom instructions specific to TypeScript projects
+  custom_instructions: |
+    Pay special attention to TypeScript-specific issues like:
+    - Type safety and proper use of generics
+    - Null/undefined handling
+    - Type assertions and type narrowing
+    - Interface vs Type usage
+    - Proper async/await error handling
+
+  # Configure which areas to focus on
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!coverage/**"
+    - "!**/*.test.ts" # Exclude test files if needed
+    - "!**/*.spec.ts"
+    - "!**/*.d.ts" # Exclude declaration files
+    - "src/**/*.ts" # Include all TypeScript files in src
+    - "src/**/*.tsx" # Include React TypeScript files
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "src/**/*.ts"
+      instructions: |
+        Ensure proper TypeScript practices:
+        - Use explicit return types for functions with complex logic
+        - Avoid the 'any' type where possible
+        - Use interfaces for object shapes
+        - Make use of TypeScript's utility types (Partial, Required, etc.)
+        - Check for array bounds and null references
+        - Use definite assignment assertions only when necessary
+
+    - path: "src/**/*.tsx"
+      instructions: |
+        For React TypeScript files:
+        - Use proper typing for props and state
+        - Ensure event handlers are properly typed
+        - Use React.FC or function components with explicit return types
+        - Check for proper typing of useEffect dependencies
+        - Ensure proper typing for context providers and consumers
+
+    - path: "src/api/**/*.ts"
+      instructions: |
+        For API-related files:
+        - Ensure all API responses are properly typed
+        - Verify error handling for API calls
+        - Check for proper validation of API inputs
+        - Ensure proper error handling for async operations

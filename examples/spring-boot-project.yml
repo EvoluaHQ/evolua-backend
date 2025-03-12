@@ -1,0 +1,150 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for Java Spring Boot projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to Java Spring Boot projects
+  custom_instructions: |
+    Focus on Java Spring Boot-specific patterns and best practices:
+    - Proper usage of Spring annotations
+    - Bean lifecycle management
+    - Dependency injection principles
+    - Spring configuration best practices
+    - Java coding standards
+    - Exception handling patterns
+    - Thread safety and concurrency
+    - Resource management
+    - Spring Security implementation
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!target/**" # Build output directory
+    - "!.mvn/**" # Maven wrapper files
+    - "!mvnw*" # Maven wrapper scripts
+    - "!gradle/**" # Gradle files
+    - "!.gradle/**" # Gradle cache
+    - "!build/**" # Gradle build directory
+    - "!**/test/**" # Test directories
+    - "!**/*Test.java" # Test files
+    - "!**/*Tests.java"
+    - "!**/*IT.java"
+    - "src/main/java/**/*.java" # Java source files
+    - "src/main/resources/**" # Resource files
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "src/main/java/**/controller/**/*.java"
+      instructions: |
+        For Spring Controllers:
+        - Use @RestController or @Controller appropriately
+        - Implement proper validation for request parameters and bodies
+        - Use appropriate HTTP status codes for responses
+        - Handle exceptions with @ExceptionHandler or global exception handler
+        - Keep controllers thin (business logic should be in services)
+        - Use proper request mapping annotations (@GetMapping, @PostMapping, etc.)
+        - Document REST endpoints with OpenAPI/Swagger annotations
+        - Implement proper authentication and authorization checks
+        - Use ResponseEntity for returning complex responses
+        - Implement proper pagination for collections
+
+    - path: "src/main/java/**/service/**/*.java"
+      instructions: |
+        For Spring Services:
+        - Use @Service annotation
+        - Implement proper transaction management with @Transactional
+        - Handle exceptions properly and use custom exceptions when appropriate
+        - Implement proper logging with SLF4J
+        - Keep methods focused and follow single responsibility principle
+        - Use constructor injection rather than field injection
+        - Ensure thread safety for singleton services
+        - Consider using Spring Events for complex workflows
+        - Implement proper validation logic
+        - Use Optional<T> for nullable return values
+
+    - path: "src/main/java/**/repository/**/*.java"
+      instructions: |
+        For Spring Data Repositories:
+        - Use appropriate Spring Data interfaces (JpaRepository, MongoRepository, etc.)
+        - Implement custom query methods with proper naming conventions
+        - Use @Query for complex queries
+        - Ensure proper use of @Transactional when needed
+        - Consider performance implications of fetching strategies
+        - Implement pagination for large result sets
+        - Use query projection when appropriate
+        - Consider using Specifications or QueryDSL for complex queries
+        - Ensure proper exception handling for database operations
+
+    - path: "src/main/java/**/model/**/*.java"
+      instructions: |
+        For Entity/Model classes:
+        - Implement proper JPA annotations
+        - Use appropriate column types and constraints
+        - Implement equals(), hashCode(), and toString() methods
+        - Use appropriate fetch types for relationships
+        - Implement validation constraints with Bean Validation
+        - Consider using @Embeddable for value objects
+        - Use appropriate index annotations for frequently queried fields
+        - Implement Serializable if needed
+        - Use appropriate inheritance strategies
+        - Consider using value objects for complex attributes
+
+    - path: "src/main/java/**/config/**/*.java"
+      instructions: |
+        For Spring Configuration:
+        - Use @Configuration annotation
+        - Use proper conditional annotations (@ConditionalOnProperty, etc.)
+        - Follow bean naming conventions
+        - Implement proper error handling in bean creation
+        - Use @Profile for environment-specific configurations
+        - Consider using @ConfigurationProperties for complex configurations
+        - Ensure thread safety for shared beans
+        - Properly manage bean dependencies and initialization order
+        - Document configuration properties
+
+    - path: "src/main/java/**/security/**/*.java"
+      instructions: |
+        For Spring Security:
+        - Implement proper authentication mechanisms
+        - Use proper authorization rules with least privilege
+        - Implement proper password encoding
+        - Use Security Context properly
+        - Implement proper CSRF protection
+        - Configure appropriate security headers
+        - Avoid hardcoded credentials
+        - Implement proper session management
+        - Consider using OAuth2 or JWT where appropriate
+        - Implement proper logging for security events
+
+    - path: "src/main/resources/application*.{yml,properties}"
+      instructions: |
+        For application configuration:
+        - Avoid hardcoded credentials (use environment variables or config server)
+        - Use appropriate logging levels
+        - Configure appropriate connection pool settings
+        - Use externalized configuration for environment-specific values
+        - Configure appropriate timeouts for external services
+        - Use appropriate caching strategies
+        - Configure proper security settings
+        - Use appropriate profile-specific configurations
+        - Document non-obvious configuration properties
+
+    - path: "src/main/java/**/exception/**/*.java"
+      instructions: |
+        For exception handling:
+        - Implement a proper exception hierarchy
+        - Use meaningful exception messages
+        - Include relevant context in exceptions
+        - Implement proper global exception handling
+        - Use appropriate HTTP status codes for REST exceptions
+        - Avoid exposing sensitive information in error responses
+        - Consider using @ControllerAdvice or @RestControllerAdvice
+        - Log exceptions appropriately
+        - Implement proper error response format

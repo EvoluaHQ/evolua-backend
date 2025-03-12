@@ -1,0 +1,183 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for Next.js projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to Next.js projects
+  custom_instructions: |
+    Focus on Next.js-specific patterns and best practices:
+    - Proper usage of App Router vs Pages Router features
+    - Server Components vs Client Components usage
+    - Next.js data fetching patterns and caching strategies
+    - Routing and navigation best practices
+    - Image optimization with next/image
+    - Performance optimization techniques (including Core Web Vitals)
+    - Proper state management
+    - ESLint rules compliance (next/core-web-vitals)
+    - Metadata API usage
+    - Server Actions implementation
+    - Route handlers (API routes) practices
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!node_modules/**"
+    - "!.next/**"
+    - "!out/**"
+    - "!coverage/**"
+    - "!**/*.test.ts"
+    - "!**/*.test.tsx"
+    - "!**/*.spec.ts"
+    - "!**/*.spec.tsx"
+    - "app/**/*.{ts,tsx,js,jsx}" # App Router files
+    - "pages/**/*.{ts,tsx,js,jsx}" # Pages Router files
+    - "components/**/*.{ts,tsx,js,jsx}"
+    - "lib/**/*.{ts,tsx,js,jsx}"
+    - "utils/**/*.{ts,tsx,js,jsx}"
+    - "hooks/**/*.{ts,tsx,js,jsx}"
+    - "public/**/*.{svg,png,jpg,jpeg}" # Static assets
+    - ".eslintrc.{js,json}" # ESLint config
+    - "next.config.{js,mjs,ts}" # Next.js config
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "app/**/*.{ts,tsx,js,jsx}"
+      instructions: |
+        For Next.js App Router files:
+        - Ensure proper file naming conventions for special files (layout, page, loading, error, not-found)
+        - Use Server Components by default unless client interactivity is needed
+        - Implement proper 'use client' directives only when necessary
+        - Use proper data fetching patterns (fetch with caching and revalidation options)
+        - Implement proper metadata using the Metadata API
+        - Use React Server Components effectively (avoid useState, useEffect, etc. in server components)
+        - Implement proper error handling with error.tsx boundary files
+        - Use proper parallel and intercepted routes when appropriate
+        - Implement proper loading states with loading.tsx files
+        - Use the route segment config options appropriately (dynamic, fetchCache, preferredRegion, etc.)
+
+    - path: "app/**/route.{ts,js}"
+      instructions: |
+        For Next.js Route Handlers:
+        - Implement proper request validation
+        - Return appropriate Response objects with correct status codes
+        - Use proper caching headers
+        - Implement proper CORS configuration when needed
+        - Use structured error handling
+        - Handle different HTTP methods appropriately
+        - Use Edge Runtime or Node.js Runtime appropriately based on requirements
+        - Consider using zod or similar for request validation
+        - Implement proper authentication checks
+
+    - path: "app/**/actions.{ts,js}"
+      instructions: |
+        For Server Actions:
+        - Use 'use server' directive properly
+        - Implement proper form validation
+        - Return appropriate response values and errors
+        - Use proper error handling with try/catch
+        - Consider optimistic updates on the client
+        - Implement proper authentication and authorization checks
+        - Use revalidatePath or revalidateTag when data changes
+        - Consider progressive enhancement for forms
+        - Use FormData effectively
+        - Consider implementing proper TypeScript types for action parameters and return values
+
+    - path: "pages/**/*.{ts,tsx,js,jsx}"
+      instructions: |
+        For Next.js Pages Router files:
+        - Use appropriate data fetching methods (getServerSideProps, getStaticProps, getStaticPaths)
+        - Implement proper SEO with next/head or Head component
+        - Handle loading and error states properly
+        - Optimize for Core Web Vitals (LCP, FID, CLS)
+        - Consider implementing ISR where appropriate
+        - Use proper client-side navigation with next/link
+        - Consider using SWR or React Query for client-side data fetching
+        - Avoid mixing App Router and Pages Router patterns
+        - Use proper route and query parameters
+
+    - path: "pages/api/**/*.{ts,js}"
+      instructions: |
+        For Next.js API Routes:
+        - Implement proper request validation
+        - Return appropriate status codes and responses
+        - Handle different HTTP methods appropriately
+        - Implement proper authentication and authorization
+        - Use proper error handling
+        - Consider rate limiting for public endpoints
+        - Implement proper CORS configuration when needed
+        - Consider using middleware for common API functionalities
+        - Structure API responses consistently
+
+    - path: "components/**/*.{ts,tsx,js,jsx}"
+      instructions: |
+        For React components:
+        - Mark client components with 'use client' directive when needed
+        - Ensure proper prop typing with TypeScript
+        - Implement proper error boundaries
+        - Use React hooks correctly (follow rules of hooks)
+        - Optimize renders with useMemo, useCallback, and memo where appropriate
+        - Implement proper event handling
+        - Consider accessibility (ARIA attributes, keyboard navigation, etc.)
+        - Avoid using browser-only APIs in Server Components
+        - Use proper state management patterns (Context, Redux, Zustand, etc.)
+        - Consider component composition and reusability
+
+    - path: "lib/**/*.{ts,js}"
+      instructions: |
+        For utility/library code:
+        - Ensure functions are properly typed
+        - Consider server/client usage boundaries
+        - Implement proper error handling
+        - Use async/await patterns correctly
+        - Consider performance implications for frequently used utilities
+        - Write pure functions where possible
+        - Implement proper logging
+        - Consider unit testing critical utilities
+        - Use proper imports to avoid unnecessary bundling
+
+    - path: "next.config.{js,mjs,ts}"
+      instructions: |
+        For Next.js configuration:
+        - Use appropriate compiler options
+        - Configure proper image domains and remote patterns
+        - Set up appropriate redirects and rewrites
+        - Configure proper environment variables
+        - Use appropriate experimental features
+        - Configure proper output modes (standalone, export)
+        - Set up appropriate headers for security
+        - Configure proper internationalization settings
+        - Use appropriate transpilation and module resolution settings
+        - Consider proper webpack or Turbopack customizations
+
+    - path: ".eslintrc.{js,json}"
+      instructions: |
+        For ESLint configuration:
+        - Ensure 'next/core-web-vitals' is extended for strict rules
+        - Configure appropriate linting rules for React and JavaScript/TypeScript
+        - Consider using additional plugins for better linting
+        - Ensure proper configuration for handling both client and server components
+        - Set up appropriate rules for accessibility
+        - Configure proper rules for import order
+        - Consider using ESLint for detecting performance issues
+        - Set up appropriate rules for handling promises and async code
+        - Ensure proper rules for React hooks
+
+    - path: "**/*.css"
+      instructions: |
+        For CSS files:
+        - Follow CSS module patterns when appropriate
+        - Use CSS variables for theming
+        - Consider mobile-first approach
+        - Optimize for performance (avoid excessive animations, large CSS files, etc.)
+        - Ensure proper responsive design
+        - Consider using utility classes approach (like Tailwind)
+        - Ensure proper specificity management
+        - Consider using modern CSS features (grid, flexbox, etc.)
+        - Ensure proper media queries for responsive design

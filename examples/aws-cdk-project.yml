@@ -1,0 +1,166 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for AWS CDK projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to AWS CDK projects
+  custom_instructions: |
+    Focus on AWS CDK specific patterns and best practices:
+    - Proper construct composition and hierarchy
+    - Resource property configuration best practices
+    - CDK escape hatches and when they should be avoided
+    - Proper IAM permission management
+    - Environment-aware constructs
+    - CloudFormation resource limits and quotas
+    - Resource naming and tagging consistency
+    - CDK cross-stack references
+    - Security best practices for AWS resources
+    - Cost optimization for AWS resources
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!node_modules/**"
+    - "!cdk.out/**" # CDK output directory
+    - "!.git/**"
+    - "!coverage/**"
+    - "!**/*.test.ts" # Test files
+    - "!**/*.spec.ts"
+    - "!**/*.d.ts" # TypeScript declaration files
+    - "lib/**/*.ts" # CDK stack code
+    - "bin/**/*.ts" # CDK app entry point
+    - "src/**/*.ts" # Source code
+    - "cdk.json" # CDK configuration
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "bin/**/*.ts"
+      instructions: |
+        For CDK app entry points:
+        - Ensure proper environment configuration
+        - Check for proper stack dependencies
+        - Verify proper tag propagation
+        - Ensure proper error handling
+        - Avoid hardcoded account IDs and regions
+        - Use proper CDK context values for environment-specific configurations
+        - Consider using CDK pipelines for deployment
+        - Ensure proper termination protection for production stacks
+        - Validate stack naming conventions
+
+    - path: "lib/**/*-stack.ts"
+      instructions: |
+        For CDK stack definitions:
+        - Ensure logical resource organization by purpose
+        - Check for proper stack dependencies
+        - Validate appropriate resource removal policies
+        - Check for excessive resource count (CloudFormation limits)
+        - Ensure proper use of CDK context
+        - Verify appropriate use of Parameters, Conditions, and Mappings
+        - Validate cross-stack references
+        - Check for proper error handling and resource dependencies
+        - Ensure all resources are properly tagged
+        - Use constructs at appropriate abstraction levels
+
+    - path: "lib/**/*-construct.ts"
+      instructions: |
+        For custom constructs:
+        - Ensure constructs follow the "composition is better than inheritance" principle
+        - Validate proper prop validation
+        - Check for proper resource encapsulation
+        - Ensure constructs properly expose necessary properties and methods
+        - Validate appropriate use of construct scope
+        - Check for proper initialization order of dependent resources
+        - Ensure proper implementation of the Builder pattern where appropriate
+        - Verify appropriate use of interfaces for props
+        - Validate defensive coding patterns
+        - Check for proper implementation of CDK aspects if used
+
+    - path: "**/iam/**/*.ts"
+      instructions: |
+        For IAM-related code:
+        - Follow principle of least privilege
+        - Avoid wildcard permissions (Resource: "*", Action: "*")
+        - Ensure role trust policies are properly restricted
+        - Check for proper implementation of resource-based policies
+        - Validate proper use of managed policies vs inline policies
+        - Check for potential privilege escalation
+        - Ensure temporary credentials are used appropriately
+        - Validate proper IAM permission boundaries
+        - Check for proper use of service role patterns
+
+    - path: "**/*-lambda.ts"
+      instructions: |
+        For Lambda function constructs:
+        - Ensure proper configuration of memory and timeout
+        - Validate appropriate error handling
+        - Check for appropriate VPC configuration
+        - Ensure proper layer usage
+        - Validate appropriate environment variable usage
+        - Check for appropriate dead letter queue configuration
+        - Ensure proper permission configuration
+        - Validate proper log configuration
+        - Check for appropriate retry and failure handling strategies
+        - Ensure appropriate tracing configuration
+
+    - path: "**/*-api.ts"
+      instructions: |
+        For API Gateway/AppSync constructs:
+        - Ensure proper authentication and authorization
+        - Validate appropriate throttling settings
+        - Check for proper CORS configuration
+        - Ensure proper error responses
+        - Validate proper logging and monitoring
+        - Check for proper request validation
+        - Ensure appropriate caching strategy
+        - Validate proper usage of mapping templates
+        - Check for appropriate integration response handling
+        - Ensure proper security headers
+
+    - path: "**/*-database.ts"
+      instructions: |
+        For database constructs:
+        - Ensure proper backup and restore configuration
+        - Validate appropriate scaling configuration
+        - Check for proper encryption settings
+        - Ensure proper deletion protection
+        - Validate appropriate connection handling
+        - Check for proper performance optimization settings
+        - Ensure proper monitoring and alerting
+        - Validate proper access patterns
+        - Check for appropriate multi-AZ/high availability configuration
+        - Ensure proper update and maintenance strategies
+
+    - path: "cdk.json"
+      instructions: |
+        For CDK configuration:
+        - Ensure proper CDK context values
+        - Validate appropriate feature flags
+        - Check for proper stack synthesis configuration
+        - Ensure appropriate asset handling configuration
+        - Validate proper environment configuration
+        - Check for appropriate bootstrapping configuration
+        - Ensure proper watch configuration
+        - Validate appropriate diff configuration
+        - Check for proper plugin configuration
+
+    - path: "**/*.ts"
+      instructions: |
+        For general CDK TypeScript code:
+        - Use CDK annotations (Annotations.of(scope).addWarning/Error) for runtime warnings
+        - Implement proper error handling for asynchronous operations
+        - Use proper CDK escape hatches only when necessary
+        - Ensure proper use of CDK's TagManager for resource tagging
+        - Validate proper use of CDK's PhysicalName for resource naming
+        - Check for proper handling of CloudFormation parameters
+        - Ensure appropriate use of CDK's Duration, Size, and other helper classes
+        - Use token resolution appropriately
+        - Follow proper patterns for custom resources
+        - Implement proper validation for user inputs
+        - Consider using CDK Aspects for cross-cutting concerns

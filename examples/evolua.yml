@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Evolua Configuration File
+# Place this file in the root of your repository
+
+review:
+  # Choose review strictness: 'standard' or 'strict'
+  profile: standard
+
+  # Review language
+  language: en
+
+  # Custom instructions for all reviews
+  custom_instructions: |
+    Pay attention to error handling and edge cases.
+    Suggest more readable alternatives when code is complex.
+    Consider backward compatibility when suggesting changes.
+
+  # Which types of issues to focus on
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Files to include or exclude (prefix with ! to exclude)
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!**/*.min.js"
+    - "!**/*.d.ts"
+    - "src/**"
+    - "lib/**"
+    - "api/**"
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "src/**/*.{ts,tsx}"
+      instructions: |
+        Ensure proper TypeScript type usage.
+        Check for null/undefined handling.
+        Verify proper async/await error handling.
+
+    - path: "api/**/*.js"
+      instructions: |
+        Check for proper input validation.
+        Ensure authentication and authorization are properly implemented.
+        Verify API endpoints follow RESTful principles.
+        Look for potential SQL injection or other security issues.
+
+    - path: "**/*.test.{js,ts}"
+      instructions: |
+        Ensure tests cover edge cases.
+        Check for proper mocking of dependencies.
+        Verify assertions are meaningful and specific.
