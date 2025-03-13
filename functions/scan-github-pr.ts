@@ -15,6 +15,7 @@
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
+import { Octokit } from "@octokit/rest";
 import { Sema } from "async-sema";
 import { EventBridgeEvent } from "aws-lambda";
 import { ulid } from "ulid";
@@ -95,7 +96,7 @@ const _handler = async (event: Event, context: any) => {
     const installationId = input.installation_id;
     const ghAppId = context.GITHUB_APP_ID;
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
-    const octokit = await init(ghAppId, ghPrivateKey, installationId);
+    const octokit: Octokit = await init(ghAppId, ghPrivateKey, installationId);
 
     logger.debug("Fetching PR details from GitHub");
 
@@ -228,11 +229,8 @@ const _handler = async (event: Event, context: any) => {
       await submitPRReview(owner, repo, pullNumber, results);
     } else {
       logger.info("No issues found, skipping review submission");
-    
-      await commentOnPR(
-        pullRequest.node_id,
-        "No issues found, good job! 👍"
-      );
+
+      await commentOnPR(pullRequest.node_id, "No issues found, good job! 👍");
     }
 
     // Calculate final metrics
@@ -307,7 +305,7 @@ const analyzeFile = async (
     content: string;
     repository: { owner_login: string; name: string };
     headSha: string;
-    octokit: any;
+    octokit: Octokit;
   }
 ): Promise<Findings | null> => {
   const startTime = Date.now();

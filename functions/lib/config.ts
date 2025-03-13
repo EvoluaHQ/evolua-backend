@@ -25,7 +25,7 @@ export async function loadConfigFromGitHub(
     const response = await octokit.repos.getContent({
       owner,
       repo,
-      path: "evolua.yml",
+      path: ".evolua.yml",
       ref,
     });
 

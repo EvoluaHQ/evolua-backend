@@ -1,6 +1,6 @@
 import { Logger } from "@aws-lambda-powertools/logger";
 import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/core";
+import { Octokit } from "@octokit/rest";
 /**
  * Fetch all PR files with changes
  */
