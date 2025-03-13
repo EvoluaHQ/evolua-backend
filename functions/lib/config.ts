@@ -86,9 +86,36 @@ export function mergeWithDefaultConfig(
       mergedConfig.review.custom_instructions =
         userConfig.review.custom_instructions;
 
-    // Path filters
-    if (userConfig.review.path_filters)
-      mergedConfig.review.path_filters = userConfig.review.path_filters;
+    // Path filters - keep both default and user filters
+    // User excludes (starting with !) are added to default excludes
+    // User includes (not starting with !) are kept as is
+    if (
+      userConfig.review.path_filters &&
+      userConfig.review.path_filters.length > 0
+    ) {
+      const defaultFilters = mergedConfig.review.path_filters || [];
+      const userFilters = userConfig.review.path_filters;
+
+      // Extract default excludes (starting with !)
+      const defaultExcludes = defaultFilters.filter((pattern) =>
+        pattern.startsWith("!")
+      );
+
+      // Extract user excludes and includes
+      const userExcludes = userFilters.filter((pattern) =>
+        pattern.startsWith("!")
+      );
+      const userIncludes = userFilters.filter(
+        (pattern) => !pattern.startsWith("!")
+      );
+
+      // Combine: Put excludes first (both default and user), then includes
+      mergedConfig.review.path_filters = [
+        ...defaultExcludes,
+        ...userExcludes,
+        ...userIncludes,
+      ];
+    }
 
     // Path instructions
     if (userConfig.review.path_instructions)
@@ -108,17 +135,23 @@ export function mergeWithDefaultConfig(
 }
 
 /**
- * Updates the file filter configuration based on the config file's path_filters property
+ * Unified file filtering function using path_filters to determine if files should be skipped
  *
- * @param config - The evolua configuration
- * @param filePath - The path of the file being analyzed
+ * @param filePath - The path of the file to check
+ * @param config - The evolua configuration (or undefined if not yet loaded)
  * @returns True if the file should be skipped, false otherwise
  */
 export function shouldSkipFileBasedOnConfig(
-  config: EvoluaConfig,
-  filePath: string
+  filePath: string,
+  config?: EvoluaConfig
 ): boolean {
-  if (!config.review.path_filters || config.review.path_filters.length === 0) {
+  // Start with the default config path filters
+  const defaultPathFilters = DEFAULT_CONFIG.review.path_filters || [];
+
+  // If there's a user config, use its path_filters (if any) or fall back to the defaults
+  const pathFilters = config?.review.path_filters || defaultPathFilters;
+
+  if (!pathFilters || pathFilters.length === 0) {
     return false;
   }
 
@@ -126,7 +159,7 @@ export function shouldSkipFileBasedOnConfig(
   const exclude: string[] = [];
 
   // Split filters into includes and excludes
-  config.review.path_filters.forEach((pattern) => {
+  pathFilters.forEach((pattern) => {
     if (pattern.startsWith("!")) {
       exclude.push(pattern.substring(1));
     } else {
@@ -136,11 +169,13 @@ export function shouldSkipFileBasedOnConfig(
 
   // If there are includes and the file doesn't match any, skip it
   if (include.length > 0 && !matchesAnyPattern(filePath, include)) {
+    logger.debug(`Skipping file not matching any include pattern: ${filePath}`);
     return true;
   }
 
   // If the file matches any exclude pattern, skip it
   if (exclude.length > 0 && matchesAnyPattern(filePath, exclude)) {
+    logger.debug(`Skipping file matching exclude pattern: ${filePath}`);
     return true;
   }
 

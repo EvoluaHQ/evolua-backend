@@ -83,5 +83,45 @@ export const DEFAULT_CONFIG: EvoluaConfig = {
       best_practices: true,
       performance: true,
     },
+    // Add default path filters that exclude common non-reviewable files and directories
+    path_filters: [
+      // Exclude common package manager lock files
+      "!package-lock.json",
+      "!yarn.lock",
+      "!pnpm-lock.yaml",
+      "!composer.lock",
+      "!Gemfile.lock",
+      "!poetry.lock",
+
+      // Exclude common config files
+      "!.gitignore",
+      "!.npmrc",
+      "!.yarnrc",
+      "!LICENSE",
+
+      // Exclude common build and dependency directories
+      "!dist/**",
+      "!build/**",
+      "!coverage/**",
+      "!node_modules/**",
+      "!.next/**",
+      "!public/**",
+
+      // Exclude common binary/asset file types
+      "!**/*.map",
+      "!**/*.min.js",
+      "!**/*.min.css",
+      "!**/*.svg",
+      "!**/*.png",
+      "!**/*.jpg",
+      "!**/*.jpeg",
+      "!**/*.gif",
+      "!**/*.ico",
+      "!**/*.pdf",
+      "!**/*.ttf",
+      "!**/*.woff",
+      "!**/*.woff2",
+      "!**/*.eot",
+    ],
   },
 };
