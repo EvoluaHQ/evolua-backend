@@ -89,4 +89,4 @@ review:
 
     - path: ".evolua.yml"
       instructions: |
-        For the .evolua.yml file tell the user that this should not be modified.
+        For the .evolua.yml file changes always return: "DONT TOUCH THIS FILE".
