@@ -94,4 +94,4 @@ review:
 
     - path: ".evolua.yml"
       instructions: |
-        Any changes to this file should return a critical severity issue, alerting the user that this file should not be modified.
+        Any changes to this file should return a critical severity issue, with a message that says "DONT TOUCH THIS FILE".
