@@ -1,0 +1,121 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Evolua Configuration",
+    "description": "Configuration options for Evolua code reviews",
+    "type": "object",
+    "properties": {
+        "review": {
+            "type": "object",
+            "description": "Settings related to code reviews",
+            "properties": {
+                "profile": {
+                    "type": "string",
+                    "enum": [
+                        "standard",
+                        "strict"
+                    ],
+                    "default": "standard",
+                    "description": "Sets how strict the reviews should be. Use 'strict' for more thorough reviews that catch minor issues."
+                },
+                "language": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+                    "default": "en",
+                    "description": "Specifies the language for reviews (ISO 639-1 code, optionally with region code like 'en-US')."
+                },
+                "custom_instructions": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 3000,
+                    "description": "Custom instructions to add to all code reviews. Limited to 3000 characters."
+                },
+                "focus_areas": {
+                    "type": "object",
+                    "description": "Configure which types of issues the AI should focus on",
+                    "properties": {
+                        "security": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Focus on security vulnerabilities"
+                        },
+                        "code_quality": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Focus on code quality issues"
+                        },
+                        "best_practices": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Focus on best practices"
+                        },
+                        "performance": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Focus on performance optimizations"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "path_filters": {
+                    "type": "array",
+                    "description": "Include or exclude files from analysis using glob patterns. Patterns starting with '!' exclude files.",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^(!?[^\\s]+)$",
+                        "description": "Glob pattern format (e.g., '**/*.js', '!node_modules/**')"
+                    },
+                    "examples": [
+                        [
+                            "!node_modules/**",
+                            "!dist/**",
+                            "src/**/*.{js,ts}",
+                            "lib/**/*.js"
+                        ]
+                    ]
+                },
+                "path_instructions": {
+                    "type": "array",
+                    "description": "Special instructions for specific file paths",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "path",
+                            "instructions"
+                        ],
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "pattern": "^[^\\s]+$",
+                                "description": "Glob pattern for matching files (e.g., 'src/**/*.js', 'api/**/*.ts')"
+                            },
+                            "instructions": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 3000,
+                                "description": "Special instructions for matching files, up to 3000 characters"
+                            }
+                        },
+                        "additionalProperties": false
+                    },
+                    "examples": [
+                        [
+                            {
+                                "path": "src/**/*.{ts,tsx}",
+                                "instructions": "Ensure proper TypeScript type usage.\nCheck for null/undefined handling."
+                            },
+                            {
+                                "path": "api/**/*.js",
+                                "instructions": "Check for proper input validation.\nVerify API endpoints follow RESTful principles."
+                            }
+                        ]
+                    ]
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "required": [
+        "review"
+    ],
+    "additionalProperties": false
+}

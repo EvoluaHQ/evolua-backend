@@ -1,0 +1,310 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for LangChain JavaScript/TypeScript projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to LangChain JS projects
+  custom_instructions: |
+    Focus on LangChain JS-specific patterns and best practices:
+    - Proper chain composition and orchestration
+    - Schema definition for structured outputs
+    - Prompt engineering and template usage
+    - Memory mechanisms and state management
+    - Proper error handling and fallback strategies
+    - Output parsing and response formatting
+    - LLM integration best practices
+    - Vector store and embedding usage
+    - Agent development and tool integration
+    - Retrieval patterns and RAG implementations
+    - Integration with external APIs and services
+    - Performance optimization for chain execution
+    - Testing and evaluation of LLM applications
+    - Proper usage of ES modules and CommonJS compatibility
+    - TypeScript type safety and interfaces
+    - LangChain entrypoint structure
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!.turbo/**"
+    - "!coverage/**"
+    - "!**/*.spec.ts"
+    - "!**/*.test.ts"
+    - "!**/*.int.test.ts"
+    - "src/**/*.ts"
+    - "src/**/*.js"
+    - "examples/**/*.ts"
+    - "examples/**/*.js"
+    - ".env.example"
+    - "package.json"
+    - "tsconfig.json"
+    - ".eslintrc.{js,json}"
+    - "jest.config.{js,ts}"
+    - ".prettierrc"
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "**/chains/**/*.{ts,js}"
+      instructions: |
+        For LangChain Chain files:
+        - Ensure proper chain composition and error handling
+        - Use appropriate callbacks for logging and tracing
+        - Consider memory implementations for stateful chains
+        - Implement proper input/output schemas
+        - Use LangSmith for tracing where appropriate
+        - Consider chain serialization for production deployments
+        - Ensure proper timeout and retry mechanisms
+        - Implement proper error messages for user feedback
+        - Consider streaming responses for large outputs
+        - Implement proper TypeScript interfaces for inputs/outputs
+        - Consider cost and token usage optimizations
+        - Use proper pipe methods for chain composition
+        - Follow proper imports from entrypoints (e.g., "langchain/chains")
+
+    - path: "**/prompts/**/*.{ts,js}"
+      instructions: |
+        For Prompt Template files:
+        - Use structured prompt templates with clear input variables
+        - Consider using few-shot examples with FewShotPromptTemplate
+        - Implement proper input validation
+        - Use template formatting best practices
+        - Consider using ChatPromptTemplate for chat models
+        - Implement proper documentation of prompt structure
+        - Consider reusability and modularity of prompts
+        - Use proper escape characters for special tokens
+        - Consider internationalization if applicable
+        - Use SemanticSimilarityExampleSelector for dynamic example selection
+        - Follow proper imports from entrypoints (e.g., "langchain/prompts")
+        - Consider using PromptTemplate.fromTemplate() for simpler templates
+
+    - path: "**/schema/**/*.{ts,js}"
+      instructions: |
+        For Schema Definition files:
+        - Define clear and unambiguous schema properties
+        - Use proper TypeScript types for each property
+        - Include descriptive documentation for each field
+        - Use enum values where appropriate to restrict outputs
+        - Specify required fields explicitly
+        - Consider using proper interfaces or types
+        - Implement proper error handling for schema validation
+        - Consider nested schemas for complex structures
+        - Use proper default values where appropriate
+        - Consider schema evolution and backward compatibility
+        - Use proper interfaces/types for extraction
+        - Follow proper imports from entrypoints (e.g., "langchain/schema")
+
+    - path: "**/agents/**/*.{ts,js}"
+      instructions: |
+        For Agent files:
+        - Implement proper tool definitions with clear descriptions
+        - Use appropriate agent executor for the use case
+        - Consider ReAct or other reasoning patterns
+        - Implement proper stopping criteria
+        - Use appropriate prompts for agent instructions
+        - Consider agent memory for multi-turn interactions
+        - Implement proper error handling for tool execution
+        - Use appropriate model selection for agent reasoning
+        - Consider human-in-the-loop patterns where appropriate
+        - Implement proper logging of agent actions
+        - Use proper output parsing for structured responses
+        - Follow proper imports from entrypoints (e.g., "langchain/agents")
+
+    - path: "**/retrievers/**/*.{ts,js}"
+      instructions: |
+        For Retrieval files:
+        - Implement proper vector store integration
+        - Consider metadata filtering for retrieval as shown in documentation
+        - Use appropriate similarity metrics
+        - Implement proper chunking strategies
+        - Consider hybrid search approaches
+        - Use proper embedding models for the domain
+        - Implement proper caching for retrievals
+        - Consider reranking for improved relevance
+        - Use proper indexing strategies for performance
+        - Implement proper error handling for retrieval failures
+        - Consider self-query implementations like SelfQueryRetriever
+        - Implement proper AttributeInfo definitions for structured retrieval
+        - Follow proper imports from entrypoints (e.g., "langchain/retrievers")
+
+    - path: "**/vectorstores/**/*.{ts,js}"
+      instructions: |
+        For Vector Store files:
+        - Use appropriate vector store implementation (Chroma, Convex, etc.)
+        - Implement proper document loading and storing logic
+        - Consider metadata filtering capabilities
+        - Use proper similarity search methods
+        - Consider MMR retrieval for diversity
+        - Implement proper error handling for DB operations
+        - Consider proper deletion and update strategies
+        - Use appropriate vector store initialization
+        - Consider persistence mechanisms
+        - Implement proper interface with embedding models
+        - Follow proper imports from entrypoints (e.g., "langchain/vectorstores")
+
+    - path: "**/models/**/*.{ts,js}"
+      instructions: |
+        For Model Integration files:
+        - Use appropriate model for the task (consideration of capabilities)
+        - Implement proper API key management through environment variables
+        - Consider caching mechanisms for responses
+        - Use appropriate temperature and other generation parameters
+        - Implement proper error handling for API failures
+        - Consider token limit constraints
+        - Use streaming for long responses where appropriate
+        - Implement proper timeout mechanisms
+        - Consider fallback models for reliability
+        - Use proper model versioning
+        - Consider cost optimization strategies
+        - Follow proper imports from entrypoints (e.g., "langchain/llms", "langchain/chat_models")
+
+    - path: "**/output_parsers/**/*.{ts,js}"
+      instructions: |
+        For Output Parser files:
+        - Define clear output schemas for structured parsing
+        - Implement proper error handling for parsing failures
+        - Consider retry mechanisms with refined instructions
+        - Use appropriate parser for the output format (JSON, YAML, etc.)
+        - Implement proper typing for parsed outputs
+        - Consider using structured parsers with defined schemas
+        - Use structured formatters in prompts
+        - Implement proper feedback for parsing errors
+        - Consider using StructuredOutputParser or similar
+        - Use proper debugging for parsing issues
+        - Consider fallback parsing strategies
+        - Follow proper imports from entrypoints (e.g., "langchain/output_parsers")
+
+    - path: "**/memory/**/*.{ts,js}"
+      instructions: |
+        For Memory Component files:
+        - Use appropriate memory implementation for the use case
+        - Implement proper state management
+        - Consider token limitations in memory storage
+        - Use proper serialization for persistent memory
+        - Implement proper memory window size
+        - Consider entity extraction for targeted memory
+        - Use appropriate message history formatting
+        - Implement proper memory pruning strategies
+        - Consider privacy and data retention policies
+        - Use proper error handling for memory operations
+        - Consider memory vectorization for semantic retrieval
+        - Follow proper imports from entrypoints (e.g., "langchain/memory")
+
+    - path: "**/embeddings/**/*.{ts,js}"
+      instructions: |
+        For Embedding files:
+        - Use appropriate embedding model for the domain
+        - Consider dimensionality and performance tradeoffs
+        - Implement proper caching for embeddings
+        - Use batching for efficient embedding generation
+        - Consider model quantization for performance
+        - Implement proper error handling for embedding failures
+        - Use appropriate text preprocessing
+        - Consider multilingual capabilities if needed
+        - Use proper versioning for embedding models
+        - Consider chunking strategies for large texts
+        - Consider cost optimization strategies
+        - Follow proper imports from entrypoints (e.g., "langchain/embeddings")
+
+    - path: "src/**/index.{ts,js}"
+      instructions: |
+        For Entrypoint files:
+        - Ensure proper exports for all public API components
+        - Consider including proper documentation for the module
+        - Ensure TypeScript types are properly exported
+        - Consider backward compatibility for existing users
+        - Use consistent export patterns
+        - Avoid circular dependencies
+        - Ensure proper re-exporting from sub-modules
+        - Consider organization of exports (group related functionality)
+        - Follow LangChain's entrypoint structure guidelines
+        - Ensure file is included in the langchain/scripts/create-entrypoints.js script
+        - Consider exposing most useful or common components
+
+    - path: "examples/**/*.{ts,js}"
+      instructions: |
+        For Example files:
+        - Include clear documentation and explanations
+        - Organize code logically with clear sections
+        - Hide or externalize API keys and secrets
+        - Include setup requirements and instructions
+        - Implement proper error handling and explanations
+        - Use clear console output examples
+        - Consider using LangSmith for tracing and debugging
+        - Include proper comments explaining key concepts
+        - Consider performance implications of operations
+        - Include references to relevant documentation
+        - Use proper imports from public entrypoints
+        - Consider making examples runnable out-of-the-box
+
+    - path: "package.json"
+      instructions: |
+        For Package Configuration:
+        - Specify appropriate LangChain version dependencies
+        - Include all necessary dependencies with version constraints
+        - Configure development dependencies separately
+        - Set up proper scripts for testing, building, and linting
+        - Ensure proper module type configuration
+        - Configure proper package exports
+        - Set up proper TypeScript configuration
+        - Set up proper package metadata (name, description, license)
+        - Consider optional dependencies for different features
+        - Use appropriate Node.js version requirements
+        - Ensure proper build output configuration
+
+    - path: "tsconfig.json"
+      instructions: |
+        For TypeScript Configuration:
+        - Ensure strict type checking is enabled
+        - Configure proper module resolution
+        - Set up proper source and output directories
+        - Configure proper lib options for the target environment
+        - Consider ESM compatibility settings
+        - Set up proper path aliases if used
+        - Configure proper declaration file generation
+        - Consider appropriate TypeScript target version
+        - Set up proper include/exclude patterns
+        - Consider sourceMap configuration for debugging
+        - Configure proper strict null checks and other strict options
+
+    - path: "tests/**/*.{test,spec}.{ts,js}"
+      instructions: |
+        For Test files:
+        - Implement proper mocking of LLM calls
+        - Use appropriate test fixtures
+        - Consider using Jest or testing utilities
+        - Test for proper error handling
+        - Use parameterized tests for different scenarios
+        - Implement proper isolation for tests
+        - Consider using LangSmith for evaluation
+        - Test for edge cases and failure modes
+        - Implement proper assertions for expected outputs
+        - Consider testing for different model behaviors
+        - Use proper setup and teardown for resources
+        - Separate unit tests from integration tests
+        - Consider test timeouts for asynchronous operations
+        - Follow proper test naming conventions
+        - Properly mock external dependencies
+
+    - path: ".eslintrc.{js,json}"
+      instructions: |
+        For ESLint Configuration:
+        - Configure proper TypeScript support
+        - Set up appropriate rules for code quality
+        - Configure proper import sorting
+        - Set up proper formatting rules
+        - Consider using eslint-plugin-prettier for integration
+        - Configure proper rules for async/await usage
+        - Set up proper handling of promise rejection
+        - Configure proper environment settings
+        - Consider using recommended rule sets
+        - Set up proper rules for TypeScript specific features
+        - Consider using eslint-plugin-import for better import handling

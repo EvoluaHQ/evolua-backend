@@ -1,0 +1,246 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for NestJS projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to NestJS projects
+  custom_instructions: |
+    Focus on NestJS-specific patterns and best practices:
+    - Proper usage of NestJS decorators
+    - Dependency injection principles
+    - Module organization and architecture
+    - Exception filters and error handling
+    - Request validation using ValidationPipe and class-validator
+    - DTOs and data transformation with class-transformer
+    - Guards, interceptors, and middleware implementation
+    - Configuration management with @nestjs/config
+    - Database integration (TypeORM/Mongoose/Prisma)
+    - GraphQL implementation patterns
+    - Mapped types for CRUD operations
+    - API documentation with Swagger/OpenAPI
+    - Microservices architecture patterns
+    - Testing best practices
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!coverage/**"
+    - "!**/*.spec.ts" # Exclude test files
+    - "!**/*.e2e-spec.ts" # Exclude e2e test files
+    - "src/**/*.ts" # Include all TypeScript files
+    - "nest-cli.json" # NestJS CLI configuration
+    - ".eslintrc.js" # ESLint configuration
+    - "tsconfig.json" # TypeScript configuration
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "src/**/*.controller.ts"
+      instructions: |
+        For NestJS Controllers:
+        - Ensure proper request validation using class-validator and DTOs
+        - Use appropriate HTTP status codes for responses
+        - Keep controllers thin (business logic should be in services)
+        - Use appropriate NestJS decorators (@Controller, @Get, @Post, etc.)
+        - Implement proper error handling
+        - Document API endpoints with Swagger decorators (@ApiTags, @ApiOperation, etc.)
+        - Ensure proper authentication and authorization checks
+        - Use @Param, @Query, and @Body with appropriate validation pipes
+        - Consider using custom decorators for repetitive patterns
+        - Use proper response transformations with interceptors
+        - Consider using ParseIntPipe, ParseBoolPipe for explicit type conversion
+        - Implement proper file upload handling if applicable
+
+    - path: "src/**/*.service.ts"
+      instructions: |
+        For NestJS Services:
+        - Ensure proper dependency injection
+        - Implement proper error handling with NestJS exceptions (NotFoundException, BadRequestException, etc.)
+        - Use transactions for database operations where appropriate
+        - Ensure proper logging of errors and important events
+        - Keep methods focused and follow single responsibility principle
+        - Consider using repository pattern for database operations
+        - Implement proper retry and circuit breaker patterns for external services
+        - Use async/await properly for asynchronous operations
+        - Consider caching mechanisms for frequent operations
+        - Use OnModuleInit/OnModuleDestroy lifecycle hooks appropriately
+        - Consider using ConfigService for configuration values
+        - Implement proper cleanup in OnApplicationShutdown hooks
+
+    - path: "src/**/*.module.ts"
+      instructions: |
+        For NestJS Modules:
+        - Ensure proper organization of providers, controllers, and imports
+        - Check for circular dependencies
+        - Use forRoot/forFeature patterns for configurable modules
+        - Consider using dynamic modules where appropriate
+        - Ensure providers are properly scoped (default, request, transient)
+        - Use global modules where appropriate
+        - Consider lazy-loading for performance optimization
+        - Use proper exports to make providers available to other modules
+        - Ensure proper asynchronous module initialization with forRootAsync
+        - Use module reference for getting providers dynamically if needed
+        - Consider using ConfigModule for configuration management
+
+    - path: "src/**/*.dto.ts"
+      instructions: |
+        For Data Transfer Objects (DTOs):
+        - Use class-validator decorators for validation (@IsString, @IsEmail, etc.)
+        - Include clear validation messages
+        - Use class-transformer for serialization/deserialization (@Exclude, @Expose, etc.)
+        - Consider inheritance for related DTOs
+        - Document properties with JSDoc or Swagger decorators
+        - Use @Type() decorator for nested objects
+        - Consider using mapped types (PartialType, OmitType, PickType) for CRUD operations
+        - Use proper transformation options with ValidationPipe (whitelist, transform, etc.)
+        - Consider using @ValidateIf for conditional validation
+        - Use @ValidateNested for nested objects validation
+        - Consider using Joi for schema-based validation for configuration
+        - Use appropriate types for API documentation
+
+    - path: "src/**/*.entity.ts"
+      instructions: |
+        For Database Entities:
+        - Ensure proper column types and constraints
+        - Use indexes for frequently queried fields
+        - Implement proper relations between entities
+        - Consider using subscribers for complex entity behaviors
+        - Ensure proper validation at the database level
+        - Use appropriate decorators for the ORM (@Entity, @Column, etc.)
+        - Consider using migrations for database schema changes
+        - Use cascade options appropriately for related entities
+        - Implement soft delete where appropriate
+        - Consider using UUIDs for primary keys
+        - Use proper naming conventions for tables and columns
+        - Implement proper timestamp handling (created_at, updated_at)
+
+    - path: "src/**/config/**/*.ts"
+      instructions: |
+        For Configuration Management:
+        - Use @nestjs/config package for environment variables
+        - Implement validation for configuration using Joi or class-validator
+        - Use namespace configuration for different parts of the application
+        - Consider using custom configuration service for complex configurations
+        - Use proper environment-specific configuration
+        - Ensure sensitive information is not hardcoded
+        - Use ConfigService properly for accessing configuration values
+        - Consider using custom getter functions for configuration properties
+        - Implement proper validation of required environment variables
+        - Use proper defaults for optional configuration values
+        - Consider using custom validation function for complex validation rules
+        - Use expandVariables option for variable substitution
+
+    - path: "src/**/*.guard.ts"
+      instructions: |
+        For Guards:
+        - Ensure proper implementation of CanActivate interface
+        - Use dependency injection for required services
+        - Implement proper error handling
+        - Use ExecutionContext properly to access request
+        - Consider using metadata with SetMetadata/Reflector for custom decorators
+        - Ensure proper authentication and authorization checks
+        - Use custom decorators with guards for better code organization
+        - Consider using guard composition for complex authorization rules
+        - Implement proper response for unauthorized access (throw ForbiddenException)
+        - Use proper typing for guard context
+        - Consider performance implications of complex guards
+
+    - path: "src/**/*.interceptor.ts"
+      instructions: |
+        For Interceptors:
+        - Ensure proper implementation of NestInterceptor interface
+        - Use RxJS operators appropriately
+        - Implement proper error handling
+        - Consider using interceptors for response transformation
+        - Use timeout features for long-running operations
+        - Consider caching responses where appropriate
+        - Use logging interceptors for debugging
+        - Implement proper exception handling in catchError operator
+        - Consider using map operator for response transformation
+        - Use tap operator for side effects without modifying the response
+        - Consider performance implications of complex transformations
+
+    - path: "src/**/*.resolver.ts"
+      instructions: |
+        For GraphQL Resolvers:
+        - Use proper decorator patterns (@Resolver, @Query, @Mutation, etc.)
+        - Ensure proper type safety with TypeScript
+        - Use DataLoader pattern for N+1 query problems
+        - Implement proper error handling
+        - Use proper authentication and authorization
+        - Consider using @ResolveField for complex field resolution
+        - Use custom scalars for complex types
+        - Consider using directives for metadata
+        - Implement proper pagination for lists
+        - Use proper argument validation
+        - Consider using GraphQL subscribtions for real-time features
+        - Use proper nullability for fields
+
+    - path: "nest-cli.json"
+      instructions: |
+        For NestJS CLI Configuration:
+        - Configure proper source root and output directory
+        - Set up plugins correctly (@nestjs/graphql, etc.)
+        - Configure webpack options if needed
+        - Set up proper assets management
+        - Configure watch options for development
+        - Set up proper compilation options
+        - Consider using compilerOptions for path mapping
+        - Set up proper plugin options (introspectComments, etc.)
+        - Configure language service plugins if needed
+        - Consider using plugins for optimization
+        - Configure proper builder (swc, webpack)
+        - Set up proper project structure for monorepos
+
+    - path: "src/**/*.filter.ts"
+      instructions: |
+        For Exception Filters:
+        - Ensure proper implementation of ExceptionFilter interface
+        - Implement proper error response structure
+        - Use HttpException hierarchy for different error types
+        - Consider using global exception filters
+        - Log errors properly
+        - Ensure proper status codes for different exceptions
+        - Use proper content-type for responses
+        - Consider using custom exception classes
+        - Implement proper error serialization
+        - Use proper dependency injection if needed
+        - Consider environment-specific error details (less details in production)
+
+    - path: "src/**/*.middleware.ts"
+      instructions: |
+        For Middleware:
+        - Ensure proper implementation of NestMiddleware interface
+        - Use proper request and response typing
+        - Consider using functional middleware for simple cases
+        - Implement proper error handling
+        - Use next() properly to continue request processing
+        - Consider middleware order for dependencies
+        - Use proper dependency injection if needed
+        - Consider using middleware consumer for complex configurations
+        - Implement proper logging if needed
+        - Consider performance implications of complex middleware
+        - Use middleware for cross-cutting concerns (logging, authentication)
+
+    - path: "src/**/*.pipe.ts"
+      instructions: |
+        For Pipes:
+        - Ensure proper implementation of PipeTransform interface
+        - Implement proper validation logic
+        - Use transformation capabilities where needed
+        - Consider using built-in pipes (ValidationPipe, ParseIntPipe, etc.)
+        - Implement proper error handling
+        - Use metadata for validation schemas if needed
+        - Consider using global pipes for common validations
+        - Implement proper type conversion
+        - Use proper exception types for validation errors
+        - Consider performance implications for complex validations
+        - Use proper dependency injection if needed

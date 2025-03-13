@@ -7,6 +7,8 @@ import {
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { FileChanges, PRFileChanges } from "../types";
+import { DEFAULT_CONFIG, EvoluaConfig } from "../types/config";
+import { buildCustomInstructions, getPathInstructionsForFile } from "./config";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -80,18 +82,72 @@ export const initAnthropic = (apiKey: string) => {
 };
 
 /**
- * Analysis prompt template defining the expected response format
- * Uses a structured JSON schema for consistent and parseable results
- * Focuses on specific areas of code review and sets clear expectations
+ * Generates a customized system prompt based on the configuration
+ * @param config - The Evolua configuration (or undefined if not available)
+ * @param filePath - Optional file path for path-specific instructions
+ * @returns A tailored system prompt for the AI
  */
-export const SCAN_SYSTEM_PROMPT = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices. 
+export function generateSystemPrompt(
+  config?: EvoluaConfig,
+  filePath?: string
+): string {
+  // Use default config if none provided
+  const effectiveConfig = config || DEFAULT_CONFIG;
 
-Analysis Areas:
-1. Security: Identify vulnerabilities, data exposure, and unsafe operations
-2. Code Quality: Evaluate performance, maintainability, and error handling
-3. Best Practices: Assess adherence to design patterns and coding standards
+  // Base prompt that's always included
+  let prompt = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices.`;
 
-Guidelines:
+  // Add profile-specific guidance
+  if (effectiveConfig.review.profile === "strict") {
+    prompt += `\n\nYou should be extremely thorough and strict in your review, highlighting even minor issues that could be improved.`;
+  } else {
+    // Standard profile
+    prompt += `\n\nYou should focus on significant issues while ignoring trivial matters.`;
+  }
+
+  // Add focus areas section
+  let focusAreas = [];
+  const { focus_areas } = effectiveConfig.review;
+
+  if (focus_areas?.security)
+    focusAreas.push(
+      "Security: Identify vulnerabilities, data exposure, and unsafe operations"
+    );
+  if (focus_areas?.code_quality)
+    focusAreas.push(
+      "Code Quality: Evaluate performance, maintainability, and error handling"
+    );
+  if (focus_areas?.best_practices)
+    focusAreas.push(
+      "Best Practices: Assess adherence to design patterns and coding standards"
+    );
+  if (focus_areas?.performance)
+    focusAreas.push(
+      "Performance: Identify potential bottlenecks and inefficient code patterns"
+    );
+
+  if (focusAreas.length > 0) {
+    prompt += `\n\nAnalysis Areas:\n${focusAreas.map((area, i) => `${i + 1}. ${area}`).join("\n")}`;
+  }
+
+  // Add file-specific instructions if provided
+  if (filePath && effectiveConfig.review.path_instructions) {
+    const pathInstructions = getPathInstructionsForFile(
+      effectiveConfig,
+      filePath
+    );
+    if (pathInstructions) {
+      prompt += `\n\nFile-specific instructions:\n${pathInstructions}`;
+    }
+  }
+
+  // Add custom instructions if provided
+  if (effectiveConfig.review.custom_instructions) {
+    prompt += `\n\nCustom instructions:\n${effectiveConfig.review.custom_instructions}`;
+  }
+
+  // Add standard guidelines
+  prompt += `\n\nGuidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Lines marked with ⊢ indicate the start of a change hunk, and ⊣ indicates the end of a hunk
@@ -101,14 +157,26 @@ Guidelines:
 - Reference relevant standards (CWE, OWASP, Documentations)
 - Keep responses concise and structured. Only report concrete, evidence-based issues.
 - Never include opinions, style preferences, or speculative issues.
-- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.
-- Assign risk levels based on severity:
+- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.`;
+
+  // Add profile-specific risk level guidance
+  if (effectiveConfig.review.profile === "strict") {
+    // Strict profile - include all severity levels
+    prompt += `\n\n- Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
   * Medium: Important quality issues (performance, validation, error handling, etc)
-  * Low: Minor improvements (style, documentation, optimizations)
+  * Low: Minor improvements (style, documentation, optimizations)`;
+  } else {
+    // Standard profile - focus only on critical and high severity issues
+    prompt += `\n\n- Assign risk levels based on severity, focusing ONLY on critical and high issues:
+  * Critical: Direct security risks (RCE, credentials exposure, etc)
+  * High: Significant vulnerabilities (XSS, unsafe operations, performance, etc)
+  * IGNORE Medium and Low severity issues unless they could potentially escalate to higher severity in specific contexts`;
+  }
 
-Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
+  // Add standard output format guidance
+  prompt += `\n\nAlways return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
 {
   "summary": {
     "total_issues": number,   // Count of all identified issues
@@ -144,17 +212,22 @@ Always return findings in this exact JSON format within <findings> tags, ensurin
   ]
 }`;
 
+  return prompt;
+}
+
 const useBedrock = async (
   modelId: string,
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ): Promise<string[]> => {
   logger.info("Using Bedrock for analysis", { modelId, tokenLimit });
 
   const resp = await bedrockClient.send(
     new ConverseCommand({
       modelId: modelId,
-      system: [{ text: SCAN_SYSTEM_PROMPT }],
+      system: [{ text: generateSystemPrompt(config, filePath) }],
       messages: [
         {
           role: "user",
@@ -175,7 +248,9 @@ const useBedrock = async (
 const runAnthropic = async (
   modelId: string,
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ): Promise<string[]> => {
   logger.info("Using Anthropic for analysis", { modelId, tokenLimit });
 
@@ -183,7 +258,7 @@ const runAnthropic = async (
     model: modelId,
     max_tokens: tokenLimit,
     temperature: AI_ANALYSIS_CONFIG.model.temperature,
-    system: SCAN_SYSTEM_PROMPT,
+    system: generateSystemPrompt(config, filePath),
     messages: [{ role: "user", content: userPrompt }],
   });
 
@@ -197,26 +272,41 @@ const runAnthropic = async (
 
 type runAiScanFunc = (
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ) => Promise<string[]>;
 
 const analyzeWithFallbacks = async (
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ): Promise<string | undefined> => {
   const aiModels = AI_ANALYSIS_CONFIG.model;
   const modelsToRun: runAiScanFunc[] = [
-    (up, tl) => useBedrock(aiModels.bedrock.sonnet35v2, up, tl),
-    (up, tl) => runAnthropic(aiModels.anthropic.sonnet35v2, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.sonnet35v1, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.sonnet3, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.haiku35, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.haiku3, up, tl),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.sonnet35v2, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      runAnthropic(aiModels.anthropic.sonnet35v2, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.sonnet35v1, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.sonnet3, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.haiku35, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.haiku3, up, tl, conf, path),
   ];
 
   for (const runAiScan of modelsToRun) {
     try {
-      const contentBlocks = await runAiScan(userPrompt, tokenLimit);
+      const contentBlocks = await runAiScan(
+        userPrompt,
+        tokenLimit,
+        config,
+        filePath
+      );
       return contentBlocks.join("\n\n");
     } catch (error) {
       logger.warn("AI API call failed, trying the next model", { error });
@@ -233,10 +323,12 @@ const analyzeWithFallbacks = async (
  * Handles different API formats for Anthropic direct vs AWS Bedrock
  *
  * @param content - The code content to analyze
+ * @param config - Optional configuration from evolua.yml
  * @returns Promise containing the AI service response
  */
 export const sendMessage = async (
-  file: PRFileChanges & { content: string }
+  file: PRFileChanges & { content: string },
+  config?: EvoluaConfig
 ): Promise<string | undefined> => {
   // Get optimal token limit
   const tokenLimit = getTokenLimit(file.content);
@@ -246,17 +338,18 @@ export const sendMessage = async (
     file.changes
   );
 
-  const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
+  // Build the base prompt - keep it simple as configuration is now in system prompt
+  let USER_PROMPT = `Review the following code changes:
   
   File path: ${file.path}
   File type: ${getLanguageExtension(file.path)}
-  Changed lines: ${file.changes.lineNumbers.join(", ")}
-  
-  <source code>
-  ${codeWithLines}
-  </source code>`;
+  Changed lines: ${file.changes.lineNumbers.join(", ")}`;
 
-  return await analyzeWithFallbacks(USER_PROMPT, tokenLimit);
+  // Add the source code
+  USER_PROMPT += `\n\n<source code>\n${codeWithLines}\n</source code>`;
+
+  // The configuration and file path are now passed to the system prompt via analyzeWithFallbacks
+  return await analyzeWithFallbacks(USER_PROMPT, tokenLimit, config, file.path);
 };
 
 /**

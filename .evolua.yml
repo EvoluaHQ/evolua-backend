@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Configuration for AWS CDK project with TypeScript, Lambda, DynamoDB, GraphQL, and AppSync
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to our AWS CDK project
+  custom_instructions: |
+    Focus on serverless architecture patterns in this AWS-based project:
+    - AWS CDK best practices and L2 construct usage
+    - AWS Lambda performance, concurrency, and cold start optimization
+    - DynamoDB access patterns and query efficiency
+    - GraphQL/AppSync schema design and resolver implementation
+    - AI integration with AWS Bedrock and Claude
+    - TypeScript async patterns and error handling
+    - Security, especially for IAM permissions and data encryption
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!cdk.out/**"
+    - "!coverage/**"
+    - "!**/*.test.ts"
+    - "!**/*.spec.ts"
+    - "!**/*.d.ts"
+    - "lib/**/*.ts" # CDK construct code
+    - "bin/**/*.ts" # CDK app entry point
+    - "functions/**/*.ts" # Lambda functions
+    - "graphql/**/*.ts" # GraphQL resolvers
+    - "schema.graphql" # GraphQL schema
+    - "cdk.json" # CDK configuration
+    - "tsconfig.json" # TypeScript configuration
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "lib/**/*.ts"
+      instructions: |
+        For CDK construct files:
+        - Use L2 constructs instead of L1 (CloudFormation) constructs
+        - Implement least privilege IAM permissions
+        - Ensure proper encryption for data at rest and in transit
+        - Use proper CDK dependency patterns (e.g., grant methods)
+        - Configure appropriate retention policies and deletion protection
+        - Consider cost implications of provisioned resources
+
+    - path: "functions/lib/ai.ts"
+      instructions: |
+        For AI integration:
+        - Implement fallback mechanisms for AI service failures
+        - Ensure proper input validation and token limits
+        - Consider cost optimization for AI service usage
+        - Implement appropriate error handling and retries
+        - Consider privacy implications of data sent to AI services
+        - Ensure proper model versioning and compatibility
+
+    - path: "functions/**/*.ts"
+      instructions: |
+        For Lambda functions:
+        - Optimize for cold start performance
+        - Implement consistent error handling and logging
+        - Reuse connections and clients across invocations
+        - Use proper AWS SDK clients with tracing
+        - Configure appropriate timeout and memory settings
+        - Implement proper input validation
+
+    - path: "**/*dynamo*.ts"
+      instructions: |
+        For DynamoDB access:
+        - Use efficient query patterns and avoid table scans
+        - Use batch operations and transactions appropriately
+        - Implement proper pagination for large result sets
+        - Consider DynamoDB's item size limitations
+        - Design indexes to support access patterns
+        - Handle throttling with proper retry logic
+
+    - path: "schema.graphql"
+      instructions: |
+        For GraphQL schema:
+        - Define appropriate nullability (! vs optional fields)
+        - Implement proper pagination patterns
+        - Use input types for mutations
+        - Design clear type relationships
+        - Consider query complexity and depth limitations
+        - Configure proper authorization directives
+
+    - path: "graphql/**/*.ts"
+      instructions: |
+        For GraphQL resolvers:
+        - Implement proper error handling
+        - Use batch operations to avoid N+1 query problems
+        - Consider caching strategies for frequent queries
+        - Implement proper authorization checks
+        - Use the data loader pattern for efficient data fetching
+        - Consider rate limiting for expensive operations
