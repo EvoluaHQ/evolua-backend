@@ -86,9 +86,36 @@ export function mergeWithDefaultConfig(
       mergedConfig.review.custom_instructions =
         userConfig.review.custom_instructions;
 
-    // Path filters
-    if (userConfig.review.path_filters)
-      mergedConfig.review.path_filters = userConfig.review.path_filters;
+    // Path filters - keep both default and user filters
+    // User excludes (starting with !) are added to default excludes
+    // User includes (not starting with !) are kept as is
+    if (
+      userConfig.review.path_filters &&
+      userConfig.review.path_filters.length > 0
+    ) {
+      const defaultFilters = mergedConfig.review.path_filters || [];
+      const userFilters = userConfig.review.path_filters;
+
+      // Extract default excludes (starting with !)
+      const defaultExcludes = defaultFilters.filter((pattern) =>
+        pattern.startsWith("!")
+      );
+
+      // Extract user excludes and includes
+      const userExcludes = userFilters.filter((pattern) =>
+        pattern.startsWith("!")
+      );
+      const userIncludes = userFilters.filter(
+        (pattern) => !pattern.startsWith("!")
+      );
+
+      // Combine: Put excludes first (both default and user), then includes
+      mergedConfig.review.path_filters = [
+        ...defaultExcludes,
+        ...userExcludes,
+        ...userIncludes,
+      ];
+    }
 
     // Path instructions
     if (userConfig.review.path_instructions)
@@ -108,17 +135,24 @@ export function mergeWithDefaultConfig(
 }
 
 /**
- * Updates the file filter configuration based on the config file's path_filters property
+ * Unified file filtering function using path_filters to determine if files should be skipped
+ * This is the preferred way to check if files should be skipped based on Evolua configuration
  *
- * @param config - The evolua configuration
- * @param filePath - The path of the file being analyzed
+ * @param filePath - The path of the file to check
+ * @param config - The evolua configuration (or undefined if not yet loaded)
  * @returns True if the file should be skipped, false otherwise
  */
-export function shouldSkipFileBasedOnConfig(
-  config: EvoluaConfig,
-  filePath: string
+export function shouldSkipFileUnified(
+  filePath: string,
+  config?: EvoluaConfig
 ): boolean {
-  if (!config.review.path_filters || config.review.path_filters.length === 0) {
+  // Start with the default config path filters
+  const defaultPathFilters = DEFAULT_CONFIG.review.path_filters || [];
+
+  // If there's a user config, use its path_filters (if any) or fall back to the defaults
+  const pathFilters = config?.review.path_filters || defaultPathFilters;
+
+  if (!pathFilters || pathFilters.length === 0) {
     return false;
   }
 
@@ -126,7 +160,7 @@ export function shouldSkipFileBasedOnConfig(
   const exclude: string[] = [];
 
   // Split filters into includes and excludes
-  config.review.path_filters.forEach((pattern) => {
+  pathFilters.forEach((pattern) => {
     if (pattern.startsWith("!")) {
       exclude.push(pattern.substring(1));
     } else {
@@ -136,11 +170,13 @@ export function shouldSkipFileBasedOnConfig(
 
   // If there are includes and the file doesn't match any, skip it
   if (include.length > 0 && !matchesAnyPattern(filePath, include)) {
+    logger.debug(`Skipping file not matching any include pattern: ${filePath}`);
     return true;
   }
 
   // If the file matches any exclude pattern, skip it
   if (exclude.length > 0 && matchesAnyPattern(filePath, exclude)) {
+    logger.debug(`Skipping file matching exclude pattern: ${filePath}`);
     return true;
   }
 
@@ -206,15 +242,27 @@ export function getFocusAreaInstructions(config: EvoluaConfig): string {
   const { focus_areas } = config.review;
   if (!focus_areas) return "";
 
-  const areas = [];
-  if (focus_areas.security) areas.push("Security vulnerabilities");
-  if (focus_areas.code_quality) areas.push("Code quality issues");
-  if (focus_areas.best_practices) areas.push("Best practices");
-  if (focus_areas.performance) areas.push("Performance optimizations");
+  // Add focus areas section
+  let focusAreas = [];
 
-  if (areas.length === 0) return "";
+  if (focus_areas?.security)
+    focusAreas.push(
+      "Security: Identify vulnerabilities, data exposure, and unsafe operations"
+    );
+  if (focus_areas?.code_quality)
+    focusAreas.push(
+      "Code Quality: Evaluate performance, maintainability, and error handling"
+    );
+  if (focus_areas?.best_practices)
+    focusAreas.push(
+      "Best Practices: Assess adherence to design patterns and coding standards"
+    );
+  if (focus_areas?.performance)
+    focusAreas.push(
+      "Performance: Identify potential bottlenecks and inefficient code patterns"
+    );
 
-  return `Focus primarily on these areas during your analysis: ${areas.join(", ")}.`;
+  return focusAreas.map((area, i) => `${i + 1}. ${area}`).join("\n");
 }
 
 /**
@@ -230,30 +278,25 @@ export function buildCustomInstructions(
 ): string {
   const instructions: string[] = [];
 
-  // Add profile-specific instructions
-  if (config.review.profile === "strict") {
-    instructions.push(
-      "Be extra thorough and strict in your review. Highlight even minor issues that could be improved."
-    );
-  }
-
   // Add focus area instructions
   const focusAreaText = getFocusAreaInstructions(config);
   if (focusAreaText) {
-    instructions.push(focusAreaText);
+    instructions.push(`Analysis Areas:\n${focusAreaText}`);
   }
 
   // Add file-specific instructions if file path is provided
   if (filePath) {
     const pathInstructions = getPathInstructionsForFile(config, filePath);
     if (pathInstructions) {
-      instructions.push(pathInstructions);
+      instructions.push(`File-specific instructions:\n${pathInstructions}`);
     }
   }
 
   // Add custom instructions if provided
   if (config.review.custom_instructions) {
-    instructions.push(config.review.custom_instructions);
+    instructions.push(
+      `Custom instructions:\n${config.review.custom_instructions}`
+    );
   }
 
   return instructions.join("\n\n");

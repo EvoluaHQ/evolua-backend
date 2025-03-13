@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-bedrock-runtime";
 import { FileChanges, PRFileChanges } from "../types";
 import { DEFAULT_CONFIG, EvoluaConfig } from "../types/config";
-import { buildCustomInstructions, getPathInstructionsForFile } from "./config";
+import { buildCustomInstructions } from "./config";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -105,45 +105,10 @@ export function generateSystemPrompt(
     prompt += `\n\nYou should focus on significant issues while ignoring trivial matters.`;
   }
 
-  // Add focus areas section
-  let focusAreas = [];
-  const { focus_areas } = effectiveConfig.review;
-
-  if (focus_areas?.security)
-    focusAreas.push(
-      "Security: Identify vulnerabilities, data exposure, and unsafe operations"
-    );
-  if (focus_areas?.code_quality)
-    focusAreas.push(
-      "Code Quality: Evaluate performance, maintainability, and error handling"
-    );
-  if (focus_areas?.best_practices)
-    focusAreas.push(
-      "Best Practices: Assess adherence to design patterns and coding standards"
-    );
-  if (focus_areas?.performance)
-    focusAreas.push(
-      "Performance: Identify potential bottlenecks and inefficient code patterns"
-    );
-
-  if (focusAreas.length > 0) {
-    prompt += `\n\nAnalysis Areas:\n${focusAreas.map((area, i) => `${i + 1}. ${area}`).join("\n")}`;
-  }
-
-  // Add file-specific instructions if provided
-  if (filePath && effectiveConfig.review.path_instructions) {
-    const pathInstructions = getPathInstructionsForFile(
-      effectiveConfig,
-      filePath
-    );
-    if (pathInstructions) {
-      prompt += `\n\nFile-specific instructions:\n${pathInstructions}`;
-    }
-  }
-
-  // Add custom instructions if provided
-  if (effectiveConfig.review.custom_instructions) {
-    prompt += `\n\nCustom instructions:\n${effectiveConfig.review.custom_instructions}`;
+  // Get custom instructions from the config helper function
+  const customInstructions = buildCustomInstructions(effectiveConfig, filePath);
+  if (customInstructions) {
+    prompt += `\n\n${customInstructions}`;
   }
 
   // Add standard guidelines

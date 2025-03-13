@@ -30,13 +30,9 @@ import {
   initAnthropic,
   sendMessage,
 } from "./lib/ai";
-import {
-  loadConfigFromGitHub,
-  shouldSkipFileBasedOnConfig,
-} from "./lib/config";
+import { loadConfigFromGitHub, shouldSkipFileUnified } from "./lib/config";
 import { SUBSCRIPTION_TIERS } from "./lib/constants";
 import { publishEvent } from "./lib/events";
-import { shouldSkipFile } from "./lib/file-ignore";
 import {
   commentOnPR,
   deleteCommentOnPR,
@@ -163,11 +159,15 @@ const _handler = async (event: Event, context: any) => {
     const repo = input.repository.name;
     const pullNumber = pullRequest.number;
 
-    // Fetch and analyze files
-    const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
-
     // Get the HEAD SHA for the PR
     const headSha = ghPrData.head.sha;
+
+    // Load configuration early to use in file filtering
+    logger.debug("Loading configuration from GitHub");
+    const config = await loadConfigFromGitHub(octokit, owner, repo, headSha);
+
+    // Fetch and analyze files
+    const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
 
     // Enhance the files with repository information for configuration loading
     const enhancedFiles = prFileContent.map((file) => ({
@@ -194,7 +194,7 @@ const _handler = async (event: Event, context: any) => {
           file.content !== null &&
           file.changeType !== "DELETED" &&
           file.changes.lineNumbers.length > 0 &&
-          !shouldSkipFile(file.path)
+          !shouldSkipFileUnified(file.path, config)
         );
       }
     );
@@ -327,13 +327,8 @@ const analyzeFile = async (
       file.headSha
     );
 
-    // Check if the file should be skipped based on configuration
-    if (shouldSkipFileBasedOnConfig(config, file.path)) {
-      logger.info("Skipping file based on evolua.yml configuration", {
-        path: file.path,
-      });
-      return null;
-    }
+    // Note: We don't need to check shouldSkipFileUnified anymore since we've already
+    // filtered files using shouldSkipFileUnified before this function is called
 
     // Skip extremely large files
     if (fileSize > AI_ANALYSIS_CONFIG.fileSize.max) {
