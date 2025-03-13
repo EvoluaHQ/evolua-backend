@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-bedrock-runtime";
 import { FileChanges, PRFileChanges } from "../types";
 import { DEFAULT_CONFIG, EvoluaConfig } from "../types/config";
-import { getFocusAreaInstructions, getPathInstructionsForFile } from "./config";
+import { buildCustomInstructions } from "./config";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -105,26 +105,10 @@ export function generateSystemPrompt(
     prompt += `\n\nYou should focus on significant issues while ignoring trivial matters.`;
   }
 
-  const focusAreaInstructions = getFocusAreaInstructions(effectiveConfig);
-
-  if (focusAreaInstructions) {
-    prompt += `\n\nAnalysis Areas:\n${focusAreaInstructions}`;
-  }
-
-  // Add file-specific instructions if provided
-  if (filePath && effectiveConfig.review.path_instructions) {
-    const pathInstructions = getPathInstructionsForFile(
-      effectiveConfig,
-      filePath
-    );
-    if (pathInstructions) {
-      prompt += `\n\nFile-specific instructions:\n${pathInstructions}`;
-    }
-  }
-
-  // Add custom instructions if provided
-  if (effectiveConfig.review.custom_instructions) {
-    prompt += `\n\nCustom instructions:\n${effectiveConfig.review.custom_instructions}`;
+  // Get custom instructions from the config helper function
+  const customInstructions = buildCustomInstructions(effectiveConfig, filePath);
+  if (customInstructions) {
+    prompt += `\n\n${customInstructions}`;
   }
 
   // Add standard guidelines

@@ -136,12 +136,13 @@ export function mergeWithDefaultConfig(
 
 /**
  * Unified file filtering function using path_filters to determine if files should be skipped
+ * This is the preferred way to check if files should be skipped based on Evolua configuration
  *
  * @param filePath - The path of the file to check
  * @param config - The evolua configuration (or undefined if not yet loaded)
  * @returns True if the file should be skipped, false otherwise
  */
-export function shouldSkipFileBasedOnConfig(
+export function shouldSkipFileUnified(
   filePath: string,
   config?: EvoluaConfig
 ): boolean {
@@ -262,4 +263,41 @@ export function getFocusAreaInstructions(config: EvoluaConfig): string {
     );
 
   return focusAreas.map((area, i) => `${i + 1}. ${area}`).join("\n");
+}
+
+/**
+ * Builds custom review instructions based on the configuration
+ *
+ * @param config - The evolua configuration
+ * @param filePath - Optional file path to get path-specific instructions
+ * @returns Custom review instructions string
+ */
+export function buildCustomInstructions(
+  config: EvoluaConfig,
+  filePath?: string
+): string {
+  const instructions: string[] = [];
+
+  // Add focus area instructions
+  const focusAreaText = getFocusAreaInstructions(config);
+  if (focusAreaText) {
+    instructions.push(`Analysis Areas:\n${focusAreaText}`);
+  }
+
+  // Add file-specific instructions if file path is provided
+  if (filePath) {
+    const pathInstructions = getPathInstructionsForFile(config, filePath);
+    if (pathInstructions) {
+      instructions.push(`File-specific instructions:\n${pathInstructions}`);
+    }
+  }
+
+  // Add custom instructions if provided
+  if (config.review.custom_instructions) {
+    instructions.push(
+      `Custom instructions:\n${config.review.custom_instructions}`
+    );
+  }
+
+  return instructions.join("\n\n");
 }

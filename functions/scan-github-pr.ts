@@ -30,10 +30,7 @@ import {
   initAnthropic,
   sendMessage,
 } from "./lib/ai";
-import {
-  loadConfigFromGitHub,
-  shouldSkipFileBasedOnConfig,
-} from "./lib/config";
+import { loadConfigFromGitHub, shouldSkipFileUnified } from "./lib/config";
 import { SUBSCRIPTION_TIERS } from "./lib/constants";
 import { publishEvent } from "./lib/events";
 import {
@@ -197,7 +194,7 @@ const _handler = async (event: Event, context: any) => {
           file.content !== null &&
           file.changeType !== "DELETED" &&
           file.changes.lineNumbers.length > 0 &&
-          !shouldSkipFileBasedOnConfig(file.path, config)
+          !shouldSkipFileUnified(file.path, config)
         );
       }
     );
@@ -330,8 +327,8 @@ const analyzeFile = async (
       file.headSha
     );
 
-    // Note: We don't need to check shouldSkipFileBasedOnConfig anymore since we've already
-    // filtered files using shouldSkipFileBasedOnConfig before this function is called
+    // Note: We don't need to check shouldSkipFileUnified anymore since we've already
+    // filtered files using shouldSkipFileUnified before this function is called
 
     // Skip extremely large files
     if (fileSize > AI_ANALYSIS_CONFIG.fileSize.max) {
