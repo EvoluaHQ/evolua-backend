@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-bedrock-runtime";
 import { FileChanges, PRFileChanges } from "../types";
 import { DEFAULT_CONFIG, EvoluaConfig } from "../types/config";
-import { buildCustomInstructions, getPathInstructionsForFile } from "./config";
+import { getFocusAreaInstructions, getPathInstructionsForFile } from "./config";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -105,29 +105,10 @@ export function generateSystemPrompt(
     prompt += `\n\nYou should focus on significant issues while ignoring trivial matters.`;
   }
 
-  // Add focus areas section
-  let focusAreas = [];
-  const { focus_areas } = effectiveConfig.review;
+  const focusAreaInstructions = getFocusAreaInstructions(effectiveConfig);
 
-  if (focus_areas?.security)
-    focusAreas.push(
-      "Security: Identify vulnerabilities, data exposure, and unsafe operations"
-    );
-  if (focus_areas?.code_quality)
-    focusAreas.push(
-      "Code Quality: Evaluate performance, maintainability, and error handling"
-    );
-  if (focus_areas?.best_practices)
-    focusAreas.push(
-      "Best Practices: Assess adherence to design patterns and coding standards"
-    );
-  if (focus_areas?.performance)
-    focusAreas.push(
-      "Performance: Identify potential bottlenecks and inefficient code patterns"
-    );
-
-  if (focusAreas.length > 0) {
-    prompt += `\n\nAnalysis Areas:\n${focusAreas.map((area, i) => `${i + 1}. ${area}`).join("\n")}`;
+  if (focusAreaInstructions) {
+    prompt += `\n\nAnalysis Areas:\n${focusAreaInstructions}`;
   }
 
   // Add file-specific instructions if provided

@@ -241,55 +241,25 @@ export function getFocusAreaInstructions(config: EvoluaConfig): string {
   const { focus_areas } = config.review;
   if (!focus_areas) return "";
 
-  const areas = [];
-  if (focus_areas.security) areas.push("Security vulnerabilities");
-  if (focus_areas.code_quality) areas.push("Code quality issues");
-  if (focus_areas.best_practices) areas.push("Best practices");
-  if (focus_areas.performance) areas.push("Performance optimizations");
+  // Add focus areas section
+  let focusAreas = [];
 
-  if (areas.length === 0) return "";
-
-  return `Focus primarily on these areas during your analysis: ${areas.join(", ")}.`;
-}
-
-/**
- * Builds custom review instructions based on the configuration
- *
- * @param config - The evolua configuration
- * @param filePath - Optional file path to get path-specific instructions
- * @returns Custom review instructions string
- */
-export function buildCustomInstructions(
-  config: EvoluaConfig,
-  filePath?: string
-): string {
-  const instructions: string[] = [];
-
-  // Add profile-specific instructions
-  if (config.review.profile === "strict") {
-    instructions.push(
-      "Be extra thorough and strict in your review. Highlight even minor issues that could be improved."
+  if (focus_areas?.security)
+    focusAreas.push(
+      "Security: Identify vulnerabilities, data exposure, and unsafe operations"
     );
-  }
+  if (focus_areas?.code_quality)
+    focusAreas.push(
+      "Code Quality: Evaluate performance, maintainability, and error handling"
+    );
+  if (focus_areas?.best_practices)
+    focusAreas.push(
+      "Best Practices: Assess adherence to design patterns and coding standards"
+    );
+  if (focus_areas?.performance)
+    focusAreas.push(
+      "Performance: Identify potential bottlenecks and inefficient code patterns"
+    );
 
-  // Add focus area instructions
-  const focusAreaText = getFocusAreaInstructions(config);
-  if (focusAreaText) {
-    instructions.push(focusAreaText);
-  }
-
-  // Add file-specific instructions if file path is provided
-  if (filePath) {
-    const pathInstructions = getPathInstructionsForFile(config, filePath);
-    if (pathInstructions) {
-      instructions.push(pathInstructions);
-    }
-  }
-
-  // Add custom instructions if provided
-  if (config.review.custom_instructions) {
-    instructions.push(config.review.custom_instructions);
-  }
-
-  return instructions.join("\n\n");
+  return focusAreas.map((area, i) => `${i + 1}. ${area}`).join("\n");
 }
