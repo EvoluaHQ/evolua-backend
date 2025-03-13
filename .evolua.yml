@@ -27,17 +27,8 @@ review:
     - "!node_modules/**"
     - "!dist/**"
     - "!cdk.out/**"
-    - "!coverage/**"
-    - "!**/*.test.ts"
     - "!**/*.spec.ts"
     - "!**/*.d.ts"
-    - "lib/**/*.ts" # CDK construct code
-    - "bin/**/*.ts" # CDK app entry point
-    - "functions/**/*.ts" # Lambda functions
-    - "graphql/**/*.ts" # GraphQL resolvers
-    - "schema.graphql" # GraphQL schema
-    - "cdk.json" # CDK configuration
-    - "tsconfig.json" # TypeScript configuration
 
   # Specific instructions for different file types
   path_instructions:
@@ -100,3 +91,7 @@ review:
         - Implement proper authorization checks
         - Use the data loader pattern for efficient data fetching
         - Consider rate limiting for expensive operations
+
+    - path: "evolua.yml"
+      instructions: |
+        For the evolua.yml file tell the user that this should not be modified.
