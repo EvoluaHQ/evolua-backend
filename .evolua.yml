@@ -86,12 +86,7 @@ review:
       instructions: |
         For GraphQL resolvers:
         - Implement proper error handling
-        - Use batch operations to avoid N+1 query problems
-        - Consider caching strategies for frequent queries
-        - Implement proper authorization checks
-        - Use the data loader pattern for efficient data fetching
-        - Consider rate limiting for expensive operations
 
-    - path: "evolua.yml"
+    - path: ".evolua.yml"
       instructions: |
         For the evolua.yml file tell the user that this should not be modified.
