@@ -62,15 +62,15 @@ review:
         - Configure appropriate timeout and memory settings
         - Implement proper input validation
 
-    - path: "**/*dynamo*.ts"
-      instructions: |
-        For DynamoDB access:
-        - Use efficient query patterns and avoid table scans
-        - Use batch operations and transactions appropriately
-        - Implement proper pagination for large result sets
-        - Consider DynamoDB's item size limitations
-        - Design indexes to support access patterns
-        - Handle throttling with proper retry logic
+  - path: "**/*dynamo*.ts"
+    instructions: |
+      For DynamoDB access:
+      - Use efficient query patterns and avoid table scans
+      - Use batch operations and transactions appropriately
+      - Implement proper pagination for large result sets
+      - Consider DynamoDB's item size limitations
+      - Design indexes to support access patterns
+      - Handle throttling with proper retry logic
 
     - path: "schema.graphql"
       instructions: |
