@@ -11,10 +11,6 @@ review:
     - AWS CDK best practices and L2 construct usage
     - AWS Lambda performance, concurrency, and cold start optimization
     - DynamoDB access patterns and query efficiency
-    - GraphQL/AppSync schema design and resolver implementation
-    - AI integration with AWS Bedrock and Claude
-    - TypeScript async patterns and error handling
-    - Security, especially for IAM permissions and data encryption
 
   focus_areas:
     security: true
