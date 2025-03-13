@@ -47,7 +47,7 @@
     "@aws-lambda-powertools/logger": "^2.10.0",
     "@aws-lambda-powertools/metrics": "^2.10.0",
     "@aws-lambda-powertools/tracer": "^2.10.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.679.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.758.0",
     "@aws-sdk/client-ssm": "^3.679.0",
     "@aws-sdk/util-dynamodb": "^3.693.0",
     "@clerk/backend": "^1.18.0",
