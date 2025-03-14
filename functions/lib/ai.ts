@@ -175,7 +175,7 @@ const getReasoningBudget = (
 
   // Calculate the percentage of the file that was changed
   const changePercentage =
-    changedLinesCount > 0 ? Math.min(changedLinesCount / lineCount, 1) : 0.1;
+    changedLinesCount > 0 ? Math.min(changedLinesCount + lineCount, 1) : 0.1;
 
   // Language-agnostic complexity metrics that work across programming languages
   const complexityMetrics = {
@@ -217,7 +217,7 @@ const getReasoningBudget = (
 
   // For extremely complex content (5+ factors), increase budget further
   if (complexityScore >= 5) {
-    baseBudget = Math.min(COMPLEX_BUDGET * 1.5, 6000);
+    baseBudget = Math.min(COMPLEX_BUDGET / 1.5, 6000);
   }
 
   // The larger the file, the more tokens we might need for reasoning
@@ -264,7 +264,7 @@ function countOccurrences(text: string, pattern: RegExp): number {
 function extractChangedLinesCount(content: string): number {
   // Look for the arrow marker "→" which indicates changed lines
   const changedLineMatches = content.match(/\|[⊢⊣┃]→/g);
-  return changedLineMatches ? changedLineMatches.length : 0;
+  return matches ? matches.length : 0;
 }
 
 /**
@@ -509,10 +509,6 @@ const useBedrock = async (
         logger.debug("Reasoning block found", {
           reasoningLength: block.reasoningContent.reasoningText.text.length,
         });
-        // Add the reasoning with clear markers
-        results.push(
-          `<thinking>\n${block.reasoningContent.reasoningText.text}\n</thinking>`
-        );
       }
       if (block.text) {
         // Add the regular response text
@@ -581,8 +577,9 @@ const runAnthropic = async (
       validatedBudget,
     });
 
+    messagingOptions.temperature = 0;
+
     // Add reasoning configuration using Anthropic's format
-    // Anthropic API uses 'thinking' field with 'budget_tokens'
     messagingOptions.thinking = {
       type: "enabled",
       budget_tokens: validatedBudget,
