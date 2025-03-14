@@ -11,8 +11,6 @@
  * getLanguageExtension('.gitignore')     // Returns ''
  */
 export function getLanguageExtension(filePath: string) {
-  // Handle empty or invalid inputs
-  if (!filePath) return "";
-
+  // Extract the extension and return it in lowercase
   return filePath.split(".").pop()?.toLowerCase() || "";
 }

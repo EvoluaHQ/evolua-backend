@@ -1,7 +1,10 @@
+import {
+  EventBridgeClient,
+  PutEventsCommand,
+} from "@aws-sdk/client-eventbridge";
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
-import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { documentClient } from '../lib/dynamodb-helper';
-import { Metadata } from '../types/eventbridge';
+import { documentClient } from "../lib/dynamodb-helper";
+import { Metadata } from "../types/eventbridge";
 
 const ebClient = new EventBridgeClient({});
 
@@ -10,33 +13,45 @@ interface EventDetail {
   data: any;
 }
 
-export const publishEvent = async (eventId: string, source: string, eventType: string, data: any, idempotencyKey?: string): Promise<void> => {
+export const publishEvent = async (
+  eventId: string,
+  source: string,
+  eventType: string,
+  data: any,
+  idempotencyKey?: string
+): Promise<void> => {
   const detail: EventDetail = {
     metadata: {
       eventId,
-      version: '1',
+      version: "1",
       timestamp: new Date().toISOString(),
       source,
       type: eventType,
       idempotencyKey,
     },
-    data
+    data,
   };
-  
+
   const command = new PutEventsCommand({
     Entries: [
       {
         Source: source,
         DetailType: eventType,
         Detail: JSON.stringify(detail),
-        EventBusName: process.env.EVENT_BUS_NAME,
-      }
-    ]
+        EventBusName: process.env.EVENTBUS_NAME,
+      },
+    ],
   });
   await ebClient.send(command);
-}
+};
 
-export const saveEvent = async (eventId: string, source: string, eventType: string, data: any, idempotencyKey?: string): Promise<void> => {
+export const saveEvent = async (
+  eventId: string,
+  source: string,
+  eventType: string,
+  data: any,
+  idempotencyKey?: string
+): Promise<void> => {
   const command = new PutCommand({
     TableName: process.env.EVENTS_TABLE_NAME,
     Item: {
@@ -44,8 +59,8 @@ export const saveEvent = async (eventId: string, source: string, eventType: stri
       source,
       eventType,
       idempotencyKey,
-      data
-    }
+      data,
+    },
   });
   await documentClient.send(command);
-}
+};

@@ -1,33 +1,33 @@
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb"
-import { ulid } from "ulid"
-import { 
+import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { ulid } from "ulid";
+import { ScanResult, Summary } from "../types/index";
+import {
   documentClient,
-  scansTableName, 
-  scanResultsTableName, 
-  executeBatchWriteCommand
-} from "./dynamodb-helper"
-import { ScanResult, Summary } from '../types/index'
+  executeBatchWriteCommand,
+  scanResultsTableName,
+  scansTableName,
+} from "./dynamodb-helper";
 
 export interface PullRequest {
-  id: string
-  number: number
-  url: string
-  title: string
-  createdAt: string
+  id: string;
+  number: number;
+  url: string;
+  title: string;
+  createdAt: string;
 }
 
 export interface Scan {
-  repoId: string
-  scanId: string
-  timestamp: string
-  pullRequestId: string
-  pullRequest: PullRequest
-  filesScanned: number
-  issuesCount: number
-  critical: number
-  high: number
-  medium: number
-  low: number
+  repoId: string;
+  scanId: string;
+  timestamp: string;
+  pullRequestId: string;
+  pullRequest: PullRequest;
+  filesScanned: number;
+  issuesCount: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
 }
 
 export async function saveScanResults(
@@ -39,13 +39,13 @@ export async function saveScanResults(
   const SCANS_TABLE_NAME = scansTableName();
   const SCAN_RESULTS_TABLE_NAME = scanResultsTableName();
 
-  const timestamp = reviewedAt.toISOString()
-  const prId = pr.id.toString()
-  const scanId = ulid()
+  const timestamp = reviewedAt.toISOString();
+  const prId = pr.id.toString();
+  const scanId = ulid();
 
   const countIssues = (f: (summary: Summary) => number) => {
-    return results.reduce((acc, result) => acc + f(result.findings.summary), 0)
-  }
+    return results.reduce((acc, result) => acc + f(result.findings.summary), 0);
+  };
 
   // IMPORTANT: save the scan results first, then the scan summary
   // so that when the ScansTable's DynamoDB stream triggers the
@@ -53,7 +53,6 @@ export async function saveScanResults(
   const saveResultsReqs = results.map((result) => ({
     PutRequest: {
       Item: {
-        scanId,
         file: result.file.path,
         timestamp,
         changes: {
@@ -70,9 +69,9 @@ export async function saveScanResults(
         issues: result.findings.issues,
       },
     },
-  }))
+  }));
 
-  await executeBatchWriteCommand(SCAN_RESULTS_TABLE_NAME, saveResultsReqs)
+  await executeBatchWriteCommand(SCAN_RESULTS_TABLE_NAME, saveResultsReqs);
 
   const scanSummary: Scan = {
     repoId,
@@ -86,16 +85,16 @@ export async function saveScanResults(
     high: countIssues((summary) => summary.riskLevels.high),
     medium: countIssues((summary) => summary.riskLevels.medium),
     low: countIssues((summary) => summary.riskLevels.low),
-  }
+  };
 
   await documentClient.send(
     new PutCommand({
       TableName: SCANS_TABLE_NAME,
-      Item: scanSummary
+      Item: scanSummary,
     })
-  )
+  );
 
-  return scanSummary
+  return scanSummary;
 }
 
 export async function getScanResults(scanId: string) {
@@ -109,7 +108,7 @@ export async function getScanResults(scanId: string) {
       KeyConditionExpression: "scanId = :scanId",
       ExpressionAttributeValues: {
         ":scanId": scanId,
-      },      
+      },
     });
 
     if (lastEvaluatedKey) {
@@ -125,7 +124,11 @@ export async function getScanResults(scanId: string) {
   return results;
 }
 
-export async function listScansForRepo(repoId: string, startDate: string, endDate: string) {
+export async function listScansForRepo(
+  repoId: string,
+  startDate: string,
+  endDate: string
+) {
   const SCANS_TABLE_NAME = scansTableName();
 
   let lastEvaluatedKey: any;
@@ -134,8 +137,9 @@ export async function listScansForRepo(repoId: string, startDate: string, endDat
   do {
     const command = new QueryCommand({
       TableName: SCANS_TABLE_NAME,
-      IndexName: 'byTimestampIndex',
-      KeyConditionExpression: "repoId = :repoId AND #timestamp BETWEEN :startDate AND :endDate",
+      IndexName: "byTimestampIndex",
+      KeyConditionExpression:
+        "repoId = :repoId AND #timestamp BETWEEN :startDate AND :endDate",
       ExpressionAttributeNames: {
         "#timestamp": "timestamp",
       },
@@ -148,7 +152,7 @@ export async function listScansForRepo(repoId: string, startDate: string, endDat
     });
 
     const response = await documentClient.send(command);
-    allScans.push(...response.Items as Scan[]);
+    allScans.push(...(response.Items as Scan[]));
     lastEvaluatedKey = response.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 

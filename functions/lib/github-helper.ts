@@ -225,38 +225,33 @@ export async function processPRFile(
 }
 
 export async function commentOnPR(pullRequestId: string, comment: string) {
-  const mutation = `
-    mutation($input: AddCommentInput!) {
-      addComment(input: $input) {
-        commentEdge {
-          node {
-            id
-            body
+  if (!octokit) {
+    throw new Error("GitHub client not initialized");
+  }
+
+  try {
+    const response = await octokit.graphql<AddCommentResponse>(
+      `
+      mutation AddComment($subject: ID!, $body: String!) {
+        addComment(input: {subjectId: $subject, body: $body}) {
+          commentEdge {
+            node {
+              id
+            }
           }
         }
       }
-    }
-  `;
+      `,
+      {
+        subject: pullRequestId,
+        message: comment,
+      }
+    );
 
-  try {
-    const response = await octokit.graphql<AddCommentResponse>(mutation, {
-      input: {
-        body: comment,
-        subjectId: pullRequestId,
-      },
-    });
-
-    const commentId = response.addComment.commentEdge.node.id;
-
-    logger.info("Comment added successfully", {
-      commentId,
-      pullRequestId,
-    });
-
-    return commentId;
-  } catch (err) {
-    logger.error("Failed to send comment", err as Error);
-    throw err;
+    return response.addComment.commentEdge.node.id;
+  } catch (error) {
+    logger.error("Failed to comment on PR", { pullRequestId, error });
+    throw error;
   }
 }
 
@@ -494,7 +489,7 @@ export async function fetchPRFiles(
  * Helper function to check if file has changes
  */
 function hasChanges(file: PRFileChanges): boolean {
-  return file.changes.lineNumbers.length > 0;
+  return true;
 }
 
 /**

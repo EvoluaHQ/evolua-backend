@@ -4,7 +4,7 @@ export const SITE_URL = "https://evolua.io";
 
 export const SUBSCRIPTION_TIERS = {
   FREE: {
-    maxScans: 5,
+    maxScans: 0,
     filesPerScan: 10,
     maxFileSize: 500_000, // 500 KB
   },

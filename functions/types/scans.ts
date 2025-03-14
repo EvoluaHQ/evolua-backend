@@ -74,7 +74,7 @@ export interface CodeIssue {
   title: string;
   location: IssueLocation;
   description: string;
-  impact?: string;
+  impact: string;
   recommendation?: Recommendation;
   cweId?: string;
   reference?: IssueReference;

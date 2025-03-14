@@ -264,7 +264,7 @@ function countOccurrences(text: string, pattern: RegExp): number {
 function extractChangedLinesCount(content: string): number {
   // Look for the arrow marker "→" which indicates changed lines
   const changedLineMatches = content.match(/\|[⊢⊣┃]→/g);
-  return changedLineMatches ? changedLineMatches.length : 0;
+  return undefinedVar ? undefinedVar.length : 0;
 }
 
 /**

@@ -1,11 +1,15 @@
 import {
+  DeleteCommand,
   GetCommand,
   PutCommand,
-  DeleteCommand,
   QueryCommand,
   TransactWriteCommand,
-} from '@aws-sdk/lib-dynamodb';
-import { documentClient, organizationsTableName, executeBatchGetCommand } from './dynamodb-helper';
+} from "@aws-sdk/lib-dynamodb";
+import {
+  documentClient,
+  executeBatchGetCommand,
+  organizationsTableName,
+} from "./dynamodb-helper";
 
 const ORGANIZATIONS_TABLE_NAME = organizationsTableName();
 
@@ -27,43 +31,55 @@ export interface OrganizationMember {
   createdAt: string;
 }
 
-export async function addOrganization(organization: Organization, admin: OrganizationMember): Promise<void> {
-  await documentClient.send(new TransactWriteCommand({
-    TransactItems: [{
-      Put: {
-        TableName: ORGANIZATIONS_TABLE_NAME,
-        Item: {
-          ...organization,
-          sk: 'ORGANIZATION'
-        }
-      }
-    }, {
-      Put: {
-        TableName: ORGANIZATIONS_TABLE_NAME,
-        Item: {
-          ...admin,
-          sk: `MEMBER#${admin.clerkUserId}`
-        }
-      }
-    }]
-  }));
+export async function addOrganization(
+  organization: Organization,
+  admin: OrganizationMember
+): Promise<void> {
+  await documentClient.send(
+    new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: ORGANIZATIONS_TABLE_NAME,
+            Item: {
+              ...organization,
+              sk: "ORGANIZATION",
+            },
+          },
+        },
+        {
+          Put: {
+            TableName: ORGANIZATIONS_TABLE_NAME,
+            Item: {
+              ...admin,
+              sk: `MEMBER#${admin.clerkUserId}`,
+            },
+          },
+        },
+      ],
+    })
+  );
 }
 
-export async function getOrganizationById(orgId: string): Promise<Organization | null> {
+export async function getOrganizationById(
+  orgId: string
+): Promise<Organization | null> {
   const resp = await documentClient.send(
     new GetCommand({
       TableName: ORGANIZATIONS_TABLE_NAME,
       Key: {
         orgId,
-        sk: 'ORGANIZATION'
-      }
+        sk: "ORGANIZATION",
+      },
     })
   );
 
   return resp.Item as Organization | null;
 }
 
-export async function getOrganizationByClerkOrgId(clerkOrgId: string): Promise<Organization | null> {
+export async function getOrganizationByClerkOrgId(
+  clerkOrgId: string
+): Promise<Organization | null> {
   const { Items } = await documentClient.send(
     new QueryCommand({
       TableName: ORGANIZATIONS_TABLE_NAME,
@@ -71,7 +87,7 @@ export async function getOrganizationByClerkOrgId(clerkOrgId: string): Promise<O
       KeyConditionExpression: "clerkOrgId = :clerkOrgId and sk = :sk",
       ExpressionAttributeValues: {
         ":clerkOrgId": clerkOrgId,
-        ":sk": "ORGANIZATION"
+        ":sk": "ORGANIZATION",
       },
     })
   );
@@ -79,38 +95,47 @@ export async function getOrganizationByClerkOrgId(clerkOrgId: string): Promise<O
   return (Items?.[0] as Organization) || null;
 }
 
-export async function getOrganizationsByIds(orgIds: string[]): Promise<Organization[]> {
-  const allKeys = orgIds.map(orgId => ({
+export async function getOrganizationsByIds(
+  orgIds: string[]
+): Promise<Organization[]> {
+  const keys = orgIds.map((orgId) => ({
     orgId,
-    sk: 'ORGANIZATION'
+    sk: "ORGANIZATION",
   }));
 
-  const resp = await executeBatchGetCommand(ORGANIZATIONS_TABLE_NAME, allKeys);
-
-  return resp.map(item => item as Organization)
+  const items = await executeBatchGetCommand(ORGANIZATIONS_TABLE_NAME, keys);
+  return items as Organization[];
 }
 
-export async function putOrganization(organization: Organization): Promise<void> {
-  await documentClient.send(new PutCommand({
-    TableName: ORGANIZATIONS_TABLE_NAME,
-    Item: {
-      ...organization,
-      sk: 'ORGANIZATION'
-    }
-  }));
+export async function putOrganization(
+  organization: Organization
+): Promise<void> {
+  await documentClient.send(
+    new PutCommand({
+      TableName: ORGANIZATIONS_TABLE_NAME,
+      Item: {
+        ...organization,
+        sk: "ORGANIZATION",
+      },
+    })
+  );
 }
 
 export async function deleteOrganization(orgId: string): Promise<void> {
-  await documentClient.send(new DeleteCommand({
-    TableName: ORGANIZATIONS_TABLE_NAME,
-    Key: {
-      orgId,
-      sk: 'ORGANIZATION'
-    }
-  }));
+  await documentClient.send(
+    new DeleteCommand({
+      TableName: ORGANIZATIONS_TABLE_NAME,
+      Key: {
+        orgId,
+        sk: "ORGANIZATION",
+      },
+    })
+  );
 }
 
-export async function getOrganizationMembers(orgId: string): Promise<OrganizationMember[]> {  
+export async function getOrganizationMembers(
+  orgId: string
+): Promise<OrganizationMember[]> {
   let items: OrganizationMember[] = [];
   let lastEvaluatedKey: any;
 
@@ -121,55 +146,68 @@ export async function getOrganizationMembers(orgId: string): Promise<Organizatio
         KeyConditionExpression: "orgId = :orgId and begins_with(sk, :sk)",
         ExpressionAttributeValues: {
           ":orgId": orgId,
-          ":sk": "MEMBER#"
+          ":sk": "MEMBER#",
         },
-        ExclusiveStartKey: lastEvaluatedKey
+        ExclusiveStartKey: lastEvaluatedKey,
       })
     );
-    
-    items.push(...Items as OrganizationMember[]);
+
+    items.push(...(Items as OrganizationMember[]));
     lastEvaluatedKey = LastEvaluatedKey;
   } while (lastEvaluatedKey);
 
   return items;
 }
 
-export async function putOrganizationMembership(member: OrganizationMember): Promise<void> {
-  await documentClient.send(new PutCommand({
-    TableName: ORGANIZATIONS_TABLE_NAME,
-    Item: {
-      ...member,
-      sk: `MEMBER#${member.clerkUserId}`
-    }
-  }));
+export async function putOrganizationMembership(
+  member: OrganizationMember
+): Promise<void> {
+  await documentClient.send(
+    new PutCommand({
+      TableName: ORGANIZATIONS_TABLE_NAME,
+      Item: {
+        ...member,
+        sk: `MEMBER#${member.clerkUserId}`,
+      },
+    })
+  );
 }
 
-export async function deleteOrganizationMembership(orgId: string, clerkUserId: string): Promise<void> {
-  await documentClient.send(new DeleteCommand({
-    TableName: ORGANIZATIONS_TABLE_NAME,
-    Key: {
-      orgId,
-      sk: `MEMBER#${clerkUserId}`
-    }
-  }));
+export async function deleteOrganizationMembership(
+  orgId: string,
+  clerkUserId: string
+): Promise<void> {
+  await documentClient.send(
+    new DeleteCommand({
+      TableName: ORGANIZATIONS_TABLE_NAME,
+      Key: {
+        orgId,
+        sk: `MEMBER#${clerkUserId}`,
+      },
+    })
+  );
 }
 
-export async function findOrganizationMembershipsByClerkUserId(clerkUserId: string): Promise<OrganizationMember[]> {
+export async function findOrganizationMembershipsByClerkUserId(
+  clerkUserId: string
+): Promise<OrganizationMember[]> {
   let items: OrganizationMember[] = [];
   let lastEvaluatedKey: any;
 
   do {
-    const data = await documentClient.send(new QueryCommand({
-      TableName: ORGANIZATIONS_TABLE_NAME,
-      IndexName: 'clerkUserIdIndex',
-      KeyConditionExpression: "clerkUserId = :clerkUserId",
+    const data = await documentClient.send(
+      new QueryCommand({
+        TableName: ORGANIZATIONS_TABLE_NAME,
+        IndexName: "clerkUserIdIndex",
+        KeyConditionExpression: "clerkUserId = :clerkUserId",
         ExpressionAttributeValues: {
           ":clerkUserId": clerkUserId,
         },
-      ExclusiveStartKey: lastEvaluatedKey
-    }));
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
 
-    items.push(...data.Items as OrganizationMember[]);
+    items.push(...(data.Items as OrganizationMember[]));
     lastEvaluatedKey = data.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 

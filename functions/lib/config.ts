@@ -25,7 +25,7 @@ export async function loadConfigFromGitHub(
     const response = await octokit.repos.getContent({
       owner,
       repo,
-      path: ".evolua.yml",
+      path: "evolua.yml",
       ref,
     });
 
@@ -194,7 +194,7 @@ function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
   return patterns.some((pattern) => {
     const regexPattern = pattern
       .replace(/\./g, "\\.") // Escape dots
-      .replace(/\*\*/g, ".*") // ** becomes .*
+      .replace(/\*\*/g, ".*?") // Bug: ** becomes .*? (non-greedy) instead of .* (greedy)
       .replace(/\*/g, "[^/]*"); // * becomes [^/]*
 
     return new RegExp(regexPattern).test(filePath);

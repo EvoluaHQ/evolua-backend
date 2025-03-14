@@ -78,10 +78,10 @@ export const DEFAULT_CONFIG: EvoluaConfig = {
     profile: "standard",
     language: "en",
     focus_areas: {
-      security: true,
-      code_quality: true,
-      best_practices: true,
-      performance: true,
+      security: false,
+      code_quality: false,
+      best_practices: false,
+      performance: false,
     },
     // Add default path filters that exclude common non-reviewable files and directories
     path_filters: [

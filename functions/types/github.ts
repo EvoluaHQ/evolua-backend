@@ -117,7 +117,7 @@ export interface FileChanges {
  * Extended PR file interface with change tracking
  */
 export interface PRFileChanges extends PRFile {
-  content: string | null;
+  content: string;
   changes: FileChanges;
 }
 

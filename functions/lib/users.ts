@@ -4,9 +4,9 @@ import {
   ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { documentClient, usersTableName } from './dynamodb-helper';
 import { ServiceException } from "@smithy/smithy-client";
 import { MaxScansExceededError } from "../types/errors";
+import { documentClient, usersTableName } from "./dynamodb-helper";
 
 const USERS_TABLE_NAME = usersTableName();
 
@@ -135,37 +135,35 @@ export async function deleteUser(id: string) {
 }
 
 export async function incrementScanCount(id: string, maxScans: number) {
-  const todayDate = new Date().toJSON().slice(0, 10);
-
   try {
-    await documentClient.send(
+    const response = await documentClient.send(
       new UpdateCommand({
         TableName: USERS_TABLE_NAME,
-        Key: {
-          id,
-        },
-        UpdateExpression: "ADD scanCount :one",
+        Key: { id },
+        UpdateExpression: "SET scanCount = scanCount + 1",
+        ReturnValues: "UPDATED_NEW",
+        ConditionExpression: "scanCount < :maxScans + 1",
         ExpressionAttributeValues: {
-          ":one": 1,
           ":maxScans": maxScans,
-          ":todayDate": todayDate,
         },
-        ConditionExpression: "attribute_exists(id) AND (scanCount < :maxScans OR :todayDate < freeTrialEndDate)",
       })
     );
-  } catch (err) {
+
+    return response.Attributes?.scanCount;
+  } catch (error) {
     if (
-      err instanceof ServiceException &&
-      err.name === "ConditionalCheckFailedException"
+      error instanceof ServiceException &&
+      error.name === "ConditionalCheckFailedException"
     ) {
-      throw new MaxScansExceededError("Scan limit exceeded");
-    } else {
-      throw err;
+      throw new MaxScansExceededError(
+        `User ${id} has reached the maximum number of scans (${maxScans})`
+      );
     }
+    throw error;
   }
 }
 
-export async function setUserTier(id: string, tier: "FREE" | "PRO", ) {
+export async function setUserTier(id: string, tier: "FREE" | "PRO") {
   await documentClient.send(
     new UpdateCommand({
       TableName: USERS_TABLE_NAME,

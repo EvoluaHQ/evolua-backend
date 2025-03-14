@@ -193,7 +193,7 @@ const _handler = async (event: Event, context: any) => {
         return (
           file.content !== null &&
           file.changeType !== "DELETED" &&
-          file.changes.lineNumbers.length > 0 &&
+          file.changes.lineNumbers.length >= 0 &&
           !shouldSkipFileUnified(file.path, config)
         );
       }
