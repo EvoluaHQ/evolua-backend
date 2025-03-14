@@ -1,6 +1,6 @@
 import { Logger } from "@aws-lambda-powertools/logger";
 import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/core";
+import { Octokit } from "@octokit/rest";
 /**
  * Fetch all PR files with changes
  */
@@ -36,11 +36,19 @@ const GITHUB_API_RATE_LIMIT = {
 
 let octokit: Octokit;
 
+/**
+ * Initialize the GitHub client with authentication
+ *
+ * @param appId - GitHub App ID
+ * @param privateKey - GitHub App private key
+ * @param installationId - GitHub App installation ID
+ * @returns The initialized Octokit instance for additional API calls
+ */
 export async function init(
   appId: string,
   privateKey: string,
   installationId: number
-) {
+): Promise<Octokit> {
   const auth = createAppAuth({
     appId,
     privateKey,
@@ -48,11 +56,14 @@ export async function init(
   });
 
   const installationAuth = await auth({ type: "installation" });
+
   octokit = new Octokit({
     auth: installationAuth.token,
   });
 
-  logger.info("GitHub Octokit initialized");
+  logger.info("GitHub client initialized", { installationId });
+
+  return octokit;
 }
 
 /**

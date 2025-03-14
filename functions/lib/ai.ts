@@ -1,12 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { TextBlock } from "@anthropic-ai/sdk/resources";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Tracer } from "@aws-lambda-powertools/tracer";
 import {
   BedrockRuntimeClient,
   ConverseCommand,
+  ConverseCommandInput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { FileChanges, PRFileChanges } from "../types";
+import { DEFAULT_CONFIG, EvoluaConfig } from "../types/config";
+import { buildCustomInstructions } from "./config";
 import { SITE_URL } from "./constants";
 import { getLanguageExtension } from "./utils";
 
@@ -50,15 +52,22 @@ export const AI_ANALYSIS_CONFIG = {
   model: {
     temperature: 0.1, // Lower temperature for more consistent results
     bedrock: {
+      sonnet37v1: "us.anthropic.claude-3-7-sonnet-20250219-v1:0", // cross-region inference
       sonnet35v2: "us.anthropic.claude-3-5-sonnet-20241022-v2:0", // cross-region inference
       sonnet35v1: "us.anthropic.claude-3-5-sonnet-20240620-v1:0", // cross-region inference
-      sonnet3: "us.anthropic.claude-3-sonnet-20240229-v1:0", // cross-region inference
-      haiku35: "us.anthropic.claude-3-5-haiku-20241022-v1:0", // cross-region inference
-      haiku3: "us.anthropic.claude-3-haiku-20240307-v1:0", // cross-region inference
     },
     anthropic: {
+      sonnet37v1: "claude-3-7-sonnet-20250219",
       sonnet35v2: "claude-3-5-sonnet-20241022",
     },
+  },
+  // Reasoning configurations for Claude models
+  reasoning: {
+    // Claude reasoning configuration
+    defaultBudget: 2000, // Default token budget for reasoning
+    complexTaskBudget: 4000, // For complex files or tasks
+    maxBudgetPercentage: 0.4, // Maximum percentage of tokens to use for reasoning
+    minBudget: 1024, // Minimum budget required for reasoning to be effective
   },
   // Concurrency and processing
   concurrency: {
@@ -67,6 +76,35 @@ export const AI_ANALYSIS_CONFIG = {
     retryDelay: 1000, // Base delay between retries (ms)
   },
 } as const;
+
+/**
+ * Reasoning Model Implementation Notes:
+ *
+ * AWS Bedrock Implementation for Claude 3.7 Sonnet:
+ * - Reasoning is configured via additionalModelRequestFields.thinking with "type": "enabled" and "budget_tokens": <token_count>
+ * - IMPORTANT: When reasoning is enabled, temperature MUST be set to 1.0 per AWS documentation
+ * - IMPORTANT: The "topP" parameter MUST NOT be included in the request when reasoning is enabled
+ * - Valid reasoning budget values range from 1024 to 8192 tokens
+ * - The budget_tokens value determines how many tokens Claude can use for step-by-step reasoning
+ * - Response will include a reasoningContent object with Claude's step-by-step thinking process
+ * - Reasoning is especially beneficial for complex code reviews requiring deep analysis
+ * - Claude will show its work in a structured, step-by-step fashion when analyzing complex patterns
+ *
+ * Anthropic Direct API Implementation:
+ * - Claude 3.7 Sonnet: Reasoning is configured via the thinking field with "type": "enabled" and "budget_tokens": <token_count>
+ * - Unlike AWS Bedrock, Anthropic API does not require temperature=1.0 when reasoning is enabled
+ * - Response will include content blocks with 'type': 'thinking' containing the reasoning process
+ *
+ * Response Format Differences:
+ * - AWS Bedrock: response.output.message.content contains blocks with reasoningContent and text properties
+ * - Anthropic API: response.content contains blocks with type property ('thinking' or 'text')
+ *
+ * Budget Management:
+ * - Budget sizes vary based on file complexity
+ * - Complex files (with async patterns, classes, etc.) receive larger reasoning budgets
+ * - Budget is scaled appropriately to match content complexity
+ * - The implementation detects specific code patterns that benefit from more reasoning budget
+ */
 
 const bedrockClient = tracer.captureAWSv3Client(new BedrockRuntimeClient());
 
@@ -80,18 +118,187 @@ export const initAnthropic = (apiKey: string) => {
 };
 
 /**
- * Analysis prompt template defining the expected response format
- * Uses a structured JSON schema for consistent and parseable results
- * Focuses on specific areas of code review and sets clear expectations
+ * Interface for AWS Bedrock reasoning configuration
  */
-export const SCAN_SYSTEM_PROMPT = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices. 
+interface AnthropicReasoningConfig {
+  type: "enabled";
+  budget_tokens: number;
+}
 
-Analysis Areas:
-1. Security: Identify vulnerabilities, data exposure, and unsafe operations
-2. Code Quality: Evaluate performance, maintainability, and error handling
-3. Best Practices: Assess adherence to design patterns and coding standards
+/**
+ * Interface for Bedrock additional model request fields
+ */
+interface AnthropicAdditionalFields {
+  thinking?: AnthropicReasoningConfig;
+}
 
-Guidelines:
+/**
+ * Interface for Bedrock inference configuration
+ */
+interface BedrockInferenceConfig {
+  temperature: number;
+  maxTokens: number;
+  topP?: number; // Must be disabled when reasoning is enabled
+}
+
+/**
+ * Determines appropriate reasoning budget based on file complexity
+ * @param content - The code content to analyze
+ * @param filePath - The file path for type detection
+ * @param tokenLimit - The total token limit for the model
+ * @returns The appropriate reasoning budget for the content
+ */
+const getReasoningBudget = (
+  content: string,
+  filePath: string,
+  tokenLimit: number
+): number => {
+  const fileType = getLanguageExtension(filePath);
+  const size = content.length;
+
+  // Use numeric constants instead of referencing the config directly to avoid type issues
+  const DEFAULT_BUDGET = 2000;
+  const COMPLEX_BUDGET = 4000;
+  const MIN_BUDGET = 1024;
+  const MAX_BUDGET_PERCENTAGE = 0.4;
+
+  // Calculate estimated tokens in content for better budget calculation
+  const estimatedContentTokens = Math.ceil(
+    size / AI_ANALYSIS_CONFIG.tokens.charsPerToken
+  );
+
+  // Count the number of lines in the content
+  const lineCount = content.split("\n").length;
+
+  // Extract changed lines from hunks in the code
+  const changedLinesCount = extractChangedLinesCount(content);
+
+  // Calculate the percentage of the file that was changed
+  const changePercentage =
+    changedLinesCount > 0 ? Math.min(changedLinesCount / lineCount, 1) : 0.1;
+
+  // Language-agnostic complexity metrics that work across programming languages
+  const complexityMetrics = {
+    // Size-based metrics
+    isLargeFile: size > 10000, // Over 10KB
+    isMediumFile: size > 5000 && size <= 10000, // 5-10KB
+
+    // Line-based metrics
+    hasHighLineCount: lineCount > 300, // More than 300 lines
+    hasMediumLineCount: lineCount > 150 && lineCount <= 300, // 150-300 lines
+
+    // Change-based metrics
+    hasSignificantChanges: changePercentage > 0.3, // >30% of file changed
+    hasModerateChanges: changePercentage > 0.1 && changePercentage <= 0.3, // 10-30% changed
+
+    // Universal complexity indicators (found in most languages)
+    hasNestedStructures: (content.match(/[{[(]/g) || []).length > 30, // Many braces/brackets
+    hasHighLogicBranching:
+      countOccurrences(content, /if|else|switch|case|for|while|do/g) > 15, // Many control flow statements
+    hasErrorHandling:
+      content.includes("try") ||
+      content.includes("catch") ||
+      content.includes("throw") ||
+      content.includes("except") ||
+      content.includes("finally"), // Basic error handling in many languages
+  };
+
+  // Count how many complexity metrics are true
+  const complexityScore =
+    Object.values(complexityMetrics).filter(Boolean).length;
+
+  // Determine base budget based on complexity score
+  let baseBudget = DEFAULT_BUDGET;
+
+  // For higher complexity (3+ factors), use the complex task budget
+  if (complexityScore >= 3) {
+    baseBudget = COMPLEX_BUDGET;
+  }
+
+  // For extremely complex content (5+ factors), increase budget further
+  if (complexityScore >= 5) {
+    baseBudget = Math.min(COMPLEX_BUDGET * 1.5, 6000);
+  }
+
+  // The larger the file, the more tokens we might need for reasoning
+  if (estimatedContentTokens > 5000) {
+    // For very large files, increase the budget proportionally
+    baseBudget = Math.min(baseBudget * 1.2, 6000);
+  }
+
+  // Ensure the budget doesn't exceed a reasonable percentage of the total token limit
+  const maxAllowedBudget = Math.floor(tokenLimit * MAX_BUDGET_PERCENTAGE);
+
+  // Final budget calculation with min/max bounds
+  const budget = Math.min(Math.max(baseBudget, MIN_BUDGET), maxAllowedBudget);
+
+  logger.debug("Calculated reasoning budget", {
+    fileType,
+    contentLength: size,
+    estimatedContentTokens,
+    lineCount,
+    changedLinesCount,
+    changePercentage,
+    complexityScore,
+    complexityMetrics,
+    baseBudget,
+    maxAllowedBudget,
+    finalBudget: budget,
+  });
+
+  return budget;
+};
+
+/**
+ * Helper function to count occurrences of a pattern in text
+ */
+function countOccurrences(text: string, pattern: RegExp): number {
+  const matches = text.match(pattern);
+  return matches ? matches.length : 0;
+}
+
+/**
+ * Extract the number of changed lines from code content
+ * Assumes code has been formatted with prepareCodeWithLineNumbersAndHunks
+ */
+function extractChangedLinesCount(content: string): number {
+  // Look for the arrow marker "→" which indicates changed lines
+  const changedLineMatches = content.match(/\|[⊢⊣┃]→/g);
+  return changedLineMatches ? changedLineMatches.length : 0;
+}
+
+/**
+ * Generates a customized system prompt based on the configuration
+ * @param config - The Evolua configuration (or undefined if not available)
+ * @param filePath - Optional file path for path-specific instructions
+ * @returns A tailored system prompt for the AI
+ */
+export function generateSystemPrompt(
+  config?: EvoluaConfig,
+  filePath?: string
+): string {
+  // Use default config if none provided
+  const effectiveConfig = config || DEFAULT_CONFIG;
+
+  // Base prompt that's always included
+  let prompt = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices.`;
+
+  // Add profile-specific guidance
+  if (effectiveConfig.review.profile === "strict") {
+    prompt += `\n\nYou should be extremely thorough and strict in your review, highlighting even minor issues that could be improved.`;
+  } else {
+    // Standard profile
+    prompt += `\n\nYou should focus on significant issues while ignoring trivial matters.`;
+  }
+
+  // Get custom instructions from the config helper function
+  const customInstructions = buildCustomInstructions(effectiveConfig, filePath);
+  if (customInstructions) {
+    prompt += `\n\n${customInstructions}`;
+  }
+
+  // Add standard guidelines
+  prompt += `\n\nGuidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Lines marked with ⊢ indicate the start of a change hunk, and ⊣ indicates the end of a hunk
@@ -101,14 +308,79 @@ Guidelines:
 - Reference relevant standards (CWE, OWASP, Documentations)
 - Keep responses concise and structured. Only report concrete, evidence-based issues.
 - Never include opinions, style preferences, or speculative issues.
-- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.
-- Assign risk levels based on severity:
+- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.`;
+
+  // Add profile-specific risk level guidance
+  if (effectiveConfig.review.profile === "strict") {
+    // Strict profile - include all severity levels
+    prompt += `\n\n- Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
   * Medium: Important quality issues (performance, validation, error handling, etc)
-  * Low: Minor improvements (style, documentation, optimizations)
+  * Low: Minor improvements (style, documentation, optimizations)`;
+  } else {
+    // Standard profile - focus only on critical and high severity issues
+    prompt += `\n\n- Assign risk levels based on severity, focusing ONLY on critical and high issues:
+  * Critical: Direct security risks (RCE, credentials exposure, etc)
+  * High: Significant vulnerabilities (XSS, unsafe operations, performance, etc)
+  * IGNORE Medium and Low severity issues unless they could potentially escalate to higher severity in specific contexts`;
+  }
 
-Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
+  // Add reasoning-optimized instructions for Claude models
+  prompt += `\n\n## Analysis Approach
+When analyzing code, I want you to employ detailed step-by-step reasoning:
+
+1. First understand the context:
+   - What is the purpose of this code?
+   - What frameworks or libraries is it using?
+   - How does it fit into the larger codebase?
+
+2. For each potential issue in the changed lines, systematically analyze:
+   
+   A. Security implications:
+      - Could there be injection vulnerabilities?
+      - Are authentication/authorization mechanisms properly implemented?
+      - Is sensitive data being handled securely?
+      - Is input properly validated and sanitized?
+   
+   B. Code quality concerns:
+      - Are there edge cases not being handled?
+      - Is there proper error handling?
+      - Could there be null/undefined values causing issues?
+      - Is there redundant or duplicated code?
+   
+   C. Performance considerations:
+      - Are there potential bottlenecks or inefficiencies?
+      - Could there be memory leaks?
+      - Are there better algorithms or data structures that could be used?
+      - Is there proper resource cleanup?
+   
+   D. Best practices evaluation:
+      - Does the code follow language/framework conventions?
+      - Is it maintainable and readable?
+      - Does it properly handle concurrency or async operations?
+      - Are there better design patterns that could be applied?
+
+3. For each identified issue:
+   - Determine exact cause by examining the specific code patterns
+   - Trace potential execution paths to understand impact
+   - Consider both direct and indirect consequences
+   - Develop a clear, specific fix that addresses the root cause
+
+4. Provide detailed rationale for each recommendation:
+   - Explain WHY it's an issue (not just WHAT)
+   - Cite specific standards or documentation where relevant
+   - Provide complete, production-ready code examples
+   
+5. When uncertain about an issue:
+   - State your confidence level explicitly
+   - Explain your reasoning process
+   - Provide the best recommendation based on available information
+
+This methodical analysis approach will deliver more accurate and actionable code reviews.`;
+
+  // Add standard output format guidance
+  prompt += `\n\nAlways return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
 {
   "summary": {
     "total_issues": number,   // Count of all identified issues
@@ -144,79 +416,261 @@ Always return findings in this exact JSON format within <findings> tags, ensurin
   ]
 }`;
 
+  return prompt;
+}
+
 const useBedrock = async (
   modelId: string,
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ): Promise<string[]> => {
   logger.info("Using Bedrock for analysis", { modelId, tokenLimit });
 
-  const resp = await bedrockClient.send(
-    new ConverseCommand({
-      modelId: modelId,
-      system: [{ text: SCAN_SYSTEM_PROMPT }],
-      messages: [
-        {
-          role: "user",
-          content: [{ text: userPrompt }],
-        },
-      ],
-      inferenceConfig: {
-        temperature: AI_ANALYSIS_CONFIG.model.temperature,
-        maxTokens: tokenLimit,
-      },
-    })
-  );
+  // Prepare inference configuration
+  const inferenceConfig: BedrockInferenceConfig = {
+    temperature: AI_ANALYSIS_CONFIG.model.temperature,
+    maxTokens: tokenLimit,
+  };
 
-  const contentBlocks = resp.output?.message?.content || [];
-  return contentBlocks.map((msg) => msg.text || "");
+  // Setup common parameters for the ConverseCommand - using any to bypass type checking
+  // In a real implementation, we would import the proper types from the AWS SDK
+  const converseParams: ConverseCommandInput = {
+    modelId: modelId,
+    system: [{ text: generateSystemPrompt(config, filePath) }],
+    messages: [
+      {
+        role: "user",
+        content: [{ text: userPrompt }],
+      },
+    ],
+    inferenceConfig: inferenceConfig,
+  };
+
+  // Add reasoning configuration for Claude 3.7 Sonnet
+  if (modelId === AI_ANALYSIS_CONFIG.model.bedrock.sonnet37v1) {
+    // Enable extended thinking mode for Claude 3.7 Sonnet
+    const reasoningBudget = filePath
+      ? getReasoningBudget(userPrompt, filePath, tokenLimit)
+      : AI_ANALYSIS_CONFIG.reasoning.defaultBudget;
+
+    // Validate reasoning budget is within AWS Bedrock limits
+    // AWS recommends minimum of 1024 tokens and maximum cannot exceed available tokens
+    const validatedBudget = Math.min(
+      Math.max(reasoningBudget, 1024), // Minimum 1024 tokens as per AWS docs
+      tokenLimit * 0.9 // Ensure we leave some tokens for the response
+    );
+
+    logger.info("Enabling Claude 3.7 Sonnet reasoning", {
+      originalBudget: reasoningBudget,
+      validatedBudget,
+    });
+
+    const additionalModelRequestFields: AnthropicAdditionalFields = {
+      thinking: {
+        type: "enabled",
+        budget_tokens: validatedBudget,
+      },
+    };
+
+    // Add reasoning configuration according to AWS documentation
+    // Using additionalModelRequestFields with thinking instead of inferenceConfig.reasoningConfig
+    converseParams.additionalModelRequestFields =
+      additionalModelRequestFields as any; // How to avoid any here?
+
+    // IMPORTANT: Per AWS documentation for Claude 3.7 Sonnet with reasoning:
+    // 1. Temperature MUST be set to 1.0 when reasoning is enabled
+    // 2. Top-P MUST be completely excluded from the request
+    inferenceConfig.temperature = 1.0;
+
+    // Delete topP completely
+    delete inferenceConfig.topP;
+
+    logger.info(
+      "Applying AWS Bedrock requirements for reasoning: temperature=1.0, topP=removed"
+    );
+  }
+
+  try {
+    const resp = await bedrockClient.send(new ConverseCommand(converseParams));
+
+    // Process response and extract both reasoning and final answer
+    const contentBlocks = resp.output?.message?.content || [];
+    const results: string[] = [];
+
+    // Process each content block to extract reasoning and text
+    for (const block of contentBlocks as any[]) {
+      if (
+        block.reasoningContent &&
+        block.reasoningContent.reasoningText &&
+        block.reasoningContent.reasoningText.text
+      ) {
+        logger.debug("Reasoning block found", {
+          reasoningLength: block.reasoningContent.reasoningText.text.length,
+        });
+        // Add the reasoning with clear markers
+        results.push(
+          `<thinking>\n${block.reasoningContent.reasoningText.text}\n</thinking>`
+        );
+      }
+      if (block.text) {
+        // Add the regular response text
+        results.push(block.text);
+      }
+    }
+
+    return results;
+  } catch (error) {
+    logger.error("Error in AWS Bedrock API call", {
+      error,
+      modelId,
+      hasReasoningEnabled: !!(
+        converseParams.additionalModelRequestFields as AnthropicAdditionalFields
+      )?.thinking,
+    });
+    throw error;
+  }
 };
+
+/**
+ * Type for Anthropic message options
+ */
+interface AnthropicMessageOptions {
+  model: string;
+  max_tokens: number;
+  temperature: number;
+  system: string;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  thinking?: AnthropicReasoningConfig;
+}
 
 const runAnthropic = async (
   modelId: string,
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ): Promise<string[]> => {
   logger.info("Using Anthropic for analysis", { modelId, tokenLimit });
 
-  const resp = await anthropic.messages.create({
+  // Create messaging options
+  const messagingOptions: AnthropicMessageOptions = {
     model: modelId,
     max_tokens: tokenLimit,
     temperature: AI_ANALYSIS_CONFIG.model.temperature,
-    system: SCAN_SYSTEM_PROMPT,
+    system: generateSystemPrompt(config, filePath),
     messages: [{ role: "user", content: userPrompt }],
-  });
+  };
 
-  logger.info("Anthropic response received", {
-    hasContent: !!resp.content,
-    contentLength: resp.content?.length,
-  });
+  // For Claude 3.7 models, enable reasoning using Anthropic's format
+  if (modelId === AI_ANALYSIS_CONFIG.model.anthropic.sonnet37v1) {
+    const reasoningBudget = filePath
+      ? getReasoningBudget(userPrompt, filePath, tokenLimit)
+      : AI_ANALYSIS_CONFIG.reasoning.defaultBudget;
 
-  return resp.content?.map((msg) => (msg as TextBlock).text) ?? [];
+    // Validate reasoning budget is within Anthropic's API limits
+    // Minimum of 1024 tokens is recommended for effective reasoning
+    const validatedBudget = Math.min(
+      Math.max(reasoningBudget, 1024), // Minimum 1024 tokens
+      tokenLimit * 0.9 // Ensure we leave some tokens for the response
+    );
+
+    logger.info("Enabling Claude 3.7 Sonnet reasoning with Anthropic API", {
+      originalBudget: reasoningBudget,
+      validatedBudget,
+    });
+
+    // Add reasoning configuration using Anthropic's format
+    // Anthropic API uses 'thinking' field with 'budget_tokens'
+    messagingOptions.thinking = {
+      type: "enabled",
+      budget_tokens: validatedBudget,
+    };
+
+    // Note: Unlike AWS Bedrock, Anthropic API does not require temperature=1.0
+    // when reasoning is enabled, so we keep the original temperature setting
+  }
+
+  try {
+    // Use any to bypass type checking issues
+    const resp = await anthropic.messages.create(messagingOptions);
+
+    logger.info("Anthropic response received", {
+      hasContent: !!resp.content,
+      contentLength: resp.content?.length,
+      hasThinking: !!messagingOptions.thinking,
+    });
+
+    const results: string[] = [];
+
+    // Process each content block to extract reasoning and text
+    if (resp.content && resp.content.length > 0) {
+      // Use any[] to avoid type issues with the Anthropic SDK
+      for (const block of resp.content as any[]) {
+        // Check for thinking blocks (using any to bypass type checking)
+        if (block.type === "thinking" && block.text) {
+          logger.debug("Anthropic thinking block found", {
+            thinkingLength: block.text.length,
+          });
+          results.push(`<thinking>\n${block.text}\n</thinking>`);
+        }
+        // Check for regular text blocks
+        else if (
+          (block.type === "text" || block.type === undefined) &&
+          block.text
+        ) {
+          results.push(block.text);
+        }
+      }
+    }
+
+    return results;
+  } catch (error) {
+    logger.error("Error in Anthropic API call", {
+      error,
+      modelId,
+      hasReasoningEnabled: !!messagingOptions.thinking,
+    });
+    throw error;
+  }
 };
 
 type runAiScanFunc = (
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ) => Promise<string[]>;
 
 const analyzeWithFallbacks = async (
   userPrompt: string,
-  tokenLimit: number
+  tokenLimit: number,
+  config?: EvoluaConfig,
+  filePath?: string
 ): Promise<string | undefined> => {
   const aiModels = AI_ANALYSIS_CONFIG.model;
   const modelsToRun: runAiScanFunc[] = [
-    (up, tl) => useBedrock(aiModels.bedrock.sonnet35v2, up, tl),
-    (up, tl) => runAnthropic(aiModels.anthropic.sonnet35v2, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.sonnet35v1, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.sonnet3, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.haiku35, up, tl),
-    (up, tl) => useBedrock(aiModels.bedrock.haiku3, up, tl),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.sonnet37v1, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      runAnthropic(aiModels.anthropic.sonnet37v1, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.sonnet35v2, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      runAnthropic(aiModels.anthropic.sonnet35v2, up, tl, conf, path),
+    (up, tl, conf, path) =>
+      useBedrock(aiModels.bedrock.sonnet35v1, up, tl, conf, path),
   ];
 
   for (const runAiScan of modelsToRun) {
     try {
-      const contentBlocks = await runAiScan(userPrompt, tokenLimit);
+      const contentBlocks = await runAiScan(
+        userPrompt,
+        tokenLimit,
+        config,
+        filePath
+      );
       return contentBlocks.join("\n\n");
     } catch (error) {
       logger.warn("AI API call failed, trying the next model", { error });
@@ -233,10 +687,12 @@ const analyzeWithFallbacks = async (
  * Handles different API formats for Anthropic direct vs AWS Bedrock
  *
  * @param content - The code content to analyze
+ * @param config - Optional configuration from evolua.yml
  * @returns Promise containing the AI service response
  */
 export const sendMessage = async (
-  file: PRFileChanges & { content: string }
+  file: PRFileChanges & { content: string },
+  config?: EvoluaConfig
 ): Promise<string | undefined> => {
   // Get optimal token limit
   const tokenLimit = getTokenLimit(file.content);
@@ -246,17 +702,25 @@ export const sendMessage = async (
     file.changes
   );
 
-  const USER_PROMPT = `Review the following code changes for security issues, quality problems, and best practice violations.
+  // Build the base prompt - keep it simple as configuration is now in system prompt
+  let USER_PROMPT = `Review the following code changes:
   
   File path: ${file.path}
   File type: ${getLanguageExtension(file.path)}
-  Changed lines: ${file.changes.lineNumbers.join(", ")}
-  
-  <source code>
-  ${codeWithLines}
-  </source code>`;
+  Changed lines: ${file.changes.lineNumbers.join(", ")}`;
 
-  return await analyzeWithFallbacks(USER_PROMPT, tokenLimit);
+  // Add the source code
+  USER_PROMPT += `\n\n<source code>\n${codeWithLines}\n</source code>`;
+
+  logger.info("Sending analysis request", {
+    filePath: file.path,
+    fileSize: file.content.length,
+    tokenLimit,
+    changeCount: file.changes.lineNumbers.length,
+  });
+
+  // The configuration and file path are now passed to the system prompt via analyzeWithFallbacks
+  return await analyzeWithFallbacks(USER_PROMPT, tokenLimit, config, file.path);
 };
 
 /**
@@ -347,39 +811,6 @@ const getTokenLimit = (content: string): number => {
  *   2|⊢→ return true;
  *   3| }
  */
-function prepareCodeWithLineNumbersAndHunksOld(
-  content: string,
-  changes: FileChanges
-): string {
-  const lines = content.split("\n");
-  return lines
-    .map((line, index) => {
-      const lineNumber = index + 1;
-
-      // Find which chunk this line belongs to, if any
-      const chunk = changes.chunks.find(
-        (chunk) => lineNumber >= chunk.hunkStart && lineNumber <= chunk.hunkEnd
-      );
-
-      // If line is in a chunk and is changed, mark it
-      const isChanged = chunk?.changedLines.includes(lineNumber);
-
-      // Add hunk boundary markers
-      const hunkMarker = chunk
-        ? lineNumber === chunk.hunkStart
-          ? "⊢" // start of hunk
-          : lineNumber === chunk.hunkEnd
-            ? "⊣" // end of hunk
-            : "┃" // middle of hunk
-        : " ";
-
-      const prefix = isChanged ? "→" : " ";
-
-      return `${lineNumber.toString().padStart(4, " ")}|${hunkMarker}${prefix}${line}`;
-    })
-    .join("\n");
-}
-
 function prepareCodeWithLineNumbersAndHunks(
   content: string,
   changes: FileChanges

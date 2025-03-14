@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration focused on security for software development
+
+review:
+  # Use strict profile to catch even minor security issues
+  profile: strict
+  language: en
+
+  # Custom instructions prioritizing security
+  custom_instructions: |
+    Focus heavily on identifying security vulnerabilities and weaknesses:
+    - OWASP Top 10 vulnerabilities
+    - CWE Top 25 weaknesses
+    - Insecure coding patterns
+    - Authentication and authorization issues
+    - Data validation and sanitization
+    - Secure configuration
+    - Cryptographic implementation errors
+    - Potential information disclosure
+    - Use concrete examples for each identified vulnerability
+
+  # Prioritize security, but still check other aspects
+  focus_areas:
+    security: true # Primary focus
+    code_quality: true # Still important as poor quality often leads to security issues
+    best_practices: true # Security best practices are essential
+    performance: false # Less focus on performance unless it impacts security
+
+  # General file patterns
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!vendor/**" # Common vendor directories
+    - "!**/*.min.js" # Minified files
+    - "!**/*.test.*" # Test files
+    - "!**/*.spec.*"
+    - "**/*" # Include all other files
+
+  # Specific security instructions for different types of files
+  path_instructions:
+    - path: "**/*.{js,ts,jsx,tsx}"
+      instructions: |
+        Focus on JavaScript/TypeScript security issues:
+        - Cross-Site Scripting (XSS) vulnerabilities
+        - Prototype pollution
+        - Insecure use of eval() or Function constructors
+        - DOM-based vulnerabilities
+        - Insecure dependencies
+        - Insecure randomness
+        - Improper input validation
+        - JavaScript injection
+        - Exposed sensitive information (API keys, tokens)
+        - JSON-related vulnerabilities (injection, etc.)
+        - Insecure use of cookies or localStorage
+
+    - path: "**/api/**/*"
+      instructions: |
+        For API endpoints/routes:
+        - Injection vulnerabilities (SQL, NoSQL, command, etc.)
+        - Improper authentication or session management
+        - Insecure direct object references (IDOR)
+        - Cross-Site Request Forgery (CSRF)
+        - Missing function-level access controls
+        - Security misconfiguration
+        - Broken authentication
+        - Sensitive data exposure
+        - Insecure deserialization
+        - Insufficient logging and monitoring
+
+    - path: "**/*.{py,rb,php}"
+      instructions: |
+        For server-side scripting languages:
+        - Server-Side Request Forgery (SSRF)
+        - Remote Code Execution (RCE)
+        - Path traversal
+        - File inclusion vulnerabilities
+        - Command injection
+        - Template injection
+        - Insecure deserialization
+        - Broken access control
+        - Authentication bypass
+        - Insecure file handling
+
+    - path: "**/*.{html,vue,svelte}"
+      instructions: |
+        For HTML and component files:
+        - Cross-Site Scripting (XSS) vectors
+        - Insecure Content-Security-Policy
+        - Insecure attribute binding
+        - Unsafe URL handling
+        - Client-side template injection
+        - DOM-based vulnerabilities
+        - Insecure component rendering
+
+    - path: "**/config/**/*"
+      instructions: |
+        For configuration files:
+        - Hardcoded credentials
+        - Insecure default settings
+        - Excessive permissions
+        - Debug features enabled in production
+        - Exposed internal endpoints
+        - Insecure cookie settings
+        - Missing security headers
+        - Verbose error messages
+        - Insecure CORS settings
+
+    - path: "**/auth/**/*"
+      instructions: |
+        For authentication-related code:
+        - Weak password handling
+        - Insecure session management
+        - Missing or weak MFA implementation
+        - JWT vulnerabilities
+        - Timing attacks
+        - Account enumeration vulnerabilities
+        - Insecure password reset mechanisms
+        - Credential stuffing protections
+        - Brute force protections
+        - Improper OAuth implementations

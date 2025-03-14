@@ -15,6 +15,7 @@
 import { Logger } from "@aws-lambda-powertools/logger";
 import { Metrics, MetricUnit } from "@aws-lambda-powertools/metrics";
 import { Tracer } from "@aws-lambda-powertools/tracer";
+import { Octokit } from "@octokit/rest";
 import { Sema } from "async-sema";
 import { EventBridgeEvent } from "aws-lambda";
 import { ulid } from "ulid";
@@ -29,9 +30,9 @@ import {
   initAnthropic,
   sendMessage,
 } from "./lib/ai";
+import { loadConfigFromGitHub, shouldSkipFileUnified } from "./lib/config";
 import { SUBSCRIPTION_TIERS } from "./lib/constants";
 import { publishEvent } from "./lib/events";
-import { shouldSkipFile } from "./lib/file-ignore";
 import {
   commentOnPR,
   deleteCommentOnPR,
@@ -91,7 +92,7 @@ const _handler = async (event: Event, context: any) => {
     const installationId = input.installation_id;
     const ghAppId = context.GITHUB_APP_ID;
     const ghPrivateKey = context.GITHUB_PRIVATE_KEY;
-    await init(ghAppId, ghPrivateKey, installationId);
+    const octokit: Octokit = await init(ghAppId, ghPrivateKey, installationId);
 
     logger.debug("Fetching PR details from GitHub");
 
@@ -158,33 +159,43 @@ const _handler = async (event: Event, context: any) => {
     const repo = input.repository.name;
     const pullNumber = pullRequest.number;
 
+    // Get the HEAD SHA for the PR
+    const headSha = ghPrData.head.sha;
+
+    // Load configuration early to use in file filtering
+    logger.debug("Loading configuration from GitHub");
+    const config = await loadConfigFromGitHub(octokit, owner, repo, headSha);
+
     // Fetch and analyze files
     const prFileContent = await fetchPRFiles(owner, repo, pullNumber);
 
+    // Enhance the files with repository information for configuration loading
+    const enhancedFiles = prFileContent.map((file) => ({
+      ...file,
+      repository: {
+        owner_login: owner,
+        name: repo,
+      },
+      headSha,
+      octokit,
+    }));
+
     // Filter out files with null content
-    const validFiles = prFileContent.filter(
-      (file): file is PRFileChanges & { content: string } => {
-        // Check if file content is null
-        if (!file.content) {
-          logger.warn(`Skipping file ${file.path}: null content`);
-          metrics.addMetric("SkippedFiles", MetricUnit.Count, 1);
-          return false;
-        }
-
-        // Check if file should be skipped based on filters
-        if (shouldSkipFile(file.path)) {
-          logger.info(`Skipping excluded file: ${file.path}`);
-          metrics.addMetric("ExcludedFiles", MetricUnit.Count, 1);
-          return false;
-        }
-
-        // Check if file has any changes
-        if (file.changes.lineNumbers.length === 0) {
-          logger.info(`Skipping file with no changes: ${file.path}`);
-          return false;
-        }
-
-        return true;
+    const validFiles = enhancedFiles.filter(
+      (
+        file
+      ): file is PRFileChanges & {
+        content: string;
+        repository: { owner_login: string; name: string };
+        headSha: string;
+        octokit: any;
+      } => {
+        return (
+          file.content !== null &&
+          file.changeType !== "DELETED" &&
+          file.changes.lineNumbers.length > 0 &&
+          !shouldSkipFileUnified(file.path, config)
+        );
       }
     );
 
@@ -218,11 +229,8 @@ const _handler = async (event: Event, context: any) => {
       await submitPRReview(owner, repo, pullNumber, results);
     } else {
       logger.info("No issues found, skipping review submission");
-    
-      await commentOnPR(
-        pullRequest.node_id,
-        "No issues found, good job! 👍"
-      );
+
+      await commentOnPR(pullRequest.node_id, "No issues found, good job! 👍");
     }
 
     // Calculate final metrics
@@ -293,18 +301,34 @@ const _handler = async (event: Event, context: any) => {
  * @returns Promise containing analysis results or null if no issues found
  */
 const analyzeFile = async (
-  file: PRFileChanges & { content: string }
+  file: PRFileChanges & {
+    content: string;
+    repository: { owner_login: string; name: string };
+    headSha: string;
+    octokit: Octokit;
+  }
 ): Promise<Findings | null> => {
   const startTime = Date.now();
-  const fileSize = file.content.length;
+  const fileSize = file.content?.length || 0;
 
   try {
-    logger.info("Starting file analysis", {
+    logger.info("Analyzing file", {
       path: file.path,
       size: fileSize,
       changedLines: file.changes.lineNumbers,
       chunksCount: file.changes.chunks.length,
     });
+
+    // Load the configuration from the repository
+    const config = await loadConfigFromGitHub(
+      file.octokit,
+      file.repository.owner_login,
+      file.repository.name,
+      file.headSha
+    );
+
+    // Note: We don't need to check shouldSkipFileUnified anymore since we've already
+    // filtered files using shouldSkipFileUnified before this function is called
 
     // Skip extremely large files
     if (fileSize > AI_ANALYSIS_CONFIG.fileSize.max) {
@@ -317,7 +341,7 @@ const analyzeFile = async (
       return null;
     }
 
-    const output = await sendMessage(file);
+    const output = await sendMessage(file, config);
 
     if (!output) {
       throw new Error("No output received from AI service");
@@ -430,54 +454,63 @@ const analyzeFile = async (
  * @returns Promise containing array of analysis results
  */
 const processFiles = async (
-  files: (PRFileChanges & { content: string })[]
+  files: (PRFileChanges & {
+    content: string;
+    repository: { owner_login: string; name: string };
+    headSha: string;
+    octokit: any;
+  })[]
 ): Promise<ScanResult[]> => {
   logger.info("Starting processFiles", {
-    totalFiles: files.length,
-    filesDetails: files.map((f) => ({
-      path: f.path,
-      hasContent: !!f.content,
-      changesCount: f.changes.lineNumbers.length,
-      shouldSkip: shouldSkipFile(f.path),
-    })),
+    count: files.length,
   });
 
-  // Initialize semaphore for concurrency control
-  const sema = new Sema(AI_ANALYSIS_CONFIG.concurrency.limit, {
-    capacity: files.length,
-    pauseFn: () => logger.info("Rate limit reached, pausing..."),
-    resumeFn: () => logger.info("Resuming analysis..."),
-  });
+  const sema = new Sema(AI_ANALYSIS_CONFIG.concurrency.limit);
+  const processingStartTime = Date.now();
 
-  // Process each file with semaphore control
-  const analysisPromises = files.map(async (file) => {
-    await sema.acquire();
-    try {
-      const findings = await analyzeFile(file);
+  // Process files and attempt retries if needed
+  const results = await Promise.all(
+    files.map(async (file) => {
+      const fileStartTime = Date.now();
+      await sema.acquire();
+      try {
+        const findings = await analyzeFile(file);
 
-      logger.info("File analysis result", {
-        path: file.path,
-        hasFindings: !!findings,
-        issuesCount: findings?.issues?.length ?? 0,
-      });
+        logger.info("File analysis result", {
+          path: file.path,
+          hasFindings: !!findings,
+          issuesCount: findings?.issues.length || 0,
+        });
 
-      if (findings && findings?.issues.length > 0) {
-        logger.info(
-          `Found ${findings.issues.length} issues in changed lines of ${file.path}`
+        metrics.addMetric("AnalyzedFiles", MetricUnit.Count, 1);
+        metrics.addMetric(
+          "ProcessingTime",
+          MetricUnit.Milliseconds,
+          Date.now() - fileStartTime
         );
-        return { file, findings };
+
+        return findings
+          ? {
+              file,
+              findings,
+            }
+          : null;
+      } catch (error) {
+        logger.error(`Error analyzing ${file.path}:`, error as Error);
+        return null;
+      } finally {
+        sema.release();
       }
-      return null;
-    } catch (error) {
-      logger.error(`Error analyzing ${file.path}:`, error as Error);
-      return null;
-    } finally {
-      sema.release();
-    }
+    })
+  );
+
+  // Log overall processing time
+  logger.info("Completed processing all files", {
+    duration: Date.now() - processingStartTime,
+    filesCount: files.length,
   });
 
-  const analysisResults = await Promise.all(analysisPromises);
-  const filteredResults = analysisResults.filter(Boolean) as ScanResult[];
+  const filteredResults = results.filter(Boolean) as ScanResult[];
 
   logger.info("Analysis results summary", {
     totalProcessed: files.length,

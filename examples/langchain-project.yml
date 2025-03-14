@@ -1,0 +1,248 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for LangChain Python projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to LangChain projects
+  custom_instructions: |
+    Focus on LangChain-specific patterns and best practices:
+    - Proper chain composition and orchestration
+    - Schema definition for structured outputs
+    - Prompt engineering and template usage
+    - Memory mechanisms and state management
+    - Proper error handling and fallback strategies
+    - Output parsing and response formatting
+    - LLM integration best practices
+    - Vector database and embedding usage
+    - Agent development and tool integration
+    - Retrieval patterns and RAG implementations
+    - Integration with external APIs and services
+    - Performance optimization for chain execution
+    - Testing and evaluation of LLM applications
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Configure which files to include/exclude
+  path_filters:
+    - "!venv/**"
+    - "!env/**"
+    - "!.venv/**"
+    - "!__pycache__/**"
+    - "!*.pyc"
+    - "!dist/**"
+    - "!build/**"
+    - "!*.egg-info/**"
+    - "!.pytest_cache/**"
+    - "!.coverage"
+    - "!htmlcov/**"
+    - "!**/*_test.py"
+    - "!**/test_*.py"
+    - "**/*.py"
+    - "pyproject.toml"
+    - "setup.py"
+    - "requirements*.txt"
+    - ".env.example"
+    - "*.ipynb" # Include Jupyter notebooks for examples
+
+  # Specific instructions for different file types
+  path_instructions:
+    - path: "**/chains/**/*.py"
+      instructions: |
+        For LangChain Chain files:
+        - Ensure proper chain composition and error handling
+        - Use appropriate callbacks for logging and tracing
+        - Consider memory implementations for stateful chains
+        - Implement proper input/output schemas
+        - Use LangSmith for tracing where appropriate
+        - Consider chain serialization for production deployments
+        - Ensure proper timeout and retry mechanisms
+        - Implement proper error messages for user feedback
+        - Consider streaming responses for large outputs
+        - Use proper type annotations for input/output schemas
+        - Consider cost and token usage optimizations
+
+    - path: "**/prompts/**/*.py"
+      instructions: |
+        For Prompt Template files:
+        - Use structured prompt templates with clear input variables
+        - Consider using few-shot examples for complex tasks
+        - Implement proper input validation
+        - Use template formatting best practices
+        - Consider using ChatPromptTemplate for chat models
+        - Implement proper documentation of prompt structure
+        - Consider reusability and modularity of prompts
+        - Use proper escape characters for special tokens
+        - Consider internationalization if applicable
+        - Implement proper versioning for prompt templates
+        - Use proper jinja2 templates for complex formatting if needed
+
+    - path: "**/schemas/**/*.py"
+      instructions: |
+        For Schema Definition files:
+        - Define clear and unambiguous schema properties
+        - Use proper types for each property
+        - Include descriptive documentation for each field
+        - Use enum values where appropriate to restrict outputs
+        - Specify required fields explicitly
+        - Consider using Pydantic models for validation
+        - Implement proper error handling for schema validation
+        - Consider nested schemas for complex structures
+        - Use proper default values where appropriate
+        - Consider schema evolution and backward compatibility
+        - Use JsonSchema for structured extraction
+
+    - path: "**/agents/**/*.py"
+      instructions: |
+        For Agent files:
+        - Implement proper tool definitions with clear descriptions
+        - Use appropriate agent executor for the use case
+        - Consider ReAct or other reasoning patterns
+        - Implement proper stopping criteria
+        - Use appropriate prompts for agent instructions
+        - Consider agent memory for multi-turn interactions
+        - Implement proper error handling for tool execution
+        - Use appropriate model selection for agent reasoning
+        - Consider human-in-the-loop patterns where appropriate
+        - Implement proper logging of agent actions
+        - Use proper output parsing for structured responses
+
+    - path: "**/retrievers/**/*.py"
+      instructions: |
+        For Retrieval files:
+        - Implement proper vector database integration
+        - Consider metadata filtering for retrieval
+        - Use appropriate similarity metrics
+        - Implement proper chunking strategies
+        - Consider hybrid search approaches
+        - Use proper embedding models for the domain
+        - Implement proper caching for retrievals
+        - Consider reranking for improved relevance
+        - Use proper indexing strategies for performance
+        - Implement proper error handling for retrieval failures
+        - Consider self-query or query transformations
+
+    - path: "**/models/**/*.py"
+      instructions: |
+        For Model Integration files:
+        - Use appropriate model for the task (consideration of capabilities)
+        - Implement proper API key management
+        - Consider caching mechanisms for responses
+        - Use appropriate temperature settings
+        - Implement proper error handling for API failures
+        - Consider token limit constraints
+        - Use streaming for long responses where appropriate
+        - Implement proper timeout mechanisms
+        - Consider fallback models for reliability
+        - Use proper model versioning
+        - Consider cost optimization strategies
+
+    - path: "**/output_parsers/**/*.py"
+      instructions: |
+        For Output Parser files:
+        - Define clear output schemas for structured parsing
+        - Implement proper error handling for parsing failures
+        - Consider retry mechanisms with refined instructions
+        - Use appropriate parser for the output format (JSON, YAML, etc.)
+        - Implement proper typing for parsed outputs
+        - Consider using Pydantic for validation
+        - Use structured formatters in prompts
+        - Implement proper feedback for parsing errors
+        - Consider using PydanticOutputParser or similar
+        - Use proper debugging for parsing issues
+        - Consider fallback parsing strategies
+
+    - path: "**/memory/**/*.py"
+      instructions: |
+        For Memory Component files:
+        - Use appropriate memory implementation for the use case
+        - Implement proper state management
+        - Consider token limitations in memory storage
+        - Use proper serialization for persistent memory
+        - Implement proper memory window size
+        - Consider entity extraction for targeted memory
+        - Use appropriate message history formatting
+        - Implement proper memory pruning strategies
+        - Consider privacy and data retention policies
+        - Use proper error handling for memory operations
+        - Consider memory vectorization for semantic retrieval
+
+    - path: "**/embeddings/**/*.py"
+      instructions: |
+        For Embedding files:
+        - Use appropriate embedding model for the domain
+        - Consider dimensionality and performance tradeoffs
+        - Implement proper caching for embeddings
+        - Use batching for efficient embedding generation
+        - Consider model quantization for performance
+        - Implement proper error handling for embedding failures
+        - Use appropriate text preprocessing
+        - Consider multilingual capabilities if needed
+        - Use proper versioning for embedding models
+        - Implement proper chunking strategies
+        - Consider cost optimization strategies
+
+    - path: "**/*_app.py"
+      instructions: |
+        For Application files:
+        - Implement proper environment variable management
+        - Use appropriate error handling and user feedback
+        - Consider implementing proper logging
+        - Use appropriate authentication mechanisms
+        - Implement proper input validation
+        - Consider rate limiting for API calls
+        - Use proper chain/agent initialization
+        - Implement proper response formatting
+        - Consider streaming responses for long-running operations
+        - Use proper type annotations
+        - Consider stateful vs stateless design
+
+    - path: "*.ipynb"
+      instructions: |
+        For Jupyter Notebooks:
+        - Include clear documentation and explanations
+        - Organize code cells logically
+        - Consider memory usage for large operations
+        - Hide or externalize API keys and secrets
+        - Include requirements and setup instructions
+        - Implement proper error handling and explanations
+        - Use clear output examples
+        - Consider using LangSmith for tracing and debugging
+        - Include proper markdown explanations between code cells
+        - Consider performance implications of operations
+        - Include references to relevant documentation
+
+    - path: "pyproject.toml"
+      instructions: |
+        For Project Configuration:
+        - Specify appropriate LangChain version dependencies
+        - Include all necessary dependencies with version constraints
+        - Configure development dependencies separately
+        - Set up proper Python version requirements
+        - Configure testing framework (pytest)
+        - Set up linting and formatting tools
+        - Configure type checking (mypy)
+        - Set up proper package metadata
+        - Consider optional dependencies for different features
+        - Use appropriate classifiers for package metadata
+        - Configure build system appropriately
+
+    - path: "**/*_test.py"
+      instructions: |
+        For Test files:
+        - Implement proper mocking of LLM calls
+        - Use appropriate test fixtures
+        - Consider using LangChain's test utilities
+        - Test for proper error handling
+        - Use parameterized tests for different scenarios
+        - Implement proper isolation for tests
+        - Consider using LangSmith for evaluation
+        - Test for edge cases and failure modes
+        - Implement proper assertions for expected outputs
+        - Consider testing for different model behaviors
+        - Use proper setup and teardown for resources

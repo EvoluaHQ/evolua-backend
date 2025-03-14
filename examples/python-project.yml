@@ -1,0 +1,177 @@
+# yaml-language-server: $schema=https://evolua.io/schema/evolua-config-schema.json
+# Example configuration for Python projects
+
+review:
+  profile: standard
+  language: en
+
+  # Custom instructions specific to Python projects
+  custom_instructions: |
+    Focus on Python-specific best practices:
+    - PEP 8 compliance for code style
+    - Type hints usage and correctness (PEP 484, 585, 593, 604)
+    - Proper exception handling
+    - SOLID principles in OOP code
+    - Pythonic code patterns (list comprehensions, generators, etc.)
+    - Appropriate use of Python standard libraries
+    - Modern Python features (f-strings, walrus operator, pattern matching)
+    - Asynchronous programming patterns (async/await)
+    - Modern packaging practices (pyproject.toml, Poetry)
+    - Context managers and resource handling
+    - Performance considerations (avoid inefficient operations)
+
+  focus_areas:
+    security: true
+    code_quality: true
+    best_practices: true
+    performance: true
+
+  # Exclude common Python directories and files
+  path_filters:
+    - "!venv/**"
+    - "!env/**"
+    - "!.venv/**"
+    - "!__pycache__/**"
+    - "!*.pyc"
+    - "!dist/**"
+    - "!build/**"
+    - "!*.egg-info/**"
+    - "!.pytest_cache/**"
+    - "!.coverage"
+    - "!htmlcov/**"
+    - "!**/*_test.py" # Exclude test files if needed
+    - "!**/test_*.py"
+    - "!.tox/**"
+    - "!.mypy_cache/**"
+    - "!.ruff_cache/**"
+    - "**/*.py" # Include all Python files
+    - "pyproject.toml" # Modern Python project configuration
+    - "setup.py" # Traditional Python project configuration
+    - "setup.cfg" # Python project configuration
+    - "requirements*.txt" # Requirements files
+    - "Pipfile" # Pipenv configuration
+    - "poetry.lock" # Poetry lock file
+
+  path_instructions:
+    - path: "**/*.py"
+      instructions: |
+        Follow these Python best practices:
+        - Use type hints for function parameters and return values (PEP 484)
+        - Use modern type annotations (PEP 585) - use built-in collections as generic types (list[str] instead of List[str])
+        - Use union operator for type unions (str | None instead of Union[str, None]) (PEP 604)
+        - Use docstrings for all public functions, classes, and modules (Google style docstrings preferred)
+        - Handle exceptions appropriately (avoid bare except clauses, use specific exception types)
+        - Use context managers (with statements) for resource management
+        - Prefer f-strings for string formatting over % or .format()
+        - Use enumerate() when you need both index and value from an iterable
+        - Use dict.get() with a default value instead of checking if key exists
+        - Follow consistent naming conventions (snake_case for functions and variables, PascalCase for classes)
+        - Limit line length to 88-100 characters (modern adaption of PEP 8)
+        - Use keyword arguments for clarity in function calls
+        - Use the walrus operator (:=) appropriately to avoid repeated expressions (Python 3.8+)
+        - Consider using structural pattern matching for complex conditionals (Python 3.10+)
+
+    - path: "**/models/**/*.py"
+      instructions: |
+        For model files:
+        - Ensure proper validation of model fields
+        - Use appropriate data types
+        - Include helpful docstrings for model fields
+        - Consider using dataclasses for simple models (Python 3.7+)
+        - Use attrs for more complex models with validation
+        - Implement proper __str__ and __repr__ methods
+        - Use appropriate type annotations
+        - Consider using Pydantic for data validation and settings management
+        - Implement proper equality methods (__eq__, __hash__) for models used as keys
+        - Use properties instead of getters/setters for attribute access
+        - Consider making immutable models using frozen dataclasses or @property
+
+    - path: "**/views/**/*.py"
+      instructions: |
+        For view files:
+        - Ensure proper input validation
+        - Implement appropriate error handling
+        - Avoid business logic in views (move to services)
+        - Properly document API endpoints
+        - Check for security issues like CSRF, XSS, etc.
+        - Use type annotations for request and response objects
+        - Use dependency injection for services
+        - Consider using Pydantic models for request/response validation
+        - Implement proper logging
+        - Use async views where appropriate (for FastAPI, Starlette, etc.)
+        - Implement proper response status codes
+        - Consider pagination for endpoints returning multiple items
+
+    - path: "**/tests/**/*.py"
+      instructions: |
+        For test files:
+        - Ensure tests are isolated and don't depend on external services
+        - Use appropriate assertions (pytest's rich assertions recommended)
+        - Ensure proper test coverage for edge cases
+        - Use fixtures for test setup and teardown (pytest)
+        - Use parameterized tests for testing multiple scenarios
+        - Mock external dependencies appropriately
+        - Follow Arrange-Act-Assert pattern
+        - Use descriptive test names that explain the test intent
+        - Test both success and failure paths
+        - Consider property-based testing with Hypothesis for complex data types
+        - Implement proper test cleanup to avoid test pollution
+        - Use pytest's monkeypatch for modifying objects safely during tests
+        - Consider testing for performance regressions where appropriate
+
+    - path: "**/async/**/*.py"
+      instructions: |
+        For asynchronous code:
+        - Use async/await syntax correctly
+        - Avoid blocking operations in async functions
+        - Properly handle exceptions in async code
+        - Use asyncio gathering for concurrent operations
+        - Implement proper cancellation handling
+        - Consider thread safety when mixing sync and async code
+        - Use proper context managers for async resources
+        - Consider using async libraries for I/O operations
+        - Implement back-pressure and throttling where needed
+        - Use task groups for managing related async tasks (Python 3.11+)
+        - Consider using asyncio.TaskGroup for better exception handling
+
+    - path: "pyproject.toml"
+      instructions: |
+        For project configuration:
+        - Use modern packaging configuration with pyproject.toml
+        - Specify appropriate Python version constraints
+        - Configure development dependencies separately
+        - Set up appropriate build system (setuptools, poetry, etc.)
+        - Configure linting tools (flake8, ruff, black, etc.)
+        - Configure type checking tools (mypy, pyright)
+        - Set up isort for import sorting
+        - Configure pytest for testing
+        - Use appropriate project metadata
+        - Consider using version string that complies with PEP 440
+
+    - path: "**/cli/**/*.py"
+      instructions: |
+        For command-line interfaces:
+        - Use argparse or click for parsing command-line arguments
+        - Implement proper error handling and user feedback
+        - Use appropriate exit codes
+        - Implement proper help text
+        - Consider implementing shell completion
+        - Use appropriate logging levels
+        - Implement verbose and quiet modes
+        - Consider using rich or similar for enhanced terminal output
+        - Implement progress indicators for long-running operations
+        - Consider implementing configuration file support
+
+    - path: "**/utils/**/*.py"
+      instructions: |
+        For utility functions:
+        - Make utilities focused and single-purpose
+        - Implement proper error handling
+        - Use descriptive names that indicate the function's purpose
+        - Write thorough docstrings with examples
+        - Use type annotations for all parameters and return values
+        - Implement proper input validation
+        - Consider edge cases in implementation
+        - Make utilities testable (avoid side effects, global state)
+        - Use caching or memoization for expensive operations
+        - Consider making utilities stateless
