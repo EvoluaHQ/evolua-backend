@@ -404,8 +404,8 @@ This methodical analysis approach will deliver more accurate and actionable code
       "description": string,    // Clear explanation of the issue
       "impact": string,
       "recommendation": {
-        "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches
-        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Use proper JSON string escaping (\\n for newlines, \\" for quotes, \\\\ for backslashes, \\b, \\f, \\r, \\t for control characters). DO NOT use triple quotes.
+        "description": string, // Provide step-by-step guidance how to fix the issue. When relevant, briefly mention alternative approaches. Use markdown if necessary.
+        "code": string         // Provide complete, production-ready code replacement. Add brief comments explaining key changes. Use proper JSON string escaping (\\n for newlines, \\" for quotes, \\\\ for backslashes, \\b, \\f, \\r, \\t for control characters). DO NOT use triple quotes. DO NOT use markdown, only use code.
       },
       "cwe_id": string | null,        // e.g., "CWE-287".
       "reference": {
