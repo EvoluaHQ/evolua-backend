@@ -338,40 +338,47 @@ When analyzing code, I want you to employ detailed step-by-step reasoning:
 2. For each potential issue in the changed lines, systematically analyze:`;
 
   // Dynamically add analysis focus areas based on config
-  const { focus_areas } = effectiveConfig.review;
+  const focus_areas = effectiveConfig.review?.focus_areas;
 
-  // Track if any focus areas were added
-  let focusAreasAdded = false;
+  // Collect prompt segments in an array instead of repeated concatenation
+  const focusAreaSegments = [];
 
   if (focus_areas?.security) {
-    prompt += `\n   
-   - Security implications - Check for vulnerabilities, authentication/authorization issues, secure data handling, and input validation.`;
-    focusAreasAdded = true;
+    focusAreaSegments.push(
+      "   - Security implications - Check for vulnerabilities, authentication/authorization issues, secure data handling, and input validation."
+    );
   }
 
   if (focus_areas?.code_quality) {
-    prompt += `\n   
-   - Code quality concerns - Evaluate error handling, edge cases, potential null/undefined issues, and code duplication.`;
-    focusAreasAdded = true;
+    focusAreaSegments.push(
+      "   - Code quality concerns - Evaluate error handling, edge cases, potential null/undefined issues, and code duplication."
+    );
   }
 
   if (focus_areas?.performance) {
-    prompt += `\n   
-   - Performance considerations - Assess efficiency, memory usage, algorithmic choices, and resource management.`;
-    focusAreasAdded = true;
+    focusAreaSegments.push(
+      "   - Performance considerations - Assess efficiency, memory usage, algorithmic choices, and resource management."
+    );
   }
 
   if (focus_areas?.best_practices) {
-    prompt += `\n   
-   - Best practices evaluation - Review coding standards, maintainability, concurrency patterns, and architectural design.`;
-    focusAreasAdded = true;
+    focusAreaSegments.push(
+      "   - Best practices evaluation - Review coding standards, maintainability, concurrency patterns, and architectural design."
+    );
   }
 
   // If no focus areas were specified or enabled, add a default general analysis prompt
-  if (!focusAreasAdded) {
-    prompt += `\n   
-   - Analyze comprehensively for any issues that might affect security, code quality, performance, or adherence to best practices.`;
+  if (focusAreaSegments.length === 0) {
+    focusAreaSegments.push(
+      "   - Analyze comprehensively for any issues that might affect security, code quality, performance, or adherence to best practices."
+    );
   }
+
+  // Add all focus areas to the prompt with proper formatting
+  prompt +=
+    focusAreaSegments.length > 0
+      ? "\n" + focusAreaSegments.join("\n") + "\n"
+      : "";
 
   prompt += `\n
 3. For each identified issue:
