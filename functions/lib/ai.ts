@@ -280,25 +280,62 @@ export function generateSystemPrompt(
   // Use default config if none provided
   const effectiveConfig = config || DEFAULT_CONFIG;
 
-  // Base prompt that's always included
-  let prompt = `You are an expert code reviewer specialized in security vulnerabilities, code quality, and best practices.`;
+  // Extract focus areas early so we can use them throughout prompt generation
+  const focus_areas = effectiveConfig.review?.focus_areas;
+
+  // Use array to collect prompt segments for better performance
+  const promptSegments = [];
+
+  // Build specialization list based on enabled focus areas
+  const specializations = [];
+
+  if (focus_areas?.security) {
+    specializations.push("security vulnerabilities");
+  }
+
+  if (focus_areas?.code_quality) {
+    specializations.push("code quality");
+  }
+
+  if (focus_areas?.performance) {
+    specializations.push("performance optimization");
+  }
+
+  if (focus_areas?.best_practices) {
+    specializations.push("best practices");
+  }
+
+  // Use all specified specializations, or a general phrase if none specified
+  const specializationText =
+    specializations.length > 0
+      ? specializations.join(", ")
+      : "security vulnerabilities, code quality, and best practices";
+
+  // Base prompt that's always included but now with dynamic specializations
+  promptSegments.push(
+    `You are an expert code reviewer specialized in ${specializationText}.`
+  );
 
   // Add profile-specific guidance
   if (effectiveConfig.review.profile === "strict") {
-    prompt += `\n\nYou should be extremely thorough and strict in your review, highlighting even minor issues that could be improved.`;
+    promptSegments.push(
+      `You should be extremely thorough and strict in your review, highlighting even minor issues that could be improved.`
+    );
   } else {
     // Standard profile
-    prompt += `\n\nYou should focus on significant issues while ignoring trivial matters.`;
+    promptSegments.push(
+      `You should focus on significant issues while ignoring trivial matters.`
+    );
   }
 
   // Get custom instructions from the config helper function
   const customInstructions = buildCustomInstructions(effectiveConfig, filePath);
   if (customInstructions) {
-    prompt += `\n\n${customInstructions}`;
+    promptSegments.push(customInstructions);
   }
 
   // Add standard guidelines
-  prompt += `\n\nGuidelines:
+  promptSegments.push(`Guidelines:
 - Use the full source code for context but ONLY report issues found in the changed lines marked with arrows (→)
 - Use exact line numbers from the prefix
 - Lines marked with ⊢ indicate the start of a change hunk, and ⊣ indicates the end of a hunk
@@ -308,79 +345,68 @@ export function generateSystemPrompt(
 - Reference relevant standards (CWE, OWASP, Documentations)
 - Keep responses concise and structured. Only report concrete, evidence-based issues.
 - Never include opinions, style preferences, or speculative issues.
-- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.`;
+- Recommendation code must include all necessary context, imports, and surrounding code to be fully functional.`);
 
   // Add profile-specific risk level guidance
   if (effectiveConfig.review.profile === "strict") {
     // Strict profile - include all severity levels
-    prompt += `\n\n- Assign risk levels based on severity:
+    promptSegments.push(`- Assign risk levels based on severity:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, etc)
   * Medium: Important quality issues (performance, validation, error handling, etc)
-  * Low: Minor improvements (style, documentation, optimizations)`;
+  * Low: Minor improvements (style, documentation, optimizations)`);
   } else {
     // Standard profile - focus only on critical and high severity issues
-    prompt += `\n\n- Assign risk levels based on severity, focusing ONLY on critical and high issues:
+    promptSegments.push(`- Assign risk levels based on severity, focusing ONLY on critical and high issues:
   * Critical: Direct security risks (RCE, credentials exposure, etc)
   * High: Significant vulnerabilities (XSS, unsafe operations, performance, etc)
-  * IGNORE Medium and Low severity issues unless they could potentially escalate to higher severity in specific contexts`;
+  * IGNORE Medium and Low severity issues unless they could potentially escalate to higher severity in specific contexts`);
   }
 
   // Add reasoning-optimized instructions for Claude models
-  prompt += `\n\n## Analysis Approach
+  promptSegments.push(`## Analysis Approach
 When analyzing code, I want you to employ detailed step-by-step reasoning:
 
 1. First understand the context:
    - What is the purpose of this code?
    - What frameworks or libraries is it using?
-   - How does it fit into the larger codebase?
+   - How does it fit into the larger codebase?`);
 
-2. For each potential issue in the changed lines, systematically analyze:
-   
-   A. Security implications:
-      - Could there be injection vulnerabilities?
-      - Are authentication/authorization mechanisms properly implemented?
-      - Is sensitive data being handled securely?
-      - Is input properly validated and sanitized?
-   
-   B. Code quality concerns:
-      - Are there edge cases not being handled?
-      - Is there proper error handling?
-      - Could there be null/undefined values causing issues?
-      - Is there redundant or duplicated code?
-   
-   C. Performance considerations:
-      - Are there potential bottlenecks or inefficiencies?
-      - Could there be memory leaks?
-      - Are there better algorithms or data structures that could be used?
-      - Is there proper resource cleanup?
-   
-   D. Best practices evaluation:
-      - Does the code follow language/framework conventions?
-      - Is it maintainable and readable?
-      - Does it properly handle concurrency or async operations?
-      - Are there better design patterns that could be applied?
+  // Build a coherent analysis approach without redundant focus areas
+  const analysisSteps = [];
 
-3. For each identified issue:
+  // Simplified step 2 without repeating focus areas
+  analysisSteps.push(
+    `2. For each potential issue in the changed lines, systematically analyze the code based on your specializations.`
+  );
+
+  // Add the rest of the analysis steps
+  analysisSteps.push(`3. For each identified issue:
    - Determine exact cause by examining the specific code patterns
    - Trace potential execution paths to understand impact
    - Consider both direct and indirect consequences
-   - Develop a clear, specific fix that addresses the root cause
+   - Develop a clear, specific fix that addresses the root cause`);
 
-4. Provide detailed rationale for each recommendation:
+  analysisSteps.push(`4. Provide detailed rationale for each recommendation:
    - Explain WHY it's an issue (not just WHAT)
    - Cite specific standards or documentation where relevant
-   - Provide complete, production-ready code examples
-   
-5. When uncertain about an issue:
+   - Provide complete, production-ready code examples`);
+
+  analysisSteps.push(`5. When uncertain about an issue:
    - State your confidence level explicitly
    - Explain your reasoning process
-   - Provide the best recommendation based on available information
+   - Provide the best recommendation based on available information`);
 
-This methodical analysis approach will deliver more accurate and actionable code reviews.`;
+  // Add all analysis steps to the prompt
+  promptSegments.push(analysisSteps.join("\n\n"));
+
+  // Add closing note for the analysis approach
+  promptSegments.push(
+    `This methodical analysis approach will deliver more accurate and actionable code reviews.`
+  );
 
   // Add standard output format guidance
-  prompt += `\n\nAlways return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
+  promptSegments.push(`Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
 {
   "summary": {
     "total_issues": number,   // Count of all identified issues
@@ -414,9 +440,10 @@ This methodical analysis approach will deliver more accurate and actionable code
       }
     }
   ]
-}`;
+}`);
 
-  return prompt;
+  // Join all prompt segments with double newlines for proper spacing
+  return promptSegments.join("\n\n");
 }
 
 const useBedrock = async (
