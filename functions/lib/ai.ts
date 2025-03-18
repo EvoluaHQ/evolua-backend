@@ -335,32 +335,45 @@ When analyzing code, I want you to employ detailed step-by-step reasoning:
    - What frameworks or libraries is it using?
    - How does it fit into the larger codebase?
 
-2. For each potential issue in the changed lines, systematically analyze:
-   
-   A. Security implications:
-      - Could there be injection vulnerabilities?
-      - Are authentication/authorization mechanisms properly implemented?
-      - Is sensitive data being handled securely?
-      - Is input properly validated and sanitized?
-   
-   B. Code quality concerns:
-      - Are there edge cases not being handled?
-      - Is there proper error handling?
-      - Could there be null/undefined values causing issues?
-      - Is there redundant or duplicated code?
-   
-   C. Performance considerations:
-      - Are there potential bottlenecks or inefficiencies?
-      - Could there be memory leaks?
-      - Are there better algorithms or data structures that could be used?
-      - Is there proper resource cleanup?
-   
-   D. Best practices evaluation:
-      - Does the code follow language/framework conventions?
-      - Is it maintainable and readable?
-      - Does it properly handle concurrency or async operations?
-      - Are there better design patterns that could be applied?
+2. For each potential issue in the changed lines, systematically analyze:`;
 
+  // Dynamically add analysis focus areas based on config
+  const { focus_areas } = effectiveConfig.review;
+
+  // Track if any focus areas were added
+  let focusAreasAdded = false;
+
+  if (focus_areas?.security) {
+    prompt += `\n   
+   - Security implications - Check for vulnerabilities, authentication/authorization issues, secure data handling, and input validation.`;
+    focusAreasAdded = true;
+  }
+
+  if (focus_areas?.code_quality) {
+    prompt += `\n   
+   - Code quality concerns - Evaluate error handling, edge cases, potential null/undefined issues, and code duplication.`;
+    focusAreasAdded = true;
+  }
+
+  if (focus_areas?.performance) {
+    prompt += `\n   
+   - Performance considerations - Assess efficiency, memory usage, algorithmic choices, and resource management.`;
+    focusAreasAdded = true;
+  }
+
+  if (focus_areas?.best_practices) {
+    prompt += `\n   
+   - Best practices evaluation - Review coding standards, maintainability, concurrency patterns, and architectural design.`;
+    focusAreasAdded = true;
+  }
+
+  // If no focus areas were specified or enabled, add a default general analysis prompt
+  if (!focusAreasAdded) {
+    prompt += `\n   
+   - Analyze comprehensively for any issues that might affect security, code quality, performance, or adherence to best practices.`;
+  }
+
+  prompt += `\n
 3. For each identified issue:
    - Determine exact cause by examining the specific code patterns
    - Trace potential execution paths to understand impact
