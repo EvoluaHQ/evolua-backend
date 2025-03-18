@@ -370,68 +370,40 @@ When analyzing code, I want you to employ detailed step-by-step reasoning:
 1. First understand the context:
    - What is the purpose of this code?
    - What frameworks or libraries is it using?
-   - How does it fit into the larger codebase?
+   - How does it fit into the larger codebase?`);
 
-2. For each potential issue in the changed lines, systematically analyze:`);
+  // Build a coherent analysis approach without redundant focus areas
+  const analysisSteps = [];
 
-  // Dynamically add analysis focus areas based on config
-  const focusAreaSegments = [];
+  // Simplified step 2 without repeating focus areas
+  analysisSteps.push(
+    `2. For each potential issue in the changed lines, systematically analyze the code based on your specializations.`
+  );
 
-  if (focus_areas?.security) {
-    focusAreaSegments.push(
-      "   - Security implications - Check for vulnerabilities, authentication/authorization issues, secure data handling, and input validation."
-    );
-  }
-
-  if (focus_areas?.code_quality) {
-    focusAreaSegments.push(
-      "   - Code quality concerns - Evaluate error handling, edge cases, potential null/undefined issues, and code duplication."
-    );
-  }
-
-  if (focus_areas?.performance) {
-    focusAreaSegments.push(
-      "   - Performance considerations - Assess efficiency, memory usage, algorithmic choices, and resource management."
-    );
-  }
-
-  if (focus_areas?.best_practices) {
-    focusAreaSegments.push(
-      "   - Best practices evaluation - Review coding standards, maintainability, concurrency patterns, and architectural design."
-    );
-  }
-
-  // If no focus areas were specified or enabled, add a default general analysis prompt
-  if (focusAreaSegments.length === 0) {
-    focusAreaSegments.push(
-      "   - Analyze comprehensively for any issues that might affect security, code quality, performance, or adherence to best practices."
-    );
-  }
-
-  // Add focus area segments to main prompt segments
-  if (focusAreaSegments.length > 0) {
-    promptSegments.push(focusAreaSegments.join("\n"));
-  }
-
-  // Continue with the rest of the analysis approach
-  promptSegments.push(`
-3. For each identified issue:
+  // Add the rest of the analysis steps
+  analysisSteps.push(`3. For each identified issue:
    - Determine exact cause by examining the specific code patterns
    - Trace potential execution paths to understand impact
    - Consider both direct and indirect consequences
-   - Develop a clear, specific fix that addresses the root cause
+   - Develop a clear, specific fix that addresses the root cause`);
 
-4. Provide detailed rationale for each recommendation:
+  analysisSteps.push(`4. Provide detailed rationale for each recommendation:
    - Explain WHY it's an issue (not just WHAT)
    - Cite specific standards or documentation where relevant
-   - Provide complete, production-ready code examples
-   
-5. When uncertain about an issue:
+   - Provide complete, production-ready code examples`);
+
+  analysisSteps.push(`5. When uncertain about an issue:
    - State your confidence level explicitly
    - Explain your reasoning process
-   - Provide the best recommendation based on available information
+   - Provide the best recommendation based on available information`);
 
-This methodical analysis approach will deliver more accurate and actionable code reviews.`);
+  // Add all analysis steps to the prompt
+  promptSegments.push(analysisSteps.join("\n\n"));
+
+  // Add closing note for the analysis approach
+  promptSegments.push(
+    `This methodical analysis approach will deliver more accurate and actionable code reviews.`
+  );
 
   // Add standard output format guidance
   promptSegments.push(`Always return findings in this exact JSON format within <findings> tags, ensuring all strings use proper JSON escaping:
